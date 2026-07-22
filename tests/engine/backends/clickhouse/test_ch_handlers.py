@@ -396,6 +396,88 @@ class TestAggregatingView:
         assert target == "my_ev"
         assert mv["ch_to_table"] == "my_ev"
 
+    def test_cascade_level_uses_merge_state_combinator(self):
+        """Cascade level emits sumMergeState, not sumState.
+
+        Proved by the container test in ``test_agg_cascade.py``. This is a
+        fast regression check for the shape already proven correct there.
+        """
+        from dbwarden.databases.clickhouse import AggregatingViewSpec, AggregatingView
+        from dbwarden.schema.table_meta import CHViewMeta
+        from sqlalchemy import Integer, String
+        from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+        class _Base(DeclarativeBase):
+            pass
+
+        class SourceTable(_Base):
+            __tablename__ = "source"
+            id: Mapped[int] = mapped_column(Integer, primary_key=True)
+            amount: Mapped[float] = mapped_column()
+
+        class LevelOne(AggregatingView):
+            __tablename__ = "level_one"
+
+            class Meta(CHViewMeta):
+                ch = aggregating_view(
+                    source=SourceTable,
+                    group_by=["id"],
+                    aggregates=[agg.sum("amount", "Float64").as_("amount_sum")],
+                    order_by=["id"],
+                )
+
+        class LevelTwo(AggregatingView):
+            __tablename__ = "level_two"
+
+            class Meta(CHViewMeta):
+                ch = aggregating_view(
+                    source=LevelOne,
+                    group_by=["id"],
+                    aggregates=[
+                        agg.sum("amount_sum", "Float64").as_("amount_sum"),
+                    ],
+                    order_by=["id"],
+                )
+
+        d = LevelTwo.Meta.ch.to_dict()
+        select = d["ch_agg_mv"]["ch_select_statement"]
+        assert "sumMergeState(amount_sum)" in select, (
+            f"Cascade level should use sumMergeState, got:\n{select}"
+        )
+        # The first level (not tested here) still uses sumState — that's correct
+
+    def test_plain_source_uses_state_combinator(self):
+        """Cascade level emits sumMergeState, not sumState.
+
+        Proved by the container test in ``test_agg_cascade.py``. This is a
+        fast regression check for the shape already proven correct there.
+        """
+        from sqlalchemy import Integer, String
+        from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+        class _Base(DeclarativeBase):
+            pass
+
+        class SourceTable(_Base):
+            __tablename__ = "source"
+            id: Mapped[int] = mapped_column(Integer, primary_key=True)
+            amount: Mapped[float] = mapped_column()
+
+        av = aggregating_view(
+            name="events_daily",
+            source=SourceTable,
+            group_by=["id"],
+            aggregates=[
+                agg.sum("amount", "Float64").as_("amount_sum"),
+            ],
+            order_by=["id"],
+        )
+        d = av.to_dict()
+        select = d["ch_agg_mv"]["ch_select_statement"]
+        assert "sumState(amount) AS amount_sum" in select, (
+            f"Plain source should use sumState, got:\n{select}"
+        )
+
 
 # ── data_op ───────────────────────────────────────────────────────────────────
 

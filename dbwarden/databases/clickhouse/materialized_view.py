@@ -270,9 +270,13 @@ class AggregatingViewSpec:
         mv_name = self.mv_name if self.target_name else ""
         source_name = _resolve_source(self.source)
 
+        # Resolve source column types for cascade combinator detection
+        source_col_types = _resolve_source_column_types(self.source)
+
         group_parts = [render_expr(g) for g in group_by]
         select_items = list(group_parts) + [
-            a.state_combinator() for a in aggregates
+            a.state_combinator(source_column_type=source_col_types.get(a.alias))
+            for a in aggregates
         ]
 
         select_sql = (
@@ -397,6 +401,34 @@ def aggregating_view(
             "aggregating_view: every aggregate must have .as_(alias) set"
         )
 
+    # ── Import-time validation for cascade sources ──────────────────────────
+    source_spec = getattr(getattr(source, "Meta", None), "ch", None)
+    from dbwarden.databases.clickhouse.materialized_view import (
+        AggregatingViewSpec as _AggregatingViewSpec,
+    )
+    if isinstance(source_spec, _AggregatingViewSpec):
+        # Build alias -> target_type map from the source spec
+        source_col_types: dict[str, str] = {}
+        for src_agg in source_spec.aggregates:
+            if src_agg.alias:
+                source_col_types[src_agg.alias] = src_agg.target_type()
+
+        from dbwarden.databases.clickhouse.agg import (
+            resolve_combinator, _classify_column_type,
+        )
+        for agg_expr in aggregates:
+            alias = agg_expr.alias
+            if alias is None:
+                continue
+            src_type = source_col_types.get(alias)
+            if src_type is None:
+                # Aggregate alias not found in source — could be a group-by
+                # key rather than a state column.  Skipping validation because
+                # the combinator will fall back to *State for plain types.
+                continue
+            # This call raises TypeError on mismatch
+            resolve_combinator(agg_expr.func, src_type)
+
     return AggregatingViewSpec(
         source=source,
         group_by=tuple(group_by),
@@ -441,6 +473,56 @@ def _resolve_source(source: Any) -> str:
         f"_resolve_source: source must be a model class with __tablename__, "
         f"got {type(source).__name__}"
     )
+
+
+def _resolve_source_column_types(source: Any) -> dict[str, str]:
+    """Resolve source column types for cascade combinator detection.
+
+    Returns a mapping ``{column_alias: clickhouse_type_string}``.
+
+    * If *source* is an ``AggregatingView`` subclass (has ``Meta.ch`` of type
+      ``AggregatingViewSpec``): the column types are derived from the source
+      spec's aggregates — each aggregate's alias maps to its target type
+      (e.g. ``"amount_sum" → "AggregateFunction(sum, Float64)"``).
+    * If *source* is a plain model class: column types come from the
+      SQLAlchemy ``__table__`` columns.
+    * If *source* is a string: attempt to resolve it to a class; if that fails,
+      return an empty dict (bare table name — no type info available).
+
+    An empty dict means "no cascade detection possible" — the caller falls back
+    to the default ``*State`` combinator.
+    """
+    # Resolve string → class if possible
+    if isinstance(source, str):
+        import sys
+        for mod_name, mod in sys.modules.items():
+            if mod is None:
+                continue
+            cls = getattr(mod, source, None)
+            if cls is not None and isinstance(cls, type):
+                source = cls
+                break
+        else:
+            return {}  # bare table name — no type info
+
+    # If source is an aggregating view, derive types from its spec
+    source_spec = getattr(getattr(source, "Meta", None), "ch", None)
+    from dbwarden.databases.clickhouse.materialized_view import (
+        AggregatingViewSpec as _AggregatingViewSpec,
+    )
+    if isinstance(source_spec, _AggregatingViewSpec):
+        result: dict[str, str] = {}
+        for agg in source_spec.aggregates:
+            if agg.alias:
+                result[agg.alias] = agg.target_type()
+        return result
+
+    # Plain model class — read column types from __table__
+    table = getattr(source, "__table__", None)
+    if table is not None:
+        return {col.name: str(col.type) for col in table.columns}
+
+    return {}
 
 
 

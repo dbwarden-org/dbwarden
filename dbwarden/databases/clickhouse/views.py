@@ -230,6 +230,10 @@ def ch_view_tables_from_models(
     ChView subclasses are NOT SQLAlchemy-mapped, so this function builds
     ModelTable objects directly from the class annotations and the spec.
 
+    Aggregating view targets are emitted BEFORE their MVs (the target must
+    exist at MV creation time).  Cascading MV chains are topologically sorted
+    so that inner cascade levels are created first.
+
     Returns a list of ``ModelTable`` instances that can be appended to the
     output of ``get_all_model_tables()``.
     """
@@ -238,25 +242,74 @@ def ch_view_tables_from_models(
     )
 
     views = get_all_ch_views(model_paths=model_paths, db_name=db_name)
-    tables: list[ModelTable] = []
+
+    # Build a map: tablename -> (model_class, view_type, spec, _expand_agg_target(...))
+    # and a DAG of aggregating view dependencies for topological sort.
+    view_info: dict[str, tuple] = {}
+    dep_graph: dict[str, set[str]] = {}  # viewer -> {source_tablename}
 
     for entry in views:
         model_class = entry["model_class"]
         view_type = entry["view_type"]
         spec = entry["spec"]
         tablename = model_class.__tablename__
+        view_info[tablename] = (model_class, view_type, spec)
+
+        if view_type == "aggregating_view":
+            target = getattr(spec, "source", None)
+            # Determine the source tablename for ordering
+            if isinstance(target, type):
+                src_tablename = getattr(target, "__tablename__", None)
+            elif isinstance(target, str):
+                # Try to resolve the string to a class
+                import sys
+                src_tablename = None
+                for mod_name, mod in sys.modules.items():
+                    if mod is None:
+                        continue
+                    cls = getattr(mod, target, None)
+                    if cls is not None and isinstance(cls, type):
+                        src_tablename = getattr(cls, "__tablename__", None)
+                        if src_tablename:
+                            break
+                if src_tablename is None:
+                    src_tablename = target  # bare table name — not a CH view, so no dep edge
+            else:
+                src_tablename = None
+
+            if src_tablename and src_tablename != tablename:
+                deps = dep_graph.setdefault(tablename, set())
+                deps.add(src_tablename)
+
+    # Topological sort (Kahn's algorithm) — leaf/innermost first
+    sorted_names: list[str] = []
+    visited: set[str] = set()
+
+    def _visit(name: str) -> None:
+        if name in visited:
+            return
+        visited.add(name)
+        for dep in dep_graph.get(name, set()):
+            if dep in view_info:
+                _visit(dep)
+        sorted_names.append(name)
+
+    for name in view_info:
+        _visit(name)
+
+    # Build ModelTables in dependency order
+    tables: list[ModelTable] = []
+
+    for tablename in sorted_names:
+        model_class, view_type, spec = view_info[tablename]
 
         # Build columns from MappedColumn descriptors on the class (Mode A).
-        # ChView subclasses are NOT SA-mapped, so columns exist as
-        # MappedColumn descriptors in __dict__ with Column objects inside
-        # columns_to_assign.
         columns: list[ModelColumn] = []
         from sqlalchemy.orm import MappedColumn as _MappedColumn
         for attr_name, val in model_class.__dict__.items():
             if attr_name.startswith("_"):
                 continue
             if isinstance(val, _MappedColumn):
-                # The underlying Column is stored in columns_to_assign
                 col_pairs = getattr(val, "columns_to_assign", None)
                 if col_pairs:
                     sa_col = col_pairs[0][0]
@@ -272,6 +325,12 @@ def ch_view_tables_from_models(
         # Build clickhouse_options from spec
         clickhouse_options = spec.to_dict()
 
+        # Emit target table FIRST (must exist before MV)
+        if view_type == "aggregating_view":
+            target_table = _expand_agg_target(model_class, spec)
+            if target_table:
+                tables.append(target_table)
+
         mv_table = ModelTable(
             name=tablename,
             columns=columns,
@@ -279,12 +338,6 @@ def ch_view_tables_from_models(
             object_type="materialized_view",
         )
         tables.append(mv_table)
-
-        # For aggregating views, also create the target table ModelTable
-        if view_type == "aggregating_view":
-            target_table = _expand_agg_target(model_class, spec)
-            if target_table:
-                tables.append(target_table)
 
     return tables
 

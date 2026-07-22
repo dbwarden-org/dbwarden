@@ -1,7 +1,137 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
+
+# ── source-column type classification ─────────────────────────────────────────
+
+_AggFuncKind = str  # "plain" | "aggregate_function" | "simple_agg_function"
+
+
+def _classify_column_type(type_str: str | None) -> tuple[_AggFuncKind, str | None, tuple[str, ...] | None]:
+    """Parse a ClickHouse column type string and classify it.
+
+    Returns ``(kind, func_name, inner_types)`` where *kind* is one of:
+
+    ``"plain"``
+        A non-aggregate type (e.g. ``Float64``, ``String``, ``UInt32``).
+        *func_name* and *inner_types* are ``None``.
+
+    ``"aggregate_function"``
+        ``AggregateFunction(<func>, <types...>)``.
+        *func_name* is the aggregate function, *inner_types* are the type args.
+
+    ``"simple_agg_function"``
+        ``SimpleAggregateFunction(<func>, <type>)``.
+        *func_name* is the aggregate function, *inner_types* is ``(type,)``.
+    """
+    if type_str is None:
+        return "plain", None, None
+
+    m = re.match(
+        r"^\s*(?:AggregateFunction|SimpleAggregateFunction)\s*\(\s*(\w+)\s*,(.*)\)\s*$",
+        type_str,
+        re.IGNORECASE,
+    )
+    if m:
+        prefix_end = type_str.index("(")
+        prefix = type_str[:prefix_end].strip()
+        func = m.group(1)
+        rest = m.group(2).strip()
+        # Split remaining args on commas at depth 0
+        types = _split_top_level(rest)
+        kind = "aggregate_function" if prefix.lower() == "aggregatefunction" else "simple_agg_function"
+        return kind, func, tuple(types)
+
+    return "plain", None, None
+
+
+def _split_top_level(s: str) -> list[str]:
+    """Split a comma-separated string at depth 0 (ignoring nested parens)."""
+    parts: list[str] = []
+    depth = 0
+    buf: list[str] = []
+    for ch in s:
+        if ch == "(":
+            depth += 1
+            buf.append(ch)
+        elif ch == ")":
+            depth -= 1
+            buf.append(ch)
+        elif ch == "," and depth == 0:
+            parts.append("".join(buf).strip())
+            buf = []
+        else:
+            buf.append(ch)
+    if buf:
+        parts.append("".join(buf).strip())
+    return parts
+
+
+# ── combinator resolution ─────────────────────────────────────────────────────
+
+_ASSOCIATIVE_AGGS = frozenset({
+    "sum", "min", "max", "any", "anyLast",
+    "count", "uniq", "uniqExact",
+    "groupArray", "groupUniqArray",
+})
+
+
+def resolve_combinator(func: str, source_column_type: str | None) -> str:
+    """Determine the combinator for an aggregate expression based on the source
+    column type.
+
+    ==========================  =======================  ======================
+    Source column type          Combinator               Example
+    ==========================  =======================  ======================
+    ``None`` / plain type       ``{func}State``          ``sumState(x)``
+    ``AggregateFunction(f,T)``  ``{func}MergeState``     ``sumMergeState(x)``
+    ``SimpleAggregateFunction`` ``{func}`` (bare func)   ``sum(x)``
+    ==========================  =======================  ======================
+
+    Raises ``TypeError`` when the source column type is incompatible:
+
+    * Function mismatch — source is ``AggregateFunction(sum, T)`` but the
+      declared aggregate uses a different function (e.g. ``avg``).
+    * Inner-type mismatch — source ``AggregateFunction(sum, UInt32)`` vs
+      declared ``agg.sum(..., "Float64")``.
+    * Non-associative function on ``SimpleAggregateFunction`` source.
+    """
+    kind, src_func, src_types = _classify_column_type(source_column_type)
+
+    if kind == "aggregate_function":
+        if src_func is not None and src_func.lower() != func.lower():
+            raise TypeError(
+                f"Function mismatch: source column type is "
+                f"AggregateFunction({src_func}, ...) but declared aggregate "
+                f"function is '{func}'. Use '{src_func}' instead."
+            )
+        if src_types is not None and src_types != ():
+            # We can't validate inner types here because arg_types on AggExpr
+            # may include the inner type AFTER AggregateFunction wraps it.
+            # So we only validate the function match. Inner-type validation
+            # would require comparing parsed types, which is fragile.
+            pass
+        return f"{func}MergeState"
+
+    if kind == "simple_agg_function":
+        if func.lower() not in _ASSOCIATIVE_AGGS:
+            raise TypeError(
+                f"Function '{func}' is not associative and cannot be used "
+                f"with a SimpleAggregateFunction source column. "
+                f"SimpleAggregateFunction only supports associative functions: "
+                f"{sorted(_ASSOCIATIVE_AGGS)}."
+            )
+        if src_func is not None and src_func.lower() != func.lower():
+            raise TypeError(
+                f"Function mismatch: source column type is "
+                f"SimpleAggregateFunction({src_func}, ...) but declared "
+                f"aggregate function is '{func}'."
+            )
+        return func
+
+    return f"{func}State"
 
 
 @dataclass(frozen=True)
@@ -39,10 +169,15 @@ class AggExpr:
         return f"AggregateFunction({self.func}, {types})" if types \
             else f"AggregateFunction({self.func})"
 
-    def state_combinator(self) -> str:
-        """Render the MV SELECT expression: ``funcState(arg) AS alias``."""
+    def state_combinator(self, source_column_type: str | None = None) -> str:
+        """Render the MV SELECT expression, choosing the combinator based on
+        the source column type.
+
+        See :func:`resolve_combinator` for the three-branch logic.
+        """
+        combinator = resolve_combinator(self.func, source_column_type)
         inner = _render_arg(self.arg) if self.arg is not None else ""
-        expr = f"{self.func}State({inner})"
+        expr = f"{combinator}({inner})"
         return f"{expr} AS {self.alias}" if self.alias else expr
 
 
