@@ -28,6 +28,7 @@ from dbwarden.engine.snapshot import (
     snapshot_diff_to_sql,
     extract_full_schema_snapshot,
 )
+from dbwarden.engine.snapshot.diff import _suppress_ch_column_ops
 from dbwarden.engine.model_discovery import IndexInfo, ModelColumn, ModelTable
 from dbwarden.engine.migration_name import Change
 from dbwarden.engine.offline import diff_model_states, model_state_to_dict
@@ -37,6 +38,61 @@ from dbwarden.engine.core.protocol import Op
 
 def _mc(name: str, typ: str, pk: bool = False, nullable: bool = True) -> ModelColumn:
     return ModelColumn(name, typ, nullable, pk, False, None, None)
+
+
+class TestSuppressChColumnOps:
+    def test_suppresses_ch_column_ops(self):
+        from dbwarden.engine.core.protocol import Op
+
+        ops = [
+            Op(object_type="alter_column_type", upgrade_attrs={"table": "t", "column": "c", "model_type": "TEXT"}),
+            Op(object_type="add_column", upgrade_attrs={"table": "t", "column": "c", "definition": {}}),
+            Op(object_type="drop_column", upgrade_attrs={"table": "t", "column": "c"}),
+        ]
+        result = _suppress_ch_column_ops(ops)
+        assert len(result) == 2
+        assert result[0].object_type == "add_column"
+        assert result[1].object_type == "drop_column"
+
+    def test_suppress_ch_column_ops_with_dicts(self):
+        ops = [
+            {"type": "alter_column_type", "table": "t", "column": "c"},
+            {"type": "alter_column_nullable", "table": "t", "column": "c"},
+            {"type": "alter_column_default", "table": "t", "column": "c"},
+            {"type": "alter_column_comment", "table": "t", "column": "c"},
+            {"type": "add_column", "table": "t", "column": "c"},
+        ]
+        result = _suppress_ch_column_ops(ops)
+        assert len(result) == 1
+        assert result[0]["type"] == "add_column"
+
+    def test_suppress_empty_ops(self):
+        assert _suppress_ch_column_ops([]) == []
+
+
+class TestSystemTableSkip:
+    def test_system_table_not_matched_to_snapshot(self):
+        snapshot = {
+            "tables": {
+                "_dbwarden_system": {
+                    "columns": {"id": {"type": "integer"}},
+                    "primary_key": ["id"],
+                    "comment": None,
+                }
+            },
+            "enums": {},
+            "indexes": {},
+            "constraints": {},
+        }
+        model_tables = [
+            ModelTable(name="_dbwarden_system", columns=[_mc("id", "INTEGER", pk=True, nullable=False)]),
+            ModelTable(name="users", columns=[_mc("id", "INTEGER", pk=True, nullable=False)]),
+        ]
+        upgrade, rollback = diff_models_against_snapshot(model_tables, snapshot)
+        sys_create = [op for op in upgrade if op.get("type") == "create_table" and op.get("table") == "_dbwarden_system"]
+        sys_drop = [op for op in upgrade if op.get("type") == "drop_table" and op.get("table") == "_dbwarden_system"]
+        assert len(sys_create) == 0
+        assert len(sys_drop) == 0
 
 
 class TestDiffModelsAgainstSnapshot:

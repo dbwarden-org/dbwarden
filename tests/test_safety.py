@@ -498,3 +498,126 @@ class TestCHSafetyClassifiers:
         assert len(issues) == 1
         assert issues[0].severity == "CRITICAL"
         assert issues[0].change_type == "drop_materialized_view"
+
+
+class TestAnalyzeSchemaDropTable:
+    def test_drop_table_detected(self):
+        issues = analyze_schema(
+            model_tables=[],
+            schema_snapshot={"orphan": {"columns": {}}},
+        )
+        assert len(issues) == 1
+        assert issues[0].change_type == "drop_table"
+
+    def test_change_object_type_detected(self):
+        model_tables = [
+            ModelTable(name="t", columns=[], object_type="view"),
+        ]
+        snapshot = {
+            "t": {"columns": {}, "object_type": "table"},
+        }
+        issues = analyze_schema(model_tables, snapshot)
+        change_issues = [i for i in issues if i.change_type == "change_object_type"]
+        assert len(change_issues) >= 1
+
+    def test_drop_column_detected(self):
+        model_tables = [
+            ModelTable(name="t", columns=[]),
+        ]
+        snapshot = {
+            "t": {"columns": {"old_col": {"type": "INTEGER"}}},
+        }
+        issues = analyze_schema(model_tables, snapshot)
+        drop_issues = [i for i in issues if i.change_type == "drop_column"]
+        assert len(drop_issues) >= 1
+
+    def test_pg_table_changes_detected(self):
+        model_tables = [
+            ModelTable(name="t", columns=[], pg_table={"fillfactor": 90}),
+        ]
+        snapshot = {
+            "t": {"columns": {}, "pg_table": {"fillfactor": 80}},
+        }
+        issues = analyze_schema(model_tables, snapshot)
+        fillfactor_issues = [i for i in issues if "fillfactor" in i.message]
+        assert len(fillfactor_issues) >= 1
+
+    def test_pg_storage_params_changes_detected(self):
+        model_tables = [
+            ModelTable(name="t", columns=[], pg_table={"pg_storage_params": {"autovacuum_enabled": "off"}}),
+        ]
+        snapshot = {
+            "t": {"columns": {}, "pg_table": {"pg_storage_params": {"autovacuum_enabled": "on"}}},
+        }
+        issues = analyze_schema(model_tables, snapshot)
+        storage_issues = [i for i in issues if "storage parameter" in i.message]
+        assert len(storage_issues) >= 1
+
+    def test_pg_type_with_meta(self):
+        model_tables = [
+            ModelTable(
+                name="t",
+                columns=[
+                    ModelColumn("c", "INTEGER", True, False, False, None, None,
+                                pg_meta={"pg_type": {"kind": "integer"}}),
+                ],
+            ),
+        ]
+        snapshot = {
+            "t": {"columns": {"c": {"type": "INTEGER"}}, "database_type": "postgresql"},
+        }
+        issues = analyze_schema(model_tables, snapshot)
+        assert isinstance(issues, list)
+
+    def test_pg_enum_override(self):
+        model_tables = [
+            ModelTable(
+                name="t",
+                columns=[
+                    ModelColumn("c", "VARCHAR(50)", True, False, False, None, None,
+                                pg_meta={"pg_enum_name": "mood"}),
+                ],
+            ),
+        ]
+        snapshot = {
+            "t": {"columns": {"c": {"type": "VARCHAR(50)"}}, "database_type": "postgresql"},
+        }
+        issues = analyze_schema(model_tables, snapshot)
+        assert isinstance(issues, list)
+
+
+class TestSnapshotColumnTypeSignature:
+    def test_basic_type(self):
+        from dbwarden.engine.safety.classifiers import _snapshot_column_type_signature
+
+        sig = _snapshot_column_type_signature({"type": "VARCHAR"})
+        assert sig["type"] == "varchar"
+
+    def test_with_length(self):
+        from dbwarden.engine.safety.classifiers import _snapshot_column_type_signature
+
+        sig = _snapshot_column_type_signature({"type": "VARCHAR", "length": 255})
+        assert sig["type"] == "VARCHAR"
+        assert sig["length"] == 255
+
+    def test_with_precision_and_scale(self):
+        from dbwarden.engine.safety.classifiers import _snapshot_column_type_signature
+
+        sig = _snapshot_column_type_signature({"type": "NUMERIC", "precision": 10, "scale": 2})
+        assert sig["type"] == "NUMERIC"
+        assert sig["precision"] == 10
+        assert sig["scale"] == 2
+
+    def test_with_pg_type(self):
+        from dbwarden.engine.safety.classifiers import _snapshot_column_type_signature
+
+        sig = _snapshot_column_type_signature({"type": "MYDOMAIN", "pg_type": {"kind": "varchar"}})
+        assert sig["type"] == "MYDOMAIN"
+        assert sig["pg_type"]["kind"] == "varchar"
+
+    def test_with_enum_name(self):
+        from dbwarden.engine.safety.classifiers import _snapshot_column_type_signature
+
+        sig = _snapshot_column_type_signature({"type": "ENUM", "enum_name": "mood"})
+        assert sig["type"] == "ENUM"
+        assert sig["enum_name"] == "mood"

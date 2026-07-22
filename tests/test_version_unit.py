@@ -199,3 +199,158 @@ class TestCompareVersions:
         from dbwarden.engine.version import compare_versions
 
         assert compare_versions("2.0", "1.0") == 1
+
+
+class TestValidatePathWithinProject:
+    def test_path_outside_project_raises(self):
+        from dbwarden.engine.version import _validate_path_within_project
+        from dbwarden.exceptions import DirectoryNotFoundError
+        from pathlib import Path
+
+        with pytest.raises(DirectoryNotFoundError, match="outside project"):
+            _validate_path_within_project(
+                Path("/outside/dir"), Path("/project"), "../outside"
+            )
+
+    def test_path_inside_project_passes(self):
+        from dbwarden.engine.version import _validate_path_within_project
+        from pathlib import Path
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            _validate_path_within_project(
+                Path(tmpdir) / "migrations", Path(tmpdir), "migrations"
+            )
+
+
+class TestGetNextMigrationNumberEdgeCases:
+    def test_returns_0001_when_non_numeric_versions(self):
+        from dbwarden.engine.version import get_next_migration_number
+        from pathlib import Path
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            Path(tmpdir, "t__abcd_test.sql").touch()
+            result = get_next_migration_number(tmpdir)
+            assert result == "0001"
+
+    def test_handles_mixed_numeric_and_non_numeric(self):
+        from dbwarden.engine.version import get_next_migration_number
+        from pathlib import Path
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            Path(tmpdir, "t__0001_test.sql").touch()
+            Path(tmpdir, "t__abcd_other.sql").touch()
+            result = get_next_migration_number(tmpdir)
+            assert result == "0002"
+
+
+class TestGenerateMigrationFilenameEdgeCases:
+    def test_empty_description_after_sanitization(self):
+        from dbwarden.engine.version import generate_migration_filename
+
+        result = generate_migration_filename("primary", "!!!@@@", "0001")
+        assert result == "primary__0001_untitled.sql"
+
+    def test_repeatable_empty_description(self):
+        from dbwarden.engine.version import generate_repeatable_filename
+
+        result = generate_repeatable_filename("primary", "!!!@@@", "RA__")
+        assert result == "primary__RA__untitled.sql"
+
+
+class TestRunsAlwaysFilepaths:
+    def test_returns_empty_for_nonexistent_dir(self):
+        from dbwarden.engine.version import get_runs_always_filepaths
+
+        result = get_runs_always_filepaths("/nonexistent")
+        assert result == []
+
+    def test_returns_runs_always_files(self):
+        from dbwarden.engine.version import get_runs_always_filepaths
+        from pathlib import Path
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            Path(tmpdir, "p__RA__seed.sql").touch()
+            Path(tmpdir, "p__0001_normal.sql").touch()
+            result = get_runs_always_filepaths(tmpdir)
+            assert len(result) == 1
+            assert "RA__seed.sql" in result[0]
+
+
+class TestRunsOnChangeFilepaths:
+    def test_returns_empty_for_nonexistent_dir(self):
+        from dbwarden.engine.version import get_runs_on_change_filepaths
+
+        result = get_runs_on_change_filepaths("/nonexistent")
+        assert result == []
+
+    def test_returns_runs_on_change_files(self):
+        from dbwarden.engine.version import get_runs_on_change_filepaths
+        from pathlib import Path
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            Path(tmpdir, "p__ROC__config.sql").touch()
+            Path(tmpdir, "p__0001_normal.sql").touch()
+            result = get_runs_on_change_filepaths(tmpdir)
+            assert len(result) == 1
+            assert "ROC__config.sql" in result[0]
+
+
+class TestAllMigrationsWithMetadata:
+    def test_returns_empty_for_nonexistent_dir(self):
+        from dbwarden.engine.version import get_all_migrations_with_metadata
+
+        result = get_all_migrations_with_metadata("/nonexistent")
+        assert result == []
+
+    def test_returns_migration_metadata(self):
+        from dbwarden.engine.version import get_all_migrations_with_metadata
+        from pathlib import Path
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            Path(tmpdir, "p__0001_test.sql").write_text("-- upgrade\nSELECT 1\n-- rollback\nSELECT 0")
+            result = get_all_migrations_with_metadata(tmpdir)
+            assert len(result) == 1
+            assert result[0][0] == "0001"
+
+
+class TestResolveMigrationOrder:
+    def test_empty_pending(self):
+        from dbwarden.engine.version import resolve_migration_order
+        from pathlib import Path
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            Path(tmpdir, "p__0001_test.sql").write_text("-- upgrade\nSELECT 1\n-- rollback\nSELECT 0")
+            result = resolve_migration_order(tmpdir, {"0001"})
+            assert result == []
+
+    def test_resolves_pending_migration(self):
+        from dbwarden.engine.version import resolve_migration_order
+        from pathlib import Path
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            Path(tmpdir, "p__0001_test.sql").write_text("-- upgrade\nSELECT 1\n-- rollback\nSELECT 0")
+            result = resolve_migration_order(tmpdir, set())
+            assert len(result) == 1
+            assert result[0][0] == "0001"
+
+
+class TestGetAllRepeatableFilepaths:
+    def test_returns_both_types(self):
+        from dbwarden.engine.version import get_all_repeatable_filepaths
+        from pathlib import Path
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            Path(tmpdir, "p__RA__seed.sql").touch()
+            Path(tmpdir, "p__ROC__config.sql").touch()
+            result = get_all_repeatable_filepaths(tmpdir)
+            assert len(result["runs_always"]) == 1
+            assert len(result["runs_on_change"]) == 1

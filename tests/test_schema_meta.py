@@ -109,6 +109,122 @@ class TestMetaReader:
         assert meta is not None
         assert meta.comment == "Child user accounts"
 
+    def test_apply_meta_skips_fields_without_matching_column(self):
+        class ModelWithExtraField(Base):
+            __tablename__ = "extra_field"
+
+            id: Mapped[int] = mapped_column(Integer, primary_key=True)
+            name: Mapped[str] = mapped_column(String(255))
+
+            class Meta:
+                class name:
+                    comment = "Name column"
+
+                class nonexistent_col:
+                    comment = "No matching column - silently skipped"
+
+        apply_meta(ModelWithExtraField)
+        meta = read_meta(ModelWithExtraField)
+        assert meta is not None
+        assert ModelWithExtraField.__table__.c.name.info.get("dw_comment") == "Name column"
+
+    def test_apply_meta_skips_callable_in_meta(self):
+        class ModelWithCallable(Base):
+            __tablename__ = "callable_meta"
+
+            id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+            class Meta:
+                comment = "test model"
+
+                def helper_method(self):
+                    pass
+
+        apply_meta(ModelWithCallable)
+        meta = read_meta(ModelWithCallable)
+        assert meta is not None
+        assert meta.comment == "test model"
+
+    def test_apply_meta_rejects_flat_backend_attrs(self):
+        class ModelWithFlatAttrs(Base):
+            __tablename__ = "flat_attrs"
+
+            id: Mapped[int] = mapped_column(Integer, primary_key=True)
+            name: Mapped[str] = mapped_column(String(255))
+
+            class Meta:
+                class name:
+                    pg_collation = "en_US.UTF-8"
+
+        with pytest.raises(DBWardenConfigError, match=r"use 'pg = pg.field"):
+            apply_meta(ModelWithFlatAttrs)
+
+    def test_apply_meta_skips_nested_type_in_field_class(self):
+        class ModelWithNestedType(Base):
+            __tablename__ = "nested_type"
+
+            id: Mapped[int] = mapped_column(Integer, primary_key=True)
+            name: Mapped[str] = mapped_column(String(255))
+
+            class Meta:
+                class name:
+                    comment = "Has a nested type"
+
+                    class inner_config:
+                        pass
+
+        apply_meta(ModelWithNestedType)
+        assert ModelWithNestedType.__table__.c.name.info.get("dw_comment") == "Has a nested type"
+
+    def test_apply_meta_handles_type_value_in_field_attrs(self):
+        class ModelWithTypeField(Base):
+            __tablename__ = "type_field"
+
+            id: Mapped[int] = mapped_column(Integer, primary_key=True)
+            name: Mapped[str] = mapped_column(String(255))
+
+            class Meta:
+                class name:
+                    comment = "Has type attr"
+                    some_type = int
+
+        apply_meta(ModelWithTypeField)
+        assert ModelWithTypeField.__table__.c.name.info.get("dw_comment") == "Has type attr"
+
+    def test_to_dict_function(self):
+        from dbwarden.schema._meta_reader import _to_dict
+
+        assert _to_dict(42) == 42
+        assert _to_dict("hello") == "hello"
+
+        class HasToDict:
+            def to_dict(self):
+                return {"key": "value"}
+
+        assert _to_dict(HasToDict()) == {"key": "value"}
+
+    def test_write_column_info_skips_none_values(self):
+        from dbwarden.schema._meta_reader import _write_column_info
+        from sqlalchemy import Column, Integer, MetaData, Table
+
+        table = Table("t", MetaData(), Column("x", Integer))
+        attrs = {"comment": None, "arbitrary_str": "hello"}
+        _write_column_info(table.c.x, attrs)
+
+        assert "dw_comment" not in table.c.x.info
+        assert table.c.x.info.get("arbitrary_str") == "hello"
+
+    def test_write_column_info_handles_false(self):
+        from dbwarden.schema._meta_reader import _write_column_info
+        from sqlalchemy import Column, Integer, MetaData, Table
+
+        table = Table("t", MetaData(), Column("x", Integer))
+        attrs = {"some_flag": False, "arbitrary_value": 42}
+        _write_column_info(table.c.x, attrs)
+
+        assert "some_flag" not in table.c.x.info
+        assert table.c.x.info.get("arbitrary_value") == 42
+
     def test_apply_meta_rejects_non_empty_info(self):
         class InvalidModel(Base):
             __tablename__ = "invalid_models"
@@ -1053,6 +1169,13 @@ class TestPgIndexSpec:
 
 
 class TestMetaValidator:
+    def test_callable_skip(self):
+        class WithMethod(PGTableMeta):
+            comment = "has method"
+
+            def helper(self):
+                pass
+
     def test_unknown_table_attr_rejected(self):
         with pytest.raises(DBWardenConfigError, match=r"Unknown attribute 'zzz_top_level"):
             class _(PGTableMeta):
@@ -1192,6 +1315,112 @@ class TestChEngineFactories:
         spec = aggregating_merge_tree()
         assert spec.name == "AggregatingMergeTree"
         assert spec.args == ()
+
+
+class TestAttachMetaMerge:
+    def test_attach_meta_merges_existing(self):
+        from dbwarden.schema._base import attach_meta, DBWardenMeta
+
+        first = DBWardenMeta(
+            indexes=[{"name": "ix_1", "columns": ["a"]}],
+            comment="parent",
+            table_attrs={"fillfactor": 90},
+        )
+        first.pg_policies = []
+        first.pg_grants = []
+
+        second = DBWardenMeta(
+            indexes=[{"name": "ix_2", "columns": ["b"]}],
+            comment="child",
+            table_attrs={"tablespace": "fast"},
+        )
+        second.pg_policies = []
+        second.pg_grants = []
+
+        class Dummy:
+            pass
+
+        attach_meta(Dummy, first)
+        assert Dummy.__dbwarden_meta__.comment == "parent"
+        assert len(Dummy.__dbwarden_meta__.indexes) == 1
+
+        attach_meta(Dummy, second)
+        assert Dummy.__dbwarden_meta__.comment == "child"
+        assert len(Dummy.__dbwarden_meta__.indexes) == 2
+        assert Dummy.__dbwarden_meta__.table_attrs["fillfactor"] == 90
+        assert Dummy.__dbwarden_meta__.table_attrs["tablespace"] == "fast"
+
+
+class TestIndexSpecExtended:
+    def test_to_dict_with_with_params(self):
+        from dbwarden.schema.index import IndexSpec
+
+        spec = IndexSpec(columns=["a"], with_params={"fillfactor": 70})
+        d = spec.to_dict()
+        assert d["with_params"] == {"fillfactor": 70}
+
+    def test_to_dict_with_column_sorting(self):
+        from dbwarden.schema.index import IndexSpec
+
+        spec = IndexSpec(columns=["a"], column_sorting={"a": "DESC"})
+        d = spec.to_dict()
+        assert d["column_sorting"] == {"a": "DESC"}
+
+    def test_to_dict_with_comment(self):
+        from dbwarden.schema.index import IndexSpec
+
+        spec = IndexSpec(columns=["a"], comment="my index")
+        d = spec.to_dict()
+        assert d["comment"] == "my index"
+
+    def test_to_dict_concurrently_false(self):
+        from dbwarden.schema.index import IndexSpec
+
+        spec = IndexSpec(columns=["a"], concurrently=False)
+        d = spec.to_dict()
+        assert d["concurrently"] is False
+
+    def test_index_factory_with_include(self):
+        d = index("ix_all", ["a"], include=["b"])
+        assert d["include"] == ["b"]
+
+    def test_index_factory_with_with_params(self):
+        d = index("ix_all", ["a"], with_params={"fillfactor": 70})
+        assert d["with_params"] == {"fillfactor": 70}
+
+    def test_index_factory_with_tablespace(self):
+        d = index("ix_all", ["a"], tablespace="fast_ts")
+        assert d["tablespace"] == "fast_ts"
+
+    def test_index_factory_with_column_sorting(self):
+        d = index("ix_all", ["a"], column_sorting={"a": "DESC"})
+        assert d["column_sorting"] == {"a": "DESC"}
+
+    def test_index_factory_with_comment(self):
+        d = index("ix_all", ["a"], comment="my index")
+        assert d["comment"] == "my index"
+
+    def test_index_factory_concurrently_false(self):
+        d = index("ix_all", ["a"], concurrently=False)
+        assert d["concurrently"] is False
+
+    def test_index_factory_with_clickhouse_type(self):
+        d = index("ix_all", ["a"], clickhouse_type="set(100)")
+        assert d["clickhouse_type"] == "set(100)"
+
+    def test_index_factory_with_clickhouse_granularity(self):
+        d = index("ix_all", ["a"], clickhouse_granularity=2)
+        assert d["clickhouse_granularity"] == 2
+
+
+class TestUniqueSpecExtended:
+    def test_unique_factory_initially_deferred(self):
+        d = unique("uq_test", ["a"], initially_deferred=True)
+        assert d["initially_deferred"] is True
+
+    def test_unique_factory_with_include(self):
+        d = unique("uq_test", ["a"], include=["b"])
+        assert d["include"] == ["b"]
 
 
 class TestPGViewMeta:

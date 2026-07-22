@@ -373,3 +373,202 @@ class TestExtractFullSchemaSnapshot:
     def test_find_latest_snapshot_none(self):
         result = find_latest_snapshot("nonexistent")
         assert result is None
+
+
+class TestTypeNormalize:
+    def test_normalize_type_basic(self):
+        from dbwarden.engine.snapshot.type_normalize import normalize_type
+
+        assert normalize_type("INTEGER") == {"type": "integer"}
+        assert normalize_type("text") == {"type": "text"}
+        assert normalize_type("VARCHAR(255)") == {"type": "varchar", "length": 255}
+        assert normalize_type("numeric(10,2)") == {"type": "numeric", "precision": 10, "scale": 2}
+
+    def test_normalize_type_timestamptz(self):
+        from dbwarden.engine.snapshot.type_normalize import normalize_type
+
+        result = normalize_type("timestamptz")
+        assert result == {"type": "timestamp", "has_timezone": True}
+
+    def test_normalize_type_float32(self):
+        from dbwarden.engine.snapshot.type_normalize import normalize_type
+
+        result = normalize_type("float32")
+        assert result == {"type": "float"}
+
+    def test_normalize_type_unknown_returns_raw(self):
+        from dbwarden.engine.snapshot.type_normalize import normalize_type
+
+        result = normalize_type("custom_type")
+        assert result["raw"] is True
+        assert result["type"] == "custom_type"
+
+    def test_normalize_type_fallback_regex_unknown(self):
+        from dbwarden.engine.snapshot.type_normalize import normalize_type
+
+        result = normalize_type("")
+        assert result["raw"] is True
+
+    def test_normalize_type_collate_stripped(self):
+        from dbwarden.engine.snapshot.type_normalize import normalize_type
+
+        result = normalize_type('varchar COLLATE "en_US.utf8"')
+        assert result["type"] == "varchar"
+
+    def test_strip_ch_type_wrappers(self):
+        from dbwarden.engine.snapshot.type_normalize import _strip_ch_type_wrappers
+
+        assert _strip_ch_type_wrappers("Nullable(String)") == "String"
+        assert _strip_ch_type_wrappers("LowCardinality(String)") == "String"
+        assert _strip_ch_type_wrappers("String") == "String"
+        assert _strip_ch_type_wrappers("") == ""
+        # Only outermost wrapper is stripped per call
+        assert _strip_ch_type_wrappers("LowCardinality(Nullable(String))") == "Nullable(String)"
+
+    def test_model_type_str_with_enums(self):
+        from dbwarden.engine.snapshot.type_normalize import _model_type_str
+        from types import SimpleNamespace
+
+        sa_type = SimpleNamespace(enums=["active", "inactive"])
+        result = _model_type_str(sa_type)
+        assert result.startswith("Enum(")
+        assert "active" in result
+        assert "inactive" in result
+
+    def test_model_type_str_no_enums(self):
+        from dbwarden.engine.snapshot.type_normalize import _model_type_str
+        from types import SimpleNamespace
+
+        sa_type = SimpleNamespace(enums=None)
+        result = _model_type_str(sa_type)
+        assert isinstance(result, str)
+
+    def test_snap_to_model_key(self):
+        from dbwarden.engine.snapshot.type_normalize import snap_to_model_key
+
+        assert snap_to_model_key("collation") == "pg_collation"
+        assert snap_to_model_key("storage") == "pg_storage"
+        assert snap_to_model_key("unknown_key") == "unknown_key"
+
+    def test_normalize_default(self):
+        from dbwarden.engine.snapshot.type_normalize import _normalize_default
+
+        assert _normalize_default(None) is None
+        assert _normalize_default("'hello'") == "hello"
+        assert _normalize_default("NULL") == "NULL"
+        assert _normalize_default("true") == "TRUE"
+        assert _normalize_default("CURRENT_TIMESTAMP") == "CURRENT_TIMESTAMP"
+
+    def test_normalize_index_col(self):
+        from dbwarden.engine.snapshot.type_normalize import _normalize_index_col
+
+        assert _normalize_index_col("col::text") == "col"
+        assert _normalize_index_col("col") == "col"
+
+
+class TestDetectRenamesEdgeCases:
+    def test_multi_match_rename_equal_counts(self):
+        from dbwarden.engine.core.rename import detect_renames
+        from dbwarden.engine.model_discovery import ModelColumn
+
+        dropped = [
+            ("old_a", {"type": "varchar"}),
+            ("old_b", {"type": "varchar"}),
+        ]
+        added = [
+            ("new_a", ModelColumn("new_a", "VARCHAR", True, False, False, None, None)),
+            ("new_b", ModelColumn("new_b", "VARCHAR", True, False, False, None, None)),
+        ]
+        renames = detect_renames("t", dropped, added)
+        assert len(renames) == 2
+        assert ("old_a", "new_a") in renames
+        assert ("old_b", "new_b") in renames
+
+    def test_single_drop_single_add_matched(self):
+        from dbwarden.engine.core.rename import detect_renames
+        from dbwarden.engine.model_discovery import ModelColumn
+
+        dropped = [
+            ("old_a", {"type": "varchar"}),
+        ]
+        added = [
+            ("new_a", ModelColumn("new_a", "VARCHAR", True, False, False, None, None)),
+        ]
+        renames = detect_renames("t", dropped, added)
+        assert len(renames) == 1
+        assert renames[0] == ("old_a", "new_a")
+
+    def test_table_overlap_missing_model_zero(self):
+        from dbwarden.engine.core.rename import _compute_table_overlap
+
+        result = _compute_table_overlap("old", "new", {"tables": {"old": {"columns": {"id": {"type": "integer"}}}}}, [])
+        assert result == 0.0
+
+    def test_unconfirmed_rename_column_converted_to_drop_add(self):
+        from dbwarden.engine.core.rename import _apply_rename_intents
+
+        ops = [
+            {"type": "rename_column", "table": "users", "old_name": "name", "new_name": "full_name"},
+        ]
+        rollback = [
+            {"type": "rename_column", "table": "users", "old_name": "full_name", "new_name": "name"},
+        ]
+        result_up, result_rb = _apply_rename_intents(ops, rollback, set())
+        assert result_up[0]["type"] == "drop_column"
+        assert result_rb[0]["type"] == "add_column"
+
+
+class TestSnapshotSqlGen:
+    def test_non_concurrent_index_sets_concurrently_false(self):
+        from dbwarden.engine.snapshot.sql_gen import snapshot_diff_to_sql
+
+        ops = [
+            {"type": "add_index", "table": "users", "columns": ["email"], "unique": True},
+            {"type": "drop_index", "table": "users", "index_name": "idx_users_email", "columns": ["email"], "unique": False},
+        ]
+        rollback_ops = [dict(op) for op in ops]
+        sql, rb_sql, changes = snapshot_diff_to_sql(ops, rollback_ops, db_name=None, concurrent=False)
+        assert "CONCURRENTLY" not in sql
+
+    def test_rollback_kind_from_sql(self):
+        from dbwarden.engine.snapshot.sql_gen import _rollback_kind_from_sql
+
+        assert _rollback_kind_from_sql("-- no-op: nothing to do") == "no-op"
+        assert _rollback_kind_from_sql("-- nothing to roll back") == "no-op"
+        assert _rollback_kind_from_sql("-- irreversible: data loss") == "irreversible"
+        assert _rollback_kind_from_sql("-- cannot roll back automatically") == "placeholder"
+        assert _rollback_kind_from_sql("ALTER TABLE ...") is None
+        assert _rollback_kind_from_sql("") is None
+
+    def test_rollback_contract_enforcement(self):
+        from dbwarden.engine.snapshot.sql_gen import (
+            _enforce_rollback_contract,
+            RollbackContractError,
+        )
+        from dbwarden.engine.core.statement_order import MigrationStatement, StatementOrder
+        import pytest
+
+        stmt = MigrationStatement(
+            order=StatementOrder.ADD_COLUMN,
+            upgrade_sql="",
+            rollback_sql="-- cannot roll back automatically",
+        )
+        with pytest.raises(RollbackContractError, match="Placeholder rollback"):
+            _enforce_rollback_contract(stmt, "add_column", "users", "placeholder", enforce_rollback_contract=True)
+
+    def test_rollback_contract_skip_when_not_enforced(self):
+        from dbwarden.engine.snapshot.sql_gen import _enforce_rollback_contract
+        from dbwarden.engine.core.statement_order import MigrationStatement, StatementOrder
+
+        stmt = MigrationStatement(
+            order=StatementOrder.ADD_COLUMN,
+            upgrade_sql="",
+            rollback_sql="-- placeholder",
+        )
+        _enforce_rollback_contract(stmt, "add_column", "users", "placeholder", enforce_rollback_contract=False)
+
+    def test_find_model_table_auto_discover_none(self):
+        from dbwarden.engine.snapshot.sql_gen import _find_model_table
+
+        result = _find_model_table("nonexistent", "test")
+        assert result is None

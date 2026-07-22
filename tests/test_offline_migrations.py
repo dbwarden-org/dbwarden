@@ -2299,3 +2299,72 @@ def test_offline_pg_extension_sql():
         finally:
             os.chdir(old_cwd)
     set_dev_mode(False)
+
+
+def test_offline_diff_rename_column():
+    prev = model_state_to_dict([
+        _make_table("users", columns=[
+            _make_col("id", "biginteger", pk=True),
+            _make_col("name", "varchar"),
+        ])
+    ])
+    curr = model_state_to_dict([
+        _make_table("users", columns=[
+            _make_col("id", "biginteger", pk=True),
+            _make_col("full_name", "varchar"),
+        ])
+    ])
+    up, down = diff_model_states(prev, curr)
+    rename_ops = [op for op in up if op["type"] == "rename_column"]
+    assert len(rename_ops) == 1
+    assert rename_ops[0]["old_name"] == "name"
+    assert rename_ops[0]["new_name"] == "full_name"
+
+
+def test_offline_diff_pg_column_meta():
+    prev = model_state_to_dict([
+        _make_table("users", columns=[
+            _make_col("id", "biginteger", pk=True),
+        ])
+    ])
+    curr_state = model_state_to_dict([
+        _make_table("users", columns=[
+            _make_col("id", "biginteger", pk=True),
+        ])
+    ])
+    curr_state["tables"]["users"]["columns"]["id"]["pg_column"] = {
+        "collation": "en_US.utf8",
+        "storage": "PLAIN",
+    }
+    up, down = diff_model_states(prev, curr_state)
+    pg_meta_ops = [op for op in up if op["type"] == "alter_pg_column_meta"]
+    assert len(pg_meta_ops) == 1
+    assert pg_meta_ops[0]["column"] == "id"
+
+
+def test_offline_diff_ch_options_both_none():
+    prev = model_state_to_dict([
+        _make_table("users", columns=[_make_col("id", pk=True)])
+    ])
+    curr = model_state_to_dict([
+        _make_table("users", columns=[_make_col("id", pk=True)])
+    ])
+    prev["tables"]["users"]["backend_table_spec"] = {"backend": "clickhouse", "ch_option_a": None}
+    curr["tables"]["users"]["backend_table_spec"] = {"backend": "clickhouse", "ch_option_a": None}
+    up, down = diff_model_states(prev, curr)
+    ch_ops = [op for op in up if op["type"] == "alter_ch_options"]
+    assert len(ch_ops) == 0
+
+
+def test_offline_diff_my_auto_increment_none():
+    prev = model_state_to_dict([
+        _make_table("users", columns=[_make_col("id", pk=True)])
+    ])
+    curr = model_state_to_dict([
+        _make_table("users", columns=[_make_col("id", pk=True)])
+    ])
+    prev["tables"]["users"]["backend_table_spec"] = {"backend": "mysql", "my_auto_increment": None}
+    curr["tables"]["users"]["backend_table_spec"] = {"backend": "mysql", "my_auto_increment": None}
+    up, down = diff_model_states(prev, curr)
+    my_ops = [op for op in up if op["type"] == "alter_my_table"]
+    assert len(my_ops) == 0
