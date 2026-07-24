@@ -87,6 +87,7 @@ seo_html: "<title>7. Seeds - DBWarden Documentation</title>\n<meta name=\"descri
 
 - Completed [Section 3](03-apply-and-inspect.md) (migrations applied, tables exist)
 - `examples/core/` project
+- Seed plugin installed: `dbwarden plugin add dbwarden-seeds`
 
 ## Step 1: Define a Code Seed
 

@@ -96,6 +96,7 @@ Install with metrics support:
 
 ```bash
 uv add "dbwarden[metrics]"
+dbwarden plugin add dbwarden-fastapi
 ```
 
 DBWarden exposes six Prometheus metric families:

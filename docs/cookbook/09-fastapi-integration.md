@@ -245,6 +245,7 @@ app.include_router(DBWardenRouter(), prefix="/db")
 ```bash
 # Install dependencies
 uv add dbwarden sqlalchemy fastapi uvicorn asyncpg
+dbwarden plugin add dbwarden-fastapi
 
 # Start PostgreSQL
 docker run -d --name pg -e POSTGRES_USER=user \
