@@ -91,7 +91,7 @@ seo_html: "<title>Glossary - DBWarden Documentation</title>\n<meta name=\"descri
 ## A
 
 **Auto Schema**
-: A feature that generates Pydantic schemas from SQLAlchemy model annotations using `@auto_schema`, eliminating duplication between ORM and API layers in FastAPI applications.
+: A feature that generates Pydantic schemas from SQLAlchemy model annotations using `@auto_schema` (from the `dbwarden-fastapi` plugin), eliminating duplication between ORM and API layers in FastAPI applications.
 
 ## B
 
@@ -185,7 +185,7 @@ seo_html: "<title>Glossary - DBWarden Documentation</title>\n<meta name=\"descri
 ## P
 
 **Pydantic Schema (auto-generated)**
-: Request/response schemas automatically generated from SQLAlchemy model annotations using `@auto_schema`, keeping API contracts in sync with database models.
+: Request/response schemas automatically generated from SQLAlchemy model annotations using `@auto_schema` (from the `dbwarden-fastapi` plugin), keeping API contracts in sync with database models.
 
 ## R
 

@@ -4,8 +4,9 @@ from pydantic import BaseModel, EmailStr
 
 # Pydantic schemas for the FastAPI CRUD routes.
 # In a real project, you might replace these with the auto-
-# generated schemas from @auto_schema (see examples/auto-schema/)
-# to eliminate the duplication between ORM models and API schemas.
+# generated schemas from @auto_schema (from the dbwarden-fastapi
+# plugin, see dbwarden-fastapi repo for examples) to eliminate
+# the duplication between ORM models and API schemas.
 
 
 class UserBase(BaseModel):

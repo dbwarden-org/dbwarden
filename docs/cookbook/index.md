@@ -91,7 +91,7 @@ examples/
 ├── core/                 # Sections 1-7: progressive SQL workflow
 ├── multi-database/       # Section 8
 ├── fastapi-app/          # Section 9
-├── auto-schema/          # Section 10
+├── fastapi-app/          # Sections 9-10 (FastAPI + auto-schema examples)
 └── observability/        # Section 11
 ```
 
@@ -108,7 +108,7 @@ examples/
 | 7 | [Seeds](07-seeds.md) | `seed create/apply/rollback/list`, SQL seeds, `@seed_data` | `examples/core/` |
 | 8 | [Multi-Database](08-multi-database.md) | Multiple `database_config()`, PG + ClickHouse, `--all` flag | `examples/multi-database/` |
 | 9 | [FastAPI Integration](09-fastapi-integration.md) | Lifespan hooks, health endpoints, session DI, migration endpoints | `examples/fastapi-app/` |
-| 10 | [Auto Schemas](10-auto-schemas.md) | `@auto_schema`, `CreateSchema`, `UpdateSchema`, `PublicSchema` | `examples/auto-schema/` |
+| 10 | [Auto Schemas](10-auto-schemas.md) | `@auto_schema`, `CreateSchema`, `UpdateSchema`, `PublicSchema` (requires `dbwarden-fastapi` plugin) | `examples/fastapi-app/` |
 | 11 | [Observability](11-observability.md) | Prometheus metrics, structured logging, query tracing | `examples/observability/` |
 
 ## Quick Start (Core)

@@ -267,7 +267,7 @@ class User(Base):
 | Attribute | Type | SQL |
 |-----------|------|-----|
 | `comment` | `str` | `MODIFY COLUMN ... COMMENT '...'` |
-| `public` | `bool` | Controls field visibility in schemap auto-schema |
+| `public` | `bool` | Controls field visibility in `@auto_schema` (requires `dbwarden-fastapi` plugin) |
 | `my` | `MyFieldSpec` | MySQL-specific column options (see table below) |
 
 MySQL-specific `MyFieldSpec` fields (set via `my.field(...)`):

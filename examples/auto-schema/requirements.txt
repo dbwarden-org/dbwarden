@@ -1,2 +1,0 @@
-dbwarden>=0.9
-sqlalchemy>=2.0

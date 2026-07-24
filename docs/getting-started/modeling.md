@@ -249,10 +249,14 @@ Use `@auto_schema` to generate four Pydantic schema classes on your model:
 | `Model.UpdateSchema` | All fields optional |
 | `Model.PublicSchema` | Excludes fields where `public=False` or name starts with `_` |
 
+Requires the `dbwarden-fastapi` plugin:
+
+```bash
+dbwarden plugin add dbwarden-fastapi
+```
+
 ```python
-from sqlalchemy import Integer, String
-from sqlalchemy.orm import Mapped, mapped_column
-from dbwarden.databases import auto_schema
+from dbwarden_fastapi import auto_schema
 
 @auto_schema
 class User(Base):
@@ -279,7 +283,7 @@ The decorator reads `class Meta` to infer `SchemaConfig`, then calls `schemap` t
 To customize schema generation, pass a `SchemaConfig` explicitly:
 
 ```python
-from dbwarden.databases import auto_schema, SchemaConfig
+from dbwarden_fastapi import auto_schema, SchemaConfig
 
 @auto_schema(config=SchemaConfig(exclude_public=["internal_note"]))
 class Order(Base):
@@ -315,7 +319,7 @@ For these cases run `dbwarden new` and write the SQL by hand, or use the relevan
 - **Review generated migrations**: always read the `.sql` file before running `dbwarden migrate`.
 - **Use `--dev` for local development**: configure a `dev_database_url` (SQLite works well) and use `dbwarden --dev` to iterate quickly without touching your real database.
 - **Keep Meta classes minimal**: only set attributes that differ from the default. Default values are omitted from generated migrations, reducing noise.
-- **Use `@auto_schema` for API projects**: generates Pydantic schemas from your model annotations. Fields with `public=False` or a leading `_` are excluded from `PublicSchema`.
+- **Use `@auto_schema` for API projects** (requires `dbwarden-fastapi` plugin): generates Pydantic schemas from your model annotations. Fields with `public=False` or a leading `_` are excluded from `PublicSchema`.
 
 See also: [Cookbook: Models & Migrations](../cookbook/02-models-and-migrations.md)
 

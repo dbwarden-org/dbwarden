@@ -22,8 +22,7 @@ bash scripts/03-apply-inspect.sh
 |-----------|----------|----------------|----------|
 | `core/` | 1–7 | Full SQL workflow: setup, models, migrations, apply, rollback, inspect, offline, safety, seeds | Nothing (SQLite) |
 | `multi-database/` | 8 | PostgreSQL + ClickHouse in one project with separate model paths and migration directories | Docker |
-| `fastapi-app/` | 9 | FastAPI with health endpoints, async session DI via `primary.async_session`, and migration routers | Docker (PostgreSQL) |
-| `auto-schema/` | 10 | Auto-generated Pydantic schemas from model annotations using `@auto_schema` | Nothing (SQLite) |
+| `fastapi-app/` | 9–10 | FastAPI integration + auto-generated Pydantic schemas via `@auto_schema` (requires `dbwarden-fastapi` plugin) | Docker (PostgreSQL) |
 | `observability/` | 11 | Prometheus metrics, structured JSON logging, query tracing middleware | Docker |
 
 ## How These Examples Work

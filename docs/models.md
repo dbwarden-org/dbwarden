@@ -146,7 +146,7 @@ Typed spec classes (`IndexSpec`, `UniqueSpec`, `CheckSpec`) provide full IDE aut
 | Attribute | Type | SQL | Backends |
 |-----------|------|-----|----------|
 | `comment` | `str` | `COMMENT ON COLUMN t.c IS '...'` | All |
-| `public` | `bool` | Controls field visibility in schemap auto-schema | All |
+| `public` | `bool` | Controls field visibility in `@auto_schema` (requires `dbwarden-fastapi` plugin) | All |
 
 ```python
 class Meta(TableMeta):

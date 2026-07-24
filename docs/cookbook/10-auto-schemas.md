@@ -86,7 +86,7 @@ seo_html: "<title>10. Auto-Generated Pydantic Schemas - DBWarden Documentation</
 
 ## Prerequisites
 
-- `examples/auto-schema/` directory (no config file needed; `@auto_schema` works at model definition time)
+- `dbwarden-fastapi` plugin installed: `dbwarden plugin add dbwarden-fastapi`
 - `uv add dbwarden sqlalchemy`
 
 ## The Problem
@@ -99,7 +99,7 @@ DBWarden's `@auto_schema` eliminates this duplication by deriving Pydantic schem
 
 ```python
 from dbwarden.databases import TableMeta
-from dbwarden.databases import auto_schema
+from dbwarden_fastapi import auto_schema
 
 
 @auto_schema
@@ -191,7 +191,7 @@ All mapped columns, including those marked `public = False`.
 ## Step 4: Customizing Schema Generation
 
 ```python
-from dbwarden.databases import auto_schema, SchemaConfig
+from dbwarden_fastapi import auto_schema, SchemaConfig
 
 
 @auto_schema(config=SchemaConfig(

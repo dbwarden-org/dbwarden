@@ -31,7 +31,6 @@ from dbwarden.databases.pgsql import (
     partition_by_range,
 )
 from dbwarden.databases.sqlite import SqFieldSpec, SqTableSpec
-from dbwarden.schema._auto_schema import SchemaConfig, auto_schema
 from dbwarden.schema._base import DBWardenMeta, attach_meta, read_meta
 from dbwarden.schema._meta_reader import apply_meta
 from dbwarden.schema.constraint import CheckSpec, UniqueSpec, check, unique
@@ -49,14 +48,12 @@ __all__ = [
     "UniqueSpec",
     "apply_meta",
     "attach_meta",
-    "auto_schema",
     "ch",
     "check",
     "mdb",
     "my",
     "pg",
     "read_meta",
-    "SchemaConfig",
     "seed_data",
     "sq",
     "unique",
