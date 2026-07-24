@@ -113,7 +113,7 @@ seo_html: "<title>DBWarden - DBWarden Documentation</title>\n<meta name=\"descri
 
 ---
 
-DBWarden is a database migration and schema management tool for SQLAlchemy. You define your schema in Python (in your SQLAlchemy models) and DBWarden derives everything else: migration SQL, rollbacks, snapshots, safety checks, and seed lifecycle.
+DBWarden is a database migration and schema management tool for SQLAlchemy. You define your schema in Python (in your SQLAlchemy models) and DBWarden derives everything else: migration SQL, rollbacks, snapshots, and safety checks.
 
 There are no migration scripts to write or maintain. There is no migration runtime. Your models are the contract. The database is kept in sync with them.
 
@@ -123,7 +123,7 @@ There are no migration scripts to write or maintain. There is no migration runti
 - Supports PostgreSQL, MySQL, MariaDB, SQLite, and ClickHouse
 - Uses a registry driven PostgreSQL pipeline for diffs and SQL emission
 - Manages one or many databases from one typed config source
-- Adds safety tooling, schema diffing, seed tracking, and status commands
+- Adds safety tooling, schema diffing, and status commands
 
 - Migrations generated from your models, not written by hand
 - Plain SQL output: reviewable, committable, executable anywhere
@@ -133,7 +133,7 @@ There are no migration scripts to write or maintain. There is no migration runti
 - Schema snapshots for deterministic diffs and rename detection
 - Typed `class Meta` system with import-time validation
 - Multi-database support: PostgreSQL, MySQL, ClickHouse, MariaDB, SQLite
-- Versioned seed lifecycle with checksum drift detection
+- Extensible plugin system with official plugins for seeds, RBAC, FastAPI, sandbox testing, and PostgreSQL/ClickHouse extensions
 - Reverse-engineer live databases into models with `generate-models`
 
 ## Why DBWarden
@@ -415,32 +415,6 @@ Schema layer is complete with `MdbTableMeta` / `MdbColumnMeta` and `mdb.field()`
 
 ---
 
-## Seed lifecycle
-
-DBWarden manages versioned database seeds alongside migrations. Seeds are defined as Python classes and applied with checksum drift detection.
-
-```python
-from dbwarden import Seed
-
-class CountrySeed(Seed):
-    __seed_database__ = "primary"
-    rows = [
-        Country(code="US", name="United States"),
-        Country(code="UY", name="Uruguay"),
-    ]
-```
-
-Rows take model instances: full IDE autocomplete on every field. Versions are assigned automatically by class order, no manual numbering.
-
-Conflict resolution, auto-apply after `dbwarden migrate`, and SQL export for stateless production deployment are all supported.
-
-```bash
-dbwarden seed export   # renders seeds as plain SQL for stateless deploy
-dbwarden seed list     # shows applied seeds and checksum status
-```
-
----
-
 ## Developer experience
 
 **Dev mode**: Run SQLite locally against a PostgreSQL production schema with automatic SQL translation.
@@ -452,6 +426,24 @@ dbwarden seed list     # shows applied seeds and checksum status
 **`dbwarden diff`**: Read-only comparison tool. Outputs as Rich table, JSON, or raw SQL. Supports `--offline` mode.
 
 **Graceful disconnection**: Automatic retry logic and clear error messages when a database is unreachable.
+
+---
+
+## Official plugins
+
+DBWarden features a plugin system with three trust tiers (official, approved, community). Official plugins extend core with features that were previously built-in, now maintained independently:
+
+| Plugin | PyPI | Purpose |
+|---|---|---|
+| `dbwarden-ch-rbac` | [`dbwarden-ch-rbac`](https://pypi.org/p/dbwarden-ch-rbac) | ClickHouse RBAC: roles, users, grants, row policies, quotas, settings profiles |
+| `dbwarden-fastapi` | [`dbwarden-fastapi`](https://pypi.org/p/dbwarden-fastapi) | FastAPI session dependencies, health endpoints, migration routes |
+| `dbwarden-pgsql-extensions` | [`dbwarden-pgsql-extensions`](https://pypi.org/p/dbwarden-pgsql-extensions) | PostgreSQL extensions, event triggers, functions, triggers, storage parameters |
+| `dbwarden-pgsql-rbac` | [`dbwarden-pgsql-rbac`](https://pypi.org/p/dbwarden-pgsql-rbac) | PostgreSQL RBAC: roles, grants, default privileges, policies |
+| `dbwarden-pgsql-types` | [`dbwarden-pgsql-types`](https://pypi.org/p/dbwarden-pgsql-types) | PostgreSQL custom types: ENUMs, domains, composite types, sequences |
+| `dbwarden-sandbox` | [`dbwarden-sandbox`](https://pypi.org/p/dbwarden-sandbox) | Testcontainers sandbox providers for safe migration replay |
+| `dbwarden-seeds` | [`dbwarden-seeds`](https://pypi.org/p/dbwarden-seeds) | Seed data management with code seeds and file-based SQL/Python seeds |
+
+See the [plugin documentation](plugins/) for installation, development guides, and the full Approved standard.
 
 ---
 
@@ -468,4 +460,5 @@ DBWarden is built for teams that want explicit, reviewable, reproducible databas
 - Start with [Features](features.md)
 - Follow the guides in [Get Started](getting-started/setup.md)
 - Explore [Cookbook & Examples](cookbook/index.md)
+- Browse [Plugins](plugins/) to extend DBWarden's capabilities
 - Use [CLI Reference](cli-reference.md) as command lookup
