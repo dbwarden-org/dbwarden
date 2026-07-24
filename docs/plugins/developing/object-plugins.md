@@ -158,7 +158,7 @@ Emitting SQL that matches core's byte-for-byte matters: a plugin that quotes ide
 | `emit_with_cluster`, `ClusterableStatement` | Wrap ClickHouse DDL so it honours the configured `ON CLUSTER`. |
 | `strip_secret_values`, `has_visible_secrets`, `REDACTED` | Redact secret values before they reach a snapshot. |
 
-The module sits under `dbwarden.engine.core`, so importing from it satisfies the public-API check in the [Approved standard](approved-standard.md).
+The module sits under `dbwarden.engine.core`, so importing from it satisfies the public-API check in the [Verified standard](verified-standard.md).
 
 ## Conflicts And Overrides
 
@@ -172,11 +172,11 @@ handler for object type 'role'. Migration SQL for 'role' now comes from the
 plugin, not DBWarden core.
 ```
 
-The warning is emitted once per plugin and object type per run. If you see one you did not expect, a plugin has taken over DDL generation for that object type, and the SQL in your migrations for it is the plugin's, not core's. Plugins requesting the Approved tier must declare their overrides in the approval issue.
+The warning is emitted once per plugin and object type per run. If you see one you did not expect, a plugin has taken over DDL generation for that object type, and the SQL in your migrations for it is the plugin's, not core's. Plugins requesting the Verified tier must declare their overrides in the verification issue.
 
 ## Tests
 
-Object plugins run the value-plugin conformance checks plus two handler-specific ones from the shared harness (`dbwarden.plugin_conformance`); see the [Approved standard](approved-standard.md).
+Object plugins run the value-plugin conformance checks plus two handler-specific ones from the shared harness (`dbwarden.plugin_conformance`); see the [Verified standard](verified-standard.md).
 
 - `test_object_handler_conformance`: `assert_object_handler_conformance(handler, config=...)` exercises `extract`, `canonicalize`, `diff`, and `emit` against a minimal fixture and validates the returned types and SQL shape.
 - `test_ordering_constraint_satisfiable`: `assert_ordering_constraint_satisfiable(handler)` confirms the constraint is not statically impossible (no impossible anchor pair; no unknown/cyclic object references).

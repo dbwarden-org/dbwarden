@@ -14,7 +14,7 @@ Installation aborts and nothing is installed. Official plugin install is fail-cl
 
 ## How Do I Know A Community Plugin Is Safe?
 
-There is no automatic guarantee. Review the source, prefer Approved plugins, and only consent to plugins you have vetted yourself. Trust gates whether a plugin loads, not what it can do once loaded.
+There is no automatic guarantee. Review the source, prefer Verified plugins, and only consent to plugins you have vetted yourself. Trust gates whether a plugin loads, not what it can do once loaded.
 
 ## Can Two Plugins Provide The Same Hook?
 
@@ -28,9 +28,9 @@ Yes. Use normal Python package dependencies. Object handlers from different plug
 
 Yes. Install them as project dependencies. Use `--format json` on `plugin list` and `plugin info` for machine-readable output; Rich tables degrade gracefully when output is captured. Note that non-interactive runs never auto-consent, so trust community plugins ahead of time (commit `.dbwarden/consent.toml`).
 
-## How Do I Get My Plugin Approved?
+## How Do I Get My Plugin Verified?
 
-Follow the [Approved Plugin Standard](developing/approved-standard.md): pass the seven mandatory tests and open a review issue in the DBWarden repository.
+Follow the [Verified Plugin Standard](developing/verified-standard.md): pass the seven mandatory tests and open a review issue in the DBWarden repository.
 
 ## What Happens When I Upgrade A Community Plugin?
 

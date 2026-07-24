@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from importlib.metadata import PackageNotFoundError, version
 
-from dbwarden._approved import APPROVED_PLUGINS
+from dbwarden._verified import VERIFIED_PLUGINS
 from dbwarden._official import OFFICIAL_PLUGINS, classify
 from dbwarden.output import (
     data_table,
@@ -103,7 +103,7 @@ def plugin_info_cmd(dist_name: str, output_format: str = "table") -> None:
     if output_format == "json":
         payload = _report_to_dict(report)
         payload["repository"] = spec.repository if spec else None
-        payload["approved_minimum"] = APPROVED_PLUGINS.get(dist_name)
+        payload["verified_minimum"] = VERIFIED_PLUGINS.get(dist_name)
         plain(json.dumps(payload, indent=2))
         return
     render(kv_table("Plugin Info", {
@@ -117,7 +117,7 @@ def plugin_info_cmd(dist_name: str, output_format: str = "table") -> None:
         "Object handlers": report.object_handlers,
         "Error": report.error or "",
         "Repository": spec.repository if spec else "",
-        "Approved minimum": APPROVED_PLUGINS.get(dist_name, ""),
+        "Verified minimum": VERIFIED_PLUGINS.get(dist_name, ""),
         "Lock verified": report.lock.verified if report.lock else "",
         "Lock identity": report.lock.identity if report.lock else "",
     }))
@@ -157,8 +157,8 @@ def plugin_add_cmd(
             "After install": (
                 "provenance-verified, lockfile updated"
                 if tier == "official"
-                else "auto-loaded when version meets approved minimum"
-                if tier == "approved"
+                else "auto-loaded when version meets verified minimum"
+                if tier == "verified"
                 else "requires `dbwarden plugin trust` before loading"
             ),
         }))

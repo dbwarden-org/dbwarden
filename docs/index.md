@@ -431,7 +431,7 @@ Schema layer is complete with `MdbTableMeta` / `MdbColumnMeta` and `mdb.field()`
 
 ## Official plugins
 
-DBWarden features a plugin system with three trust tiers (official, approved, community). Official plugins extend core with features that were previously built-in, now maintained independently:
+DBWarden features a plugin system with three trust tiers (official, verified, community). Official plugins extend core with features that were previously built-in, now maintained independently:
 
 | Plugin | PyPI | Purpose |
 |---|---|---|

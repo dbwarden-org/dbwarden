@@ -54,7 +54,7 @@ dbwarden plugin info dbwarden-fastapi
 dbwarden plugin info dbwarden-fastapi --format json
 ```
 
-Shows entry point, tier, trust/load state, registered hooks and object handlers, official repository, approved minimum version, and lockfile provenance fields when present. Exits `1` if the plugin is not found.
+Shows entry point, tier, trust/load state, registered hooks and object handlers, official repository, verified minimum version, and lockfile provenance fields when present. Exits `1` if the plugin is not found.
 
 ## add
 

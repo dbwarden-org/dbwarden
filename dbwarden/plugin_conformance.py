@@ -1,11 +1,11 @@
-"""Conformance harness for the DBWarden Verified (Approved) plugin standard.
+"""Conformance harness for the DBWarden Verified plugin standard.
 
 Plugin authors call these assertions from their own pytest suite. Each function
 raises ``AssertionError`` (or ``ConformanceError``) with an explanatory message
 on failure, so one ``def test_...()`` per check reads cleanly. None of this
 imports pytest, so it works in any test runner.
 
-See docs/plugins/developing/approved-standard.md for the full standard.
+See docs/plugins/developing/verified-standard.md for the full standard.
 """
 from __future__ import annotations
 

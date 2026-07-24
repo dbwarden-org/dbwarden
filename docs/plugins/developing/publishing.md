@@ -47,7 +47,7 @@ entry key   = slug
 | Import package | `dbwarden_<slug>` | `dbwarden_audit` |
 | Entry-point key | `<slug>` | `audit` |
 
-The `dbwarden-` prefix is shared by every plugin. A plugin's trust tier is **not** inferred from its name; it comes from the curated Official and Approved lists in core (`dbwarden/_official.py`, `dbwarden/_approved.py`), and everything else is Community. Use DBWarden-owned names such as `dbwarden-fastapi` only for packages published by the DBWarden organization.
+The `dbwarden-` prefix is shared by every plugin. A plugin's trust tier is **not** inferred from its name; it comes from the curated Official and Verified lists in core (`dbwarden/_official.py`, `dbwarden/_verified.py`), and everything else is Community. Use DBWarden-owned names such as `dbwarden-fastapi` only for packages published by the DBWarden organization.
 
 ## PyPI Metadata
 
@@ -107,7 +107,7 @@ jobs:
       - run: pytest -q
 ```
 
-Link a green run of this workflow when you [submit for approval](approved-standard.md#submit-for-approval).
+Link a green run of this workflow when you [submit for verification](verified-standard.md#submit-for-verification).
 
 ## Trusted Publishing
 

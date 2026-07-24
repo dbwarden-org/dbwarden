@@ -17,7 +17,7 @@ from typing import Any, Callable
 
 from packaging.version import parse as parse_version
 
-from dbwarden._approved import APPROVED_PLUGINS
+from dbwarden._verified import VERIFIED_PLUGINS
 from dbwarden._official import OFFICIAL_PLUGINS, OfficialSpec, classify
 
 logger = logging.getLogger("dbwarden.plugin")
@@ -294,8 +294,8 @@ def consent_allows(dist_name: str, version: str | None, *, path: Path | None = N
     return version is None or entry.get("version") == version
 
 
-def approved_allows(dist_name: str, version: str | None = None) -> bool:
-    min_version = APPROVED_PLUGINS.get(dist_name)
+def verified_allows(dist_name: str, version: str | None = None) -> bool:
+    min_version = VERIFIED_PLUGINS.get(dist_name)
     if min_version is None:
         return False
     try:
@@ -375,7 +375,7 @@ def plugin_reports() -> list[PluginLoadReport]:
         version, ep_name, ep_value = discovered[dist_name]
         tier = classify(dist_name)
         trusted = tier == "official" or (
-            tier == "approved" and approved_allows(dist_name, version)
+            tier == "verified" and verified_allows(dist_name, version)
         ) or consent_allows(dist_name, version)
         reports.append(
             PluginLoadReport(
@@ -797,15 +797,15 @@ def load_plugins(*, interactive: bool = False) -> None:
         if tier == "official":
             _load_plugin_entry_point(ep, dist_name)
             continue
-        if tier == "approved":
-            if approved_allows(dist_name, version):
+        if tier == "verified":
+            if verified_allows(dist_name, version):
                 _load_plugin_entry_point(ep, dist_name)
                 continue
             logger.warning(
-                "Plugin '%s' is approved, but installed version %s is below approved minimum %s; treating as community.",
+                "Plugin '%s' is verified, but installed version %s is below verified minimum %s; treating as community.",
                 dist_name,
                 version or "unknown",
-                APPROVED_PLUGINS.get(dist_name, "unknown"),
+                VERIFIED_PLUGINS.get(dist_name, "unknown"),
             )
         if consent_allows(dist_name, version):
             _load_plugin_entry_point(ep, dist_name)

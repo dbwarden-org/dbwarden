@@ -1,10 +1,10 @@
 ---
-description: Find official, approved, and community DBWarden plugins.
+description: Find official, verified, and community DBWarden plugins.
 ---
 
 # Finding Plugins
 
-DBWarden plugins are standard Python packages that expose a `dbwarden.plugins` entry point. DBWarden classifies each discovered distribution into a [trust tier](consent-and-trust.md) before importing it, by matching its distribution name against the curated Official and Approved lists in core.
+DBWarden plugins are standard Python packages that expose a `dbwarden.plugins` entry point. DBWarden classifies each discovered distribution into a [trust tier](consent-and-trust.md) before importing it, by matching its distribution name against the curated Official and Verified lists in core.
 
 ## Search PyPI
 
@@ -14,7 +14,7 @@ All plugins are distributed as:
 dbwarden-<name>
 ```
 
-Search PyPI for `dbwarden-` to find them. The name alone does not confer trust: Official plugins are the DBWarden-owned packages listed in `dbwarden/_official.py` (for example `dbwarden-fastapi`, `dbwarden-pgsql-extensions`); every other `dbwarden-*` package is Community until it reaches the Approved list.
+Search PyPI for `dbwarden-` to find them. The name alone does not confer trust: Official plugins are the DBWarden-owned packages listed in `dbwarden/_official.py` (for example `dbwarden-fastapi`, `dbwarden-pgsql-extensions`); every other `dbwarden-*` package is Community until it reaches the Verified list.
 
 ## Official Plugins
 
@@ -32,15 +32,15 @@ Official plugins are built and maintained by the DBWarden organization under the
 
 The authoritative list is always `OFFICIAL_PLUGINS` in `dbwarden/_official.py`.
 
-## Approved Plugins
+## Verified Plugins
 
-Approved plugins are community-maintained packages that passed DBWarden's [plugin test standard](../developing/approved-standard.md) and manual review. They load without consent once the installed version meets the approved minimum.
+Verified plugins are community-maintained packages that passed DBWarden's [plugin test standard](../developing/verified-standard.md) and manual review. They load without consent once the installed version meets the verified minimum.
 
-| Package | Minimum approved version | Description |
+| Package | Minimum verified version | Description |
 |---------|--------------------------|-------------|
-| _None yet_ | – | Approved entries are listed in `dbwarden/_approved.py` and this table as the ecosystem grows. |
+| _None yet_ – feel free to [be the first](../developing/verified-standard.md#submit-for-verification)! | – | Verified entries are listed in `dbwarden/_verified.py` and this table as the ecosystem grows. |
 
-Approval is not a security audit. See [consent and trust](consent-and-trust.md).
+Verification is not a security audit. See [consent and trust](consent-and-trust.md).
 
 ## Community Plugins
 

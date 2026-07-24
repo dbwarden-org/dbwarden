@@ -13,7 +13,7 @@ dbwarden plugin add <distribution-name>
 What `plugin add` does depends on the [trust tier](consent-and-trust.md) of the distribution:
 
 - **Official**: DBWarden verifies provenance first. On success it installs the package and writes an entry to `.dbwarden/plugins.lock` recording the version, filename, SHA-256, and verifying identity. If provenance cannot be verified, installation aborts and nothing is installed (fail-closed).
-- **Approved**: installed like any package; it will load automatically once the installed version meets the approved minimum.
+- **Verified**: installed like any package; it will load automatically once the installed version meets the verified minimum.
 - **Community**: the package is installed but **not** trusted. You must run `dbwarden plugin trust <name>` (or accept the interactive consent prompt) before DBWarden loads it.
 
 ```text

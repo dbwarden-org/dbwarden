@@ -26,7 +26,7 @@ The Rich table shows every discovered distribution with its version, tier, trust
 
 Column meanings:
 
-- **Trusted**: `yes` if the plugin is allowed to load (official, approved-and-current, or consented community).
+- **Trusted**: `yes` if the plugin is allowed to load (official, verified-and-current, or consented community).
 - **State**: `loaded`, `skipped` (untrusted community), `failed` (raised during `setup`), `incompatible` (built against a different plugin API version), or `discovered`.
 
 An `incompatible` plugin is not broken: it targets a different version of the plugin contract than this DBWarden provides, so it was refused rather than allowed to register and produce migrations under the wrong assumptions. The **Error** row names both versions. Upgrade the plugin, or pin DBWarden to a release that provides the version it wants.
@@ -75,14 +75,14 @@ Plugin Info
   Object handlers    -
   Error
   Repository         https://github.com/dbwarden-org/dbwarden-fastapi
-  Approved minimum
+  Verified minimum
   Lock verified      provenance
   Lock identity      https://github.com/dbwarden-org/dbwarden-fastapi
 ```
 
 - For **Official** plugins, details include the repository and lockfile provenance fields.
-- For **Approved** plugins, the **Approved minimum** row shows the version floor.
-- For **Community** plugins, trust reflects consent state; `Repository` and `Approved minimum` are empty.
+- For **Verified** plugins, the **Verified minimum** row shows the version floor.
+- For **Community** plugins, trust reflects consent state; `Repository` and `Verified minimum` are empty.
 
 `plugin info` also supports `--format json`.
 

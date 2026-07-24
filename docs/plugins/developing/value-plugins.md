@@ -83,7 +83,7 @@ Importing `dbwarden_example` must not import FastAPI or register anything until 
 
 ## Tests
 
-Use the shared conformance harness (`dbwarden.plugin_conformance`) so your suite matches the [Approved standard](approved-standard.md) and earns the Verified badge; the [template](publishing.md#starting-from-the-template) wires it up for you. At minimum, value plugins should include:
+Use the shared conformance harness (`dbwarden.plugin_conformance`) so your suite matches the [Verified standard](verified-standard.md) and earns the Verified badge; the [template](publishing.md#starting-from-the-template) wires it up for you. At minimum, value plugins should include:
 
 - `test_setup_registers_hooks`: `setup(PluginRegistrar("dist"))` registers the declared hooks.
 - `test_import_has_no_side_effects`: importing the package/module registers nothing and mutates no plugin global state.

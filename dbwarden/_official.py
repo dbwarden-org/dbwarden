@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from dbwarden._approved import APPROVED_PLUGINS
+from dbwarden._verified import VERIFIED_PLUGINS
 
 
 @dataclass(frozen=True)
@@ -65,6 +65,6 @@ OFFICIAL_PLUGINS: dict[str, OfficialSpec] = {
 def classify(dist_name: str) -> str:
     if dist_name in OFFICIAL_PLUGINS:
         return "official"
-    if dist_name in APPROVED_PLUGINS:
-        return "approved"
+    if dist_name in VERIFIED_PLUGINS:
+        return "verified"
     return "community"

@@ -11,16 +11,16 @@ DBWarden classifies every plugin entry point **before importing any plugin code*
 | Tier | Loads automatically? | Basis of trust |
 |------|----------------------|----------------|
 | Official | Yes | Organization-owned name + provenance verified at install. |
-| Approved | Yes, when version ≥ approved minimum | Community review against the test standard. |
+| Verified | Yes, when version ≥ verified minimum | Community review against the test standard. |
 | Community | No, consent required | Your explicit, version-specific consent. |
 
 ### Official
 
 Official plugins are DBWarden-maintained. `plugin add` verifies provenance and **fails closed** when verification is unavailable or invalid. They load without consent.
 
-### Approved
+### Verified
 
-Approved plugins are community-maintained but reviewed against the DBWarden plugin standard. They load **without consent** only when the installed version is at or above the approved minimum recorded in `dbwarden/_approved.py`. If the installed version is below the floor, DBWarden logs a warning and treats the plugin as **Community** (consent required).
+Verified plugins are community-maintained but reviewed against the DBWarden plugin standard. They load **without consent** only when the installed version is at or above the verified minimum recorded in `dbwarden/_verified.py`. If the installed version is below the floor, DBWarden logs a warning and treats the plugin as **Community** (consent required).
 
 ### Community
 
@@ -63,4 +63,4 @@ Classify-before-load ensures untrusted community plugin code is **not imported**
 !!! warning "Not a sandbox"
     Trust gates *whether* a plugin loads, not *what it can do*. Once a plugin is loaded it runs with **full Python process privileges**: it can read files, open network connections, and call any API your process can. Consent is a statement that you have reviewed and trust the code, not a containment mechanism. Approval is likewise a review, **not a security audit**.
 
-Approved and Official tiers exist to reduce how often you must make that trust decision manually, not to make loading arbitrary code safe.
+Verified and Official tiers exist to reduce how often you must make that trust decision manually, not to make loading arbitrary code safe.

@@ -46,7 +46,7 @@ dbwarden plugin add dbwarden-fastapi --dry-run
 
 ## 2. Consent For Community Plugins
 
-Official and Approved plugins load automatically. A **Community** plugin, any distribution not listed in core, is discovered but not imported until you consent to the exact installed version. When you run a DBWarden command in an interactive terminal, you are prompted:
+Official and Verified plugins load automatically. A **Community** plugin, any distribution not listed in core, is discovered but not imported until you consent to the exact installed version. When you run a DBWarden command in an interactive terminal, you are prompted:
 
 ```text
 Enable community plugin 'dbwarden-example' version 0.1.0? [y/N]:

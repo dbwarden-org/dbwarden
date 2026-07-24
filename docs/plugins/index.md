@@ -18,10 +18,10 @@ Before plugin code is imported, DBWarden classifies the package by distribution 
 | Tier | Meaning | Trust guarantee |
 |------|---------|-----------------|
 | Official | Built and maintained by the DBWarden organization. Published under organization-owned package names with provenance verified at install time. | Cryptographic and organizational. |
-| Approved | Community-maintained, but passed the DBWarden plugin test standard and manual review. | Community review and technical compliance. |
-| Community | Any `dbwarden.plugins` entry point not listed as Official or Approved. | Explicit consent only. |
+| Verified | Community-maintained, but passed the DBWarden plugin test standard and manual review. | Community review and technical compliance. |
+| Community | Any `dbwarden.plugins` entry point not listed as Official or Verified. | Explicit consent only. |
 
-Approval is not a security audit. Once loaded, a plugin runs with normal Python process privileges (it is not sandboxed). See [consent and trust](using-plugins/consent-and-trust.md).
+Verification is not a security audit. Once loaded, a plugin runs with normal Python process privileges (it is not sandboxed). See [consent and trust](using-plugins/consent-and-trust.md).
 
 ## Philosophy
 

@@ -1,14 +1,14 @@
 ---
-description: Approved plugin test standard and review process.
+description: Verified plugin test standard and review process.
 ---
 
-# Approved Plugin Standard
+# Verified Plugin Standard
 
-The **Approved** tier earns a plugin the **Verified** badge: it loads without per-user consent once its installed version meets the approved minimum. To qualify, the plugin must pass a focused, automatable conformance suite that proves it respects the DBWarden contract, does not compromise the user's environment, and (for object plugins) integrates correctly with the diff pipeline.
+The **Verified** tier earns a plugin the **Verified** badge: it loads without per-user consent once its installed version meets the verified minimum. To qualify, the plugin must pass a focused, automatable conformance suite that proves it respects the DBWarden contract, does not compromise the user's environment, and (for object plugins) integrates correctly with the diff pipeline.
 
 The suite is deliberately minimal. It does **not** review business logic, performance, or security; it ensures the plugin is a well-behaved citizen.
 
-!!! warning "Approval is not a security audit"
+!!! warning "Verification is not a security audit"
     The Verified badge is a statement of contract adherence, not fitness for purpose. It says the plugin respects DBWarden's rules, will not break core, and will not execute code before you consent. It does **not** certify the plugin is free of vulnerabilities or malicious behavior, and it grants no sandboxing. A loaded plugin runs with full process privileges. Vet the source yourself for anything sensitive.
 
 ## The Conformance Harness
@@ -52,9 +52,9 @@ Building on those means less to revisit when core releases. Anything deeper is f
 - **Security audit**: no static analysis for malicious code beyond the import restriction.
 - **Inter-plugin interaction**: the resolver's job.
 
-## Submit For Approval
+## Submit For Verification
 
-Open an issue in the DBWarden repository using the **Plugin Approval** template. It asks for the repository, the distribution name and requested minimum version, what the plugin provides, the core versions you test against, a link to a green conformance run, and two things worth explaining here.
+Open an issue in the DBWarden repository using the **Plugin Verification** template. It asks for the repository, the distribution name and requested minimum version, what the plugin provides, the core versions you test against, a link to a green conformance run, and two things worth explaining here.
 
 ### The plugin API version
 
@@ -86,8 +86,8 @@ A plugin handler that claims an `object_type` core already handles **replaces** 
 
 ## CI Enforcement
 
-To be Verified, the plugin must run the conformance suite in public CI (GitHub Actions or similar) on every push, with a visible status badge. The template's `.github/workflows/test.yml` does this. The reviewer confirms CI is green and that `tests/test_conformance.py` matches the standard, then does a quick sanity pass for obviously unsafe behavior (malware, core monkey-patching, network exfiltration). On approval, the distribution name and minimum version are added to `dbwarden/_approved.py` and ship in the next DBWarden release.
+To be Verified, the plugin must run the conformance suite in public CI (GitHub Actions or similar) on every push, with a visible status badge. The template's `.github/workflows/test.yml` does this. The reviewer confirms CI is green and that `tests/test_conformance.py` matches the standard, then does a quick sanity pass for obviously unsafe behavior (malware, core monkey-patching, network exfiltration). On verification, the distribution name and minimum version are added to `dbwarden/_verified.py` and ship in the next DBWarden release.
 
-## Version Re-Approval
+## Version Re-Verification
 
-The approved minimum is a **floor**: patch and minor releases above it load automatically. A **new major version** (or any release that changes hooks, signatures, or object semantics) must request re-approval, and the floor in `dbwarden/_approved.py` is updated accordingly. Until then, a version below the recorded floor is treated as **Community** and requires consent.
+The verified minimum is a **floor**: patch and minor releases above it load automatically. A **new major version** (or any release that changes hooks, signatures, or object semantics) must request re-verification, and the floor in `dbwarden/_verified.py` is updated accordingly. Until then, a version below the recorded floor is treated as **Community** and requires consent.

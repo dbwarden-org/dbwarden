@@ -34,7 +34,7 @@ from dbwarden.plugin import (
     PluginRegistrar,
     ProvenanceResult,
     add_plugin,
-    approved_allows,
+    verified_allows,
     consent_allows,
     load_plugins,
     load_plugin_lock,
@@ -93,31 +93,31 @@ def test_classify_marks_known_plugins_official() -> None:
     assert classify("dbwarden-acme") == "community"
 
 
-def test_classify_marks_approved_plugins_after_official(monkeypatch) -> None:
-    from dbwarden._approved import APPROVED_PLUGINS
+def test_classify_marks_verified_plugins_after_official(monkeypatch) -> None:
+    from dbwarden._verified import VERIFIED_PLUGINS
 
-    APPROVED_PLUGINS["dbwarden-approved"] = "0.2.0"
-    APPROVED_PLUGINS["dbwarden-pgsql-extensions"] = "999.0.0"
+    VERIFIED_PLUGINS["dbwarden-verified"] = "0.2.0"
+    VERIFIED_PLUGINS["dbwarden-pgsql-extensions"] = "999.0.0"
     try:
-        assert classify("dbwarden-approved") == "approved"
+        assert classify("dbwarden-verified") == "verified"
         assert classify("dbwarden-pgsql-extensions") == "official"
     finally:
-        APPROVED_PLUGINS.pop("dbwarden-approved", None)
-        APPROVED_PLUGINS.pop("dbwarden-pgsql-extensions", None)
+        VERIFIED_PLUGINS.pop("dbwarden-verified", None)
+        VERIFIED_PLUGINS.pop("dbwarden-pgsql-extensions", None)
 
 
-def test_approved_allows_uses_version_floor() -> None:
-    from dbwarden._approved import APPROVED_PLUGINS
+def test_verified_allows_uses_version_floor() -> None:
+    from dbwarden._verified import VERIFIED_PLUGINS
 
-    APPROVED_PLUGINS["dbwarden-approved"] = "0.2.0"
+    VERIFIED_PLUGINS["dbwarden-verified"] = "0.2.0"
     try:
-        assert approved_allows("dbwarden-approved", "0.2.0") is True
-        assert approved_allows("dbwarden-approved", "0.3.0") is True
-        assert approved_allows("dbwarden-approved", "0.1.9") is False
-        assert approved_allows("dbwarden-approved", "not-a-version") is False
-        assert approved_allows("dbwarden-community", "1.0.0") is False
+        assert verified_allows("dbwarden-verified", "0.2.0") is True
+        assert verified_allows("dbwarden-verified", "0.3.0") is True
+        assert verified_allows("dbwarden-verified", "0.1.9") is False
+        assert verified_allows("dbwarden-verified", "not-a-version") is False
+        assert verified_allows("dbwarden-community", "1.0.0") is False
     finally:
-        APPROVED_PLUGINS.pop("dbwarden-approved", None)
+        VERIFIED_PLUGINS.pop("dbwarden-verified", None)
 
 
 def test_registrar_registers_value_hooks() -> None:
@@ -217,39 +217,39 @@ def test_load_plugins_loads_trusted_community(monkeypatch, tmp_path) -> None:
     assert HookRegistry.execute_single("load_model_module") == "models"
 
 
-def test_load_plugins_loads_approved_without_consent(monkeypatch) -> None:
-    from dbwarden._approved import APPROVED_PLUGINS
+def test_load_plugins_loads_verified_without_consent(monkeypatch) -> None:
+    from dbwarden._verified import VERIFIED_PLUGINS
 
     def setup(registrar):
         registrar.register("load_model_module", lambda: "models")
 
-    APPROVED_PLUGINS["dbwarden-approved"] = "0.2.0"
-    ep = FakeEntryPoint("dbwarden-approved", "0.2.0", setup)
+    VERIFIED_PLUGINS["dbwarden-verified"] = "0.2.0"
+    ep = FakeEntryPoint("dbwarden-verified", "0.2.0", setup)
     monkeypatch.setattr("dbwarden.plugin.iter_plugin_entry_points", lambda: [ep])
     try:
         load_plugins()
         assert HookRegistry.execute_single("load_model_module") == "models"
     finally:
-        APPROVED_PLUGINS.pop("dbwarden-approved", None)
+        VERIFIED_PLUGINS.pop("dbwarden-verified", None)
 
 
-def test_load_plugins_treats_outdated_approved_as_community(monkeypatch) -> None:
-    from dbwarden._approved import APPROVED_PLUGINS
+def test_load_plugins_treats_outdated_verified_as_community(monkeypatch) -> None:
+    from dbwarden._verified import VERIFIED_PLUGINS
 
     def setup(registrar):
         registrar.register("load_model_module", lambda: "models")
 
-    APPROVED_PLUGINS["dbwarden-approved"] = "0.2.0"
-    ep = FakeEntryPoint("dbwarden-approved", "0.1.0", setup)
+    VERIFIED_PLUGINS["dbwarden-verified"] = "0.2.0"
+    ep = FakeEntryPoint("dbwarden-verified", "0.1.0", setup)
     monkeypatch.setattr("dbwarden.plugin.iter_plugin_entry_points", lambda: [ep])
     try:
         load_plugins()
         assert HookRegistry.is_registered("load_model_module") is False
-        record_consent("dbwarden-approved", "0.1.0")
+        record_consent("dbwarden-verified", "0.1.0")
         load_plugins()
         assert HookRegistry.execute_single("load_model_module") == "models"
     finally:
-        APPROVED_PLUGINS.pop("dbwarden-approved", None)
+        VERIFIED_PLUGINS.pop("dbwarden-verified", None)
 
 
 def test_plugin_list_cli(monkeypatch) -> None:
@@ -264,34 +264,34 @@ def test_plugin_list_cli(monkeypatch) -> None:
     assert "community" in result.output
 
 
-def test_plugin_list_cli_displays_approved_tier(monkeypatch) -> None:
-    from dbwarden._approved import APPROVED_PLUGINS
+def test_plugin_list_cli_displays_verified_tier(monkeypatch) -> None:
+    from dbwarden._verified import VERIFIED_PLUGINS
 
-    APPROVED_PLUGINS["dbwarden-approved"] = "0.2.0"
-    ep = FakeEntryPoint("dbwarden-approved", "0.2.0", lambda registrar: None)
+    VERIFIED_PLUGINS["dbwarden-verified"] = "0.2.0"
+    ep = FakeEntryPoint("dbwarden-verified", "0.2.0", lambda registrar: None)
     monkeypatch.setattr("dbwarden.plugin.iter_plugin_entry_points", lambda: [ep])
     try:
         result = CliRunner().invoke(app, ["plugin", "list"])
         assert result.exit_code == 0
-        assert "dbwarden-approved" in result.output
-        assert "approved" in result.output
+        assert "dbwarden-verified" in result.output
+        assert "verified" in result.output
     finally:
-        APPROVED_PLUGINS.pop("dbwarden-approved", None)
+        VERIFIED_PLUGINS.pop("dbwarden-verified", None)
 
 
-def test_plugin_info_cli_displays_approved_minimum(monkeypatch) -> None:
-    from dbwarden._approved import APPROVED_PLUGINS
+def test_plugin_info_cli_displays_verified_minimum(monkeypatch) -> None:
+    from dbwarden._verified import VERIFIED_PLUGINS
 
-    APPROVED_PLUGINS["dbwarden-approved"] = "0.2.0"
-    ep = FakeEntryPoint("dbwarden-approved", "0.2.0", lambda registrar: None)
+    VERIFIED_PLUGINS["dbwarden-verified"] = "0.2.0"
+    ep = FakeEntryPoint("dbwarden-verified", "0.2.0", lambda registrar: None)
     monkeypatch.setattr("dbwarden.plugin.iter_plugin_entry_points", lambda: [ep])
     try:
-        result = CliRunner().invoke(app, ["plugin", "info", "dbwarden-approved"])
+        result = CliRunner().invoke(app, ["plugin", "info", "dbwarden-verified"])
         assert result.exit_code == 0
-        assert "approved" in result.output
+        assert "verified" in result.output
         assert "0.2.0" in result.output
     finally:
-        APPROVED_PLUGINS.pop("dbwarden-approved", None)
+        VERIFIED_PLUGINS.pop("dbwarden-verified", None)
 
 
 def test_plugin_object_handler_participates_in_registry_run() -> None:

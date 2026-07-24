@@ -5,8 +5,8 @@ Usage:
     python scripts/plugin-impact.py dbwarden.output
     python scripts/plugin-impact.py --all
 
-Reads the deep-import declarations recorded at plugin approval
-(``dbwarden/_approved.py``). Official plugins are checked directly from their
+Reads the deep-import declarations recorded at plugin verification
+(``dbwarden/_verified.py``). Official plugins are checked directly from their
 source when they are installed, since core owns them and their coupling is not
 recorded in the approval manifest.
 
@@ -20,8 +20,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from dbwarden._approved import (  # noqa: E402
-    APPROVED_METADATA,
+from dbwarden._verified import (  # noqa: E402
+    VERIFIED_METADATA,
     declared_deep_imports,
     plugins_depending_on,
 )
@@ -47,10 +47,10 @@ def _official_deep_imports() -> dict[str, list[str]]:
 
 
 def _report_all() -> int:
-    approved = declared_deep_imports()
+    verified = declared_deep_imports()
     official = _official_deep_imports()
 
-    if not approved and not official:
+    if not verified and not official:
         print("No deep imports declared or detected.")
         print(f"Stable surface: {', '.join(STABLE)}")
         return 0
@@ -63,12 +63,12 @@ def _report_all() -> int:
                 print(f"    {entry}")
         print()
 
-    if approved:
-        print("Approved plugins (declared at approval):")
-        for dist_name, modules in approved.items():
+    if verified:
+        print("Verified plugins (declared at verification):")
+        for dist_name, modules in verified.items():
             print(f"  {dist_name}: {', '.join(modules)}")
     else:
-        print("Approved plugins: none have declared deep imports.")
+        print("Verified plugins: none have declared deep imports.")
     return 0
 
 
@@ -78,11 +78,11 @@ def _report_module(module: str) -> int:
 
     dependants = plugins_depending_on(module)
     if dependants:
-        print(f"Approved plugins depending on '{module}':")
+        print(f"Verified plugins depending on '{module}':")
         for dist_name in dependants:
-            print(f"  {dist_name}  ({APPROVED_METADATA[dist_name].repository})")
+            print(f"  {dist_name}  ({VERIFIED_METADATA[dist_name].repository})")
     else:
-        print(f"No approved plugin declared a dependency on '{module}'.")
+        print(f"No verified plugin declared a dependency on '{module}'.")
 
     official_hits = {
         dist_name: [e for e in entries if module in e]

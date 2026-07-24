@@ -59,7 +59,7 @@ All plugins are distributed as `dbwarden-<name>`. The import package and entry-p
 | Import package | `dbwarden_<slug>` | `dbwarden_audit` |
 | Entry-point key | `<slug>` | `audit` |
 
-The `dbwarden-` prefix is shared by every plugin; a plugin's trust tier comes from the curated Official/Approved lists in core, not from its name. See [publishing](publishing.md#naming) for the full rule.
+The `dbwarden-` prefix is shared by every plugin; a plugin's trust tier comes from the curated Official/Verified lists in core, not from its name. See [publishing](publishing.md#naming) for the full rule.
 
 ## Project Structure
 

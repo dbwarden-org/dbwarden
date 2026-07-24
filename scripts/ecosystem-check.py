@@ -3,7 +3,7 @@
 
 Usage:
     python scripts/ecosystem-check.py                       # clone official plugins
-    python scripts/ecosystem-check.py --all                 # official + approved
+    python scripts/ecosystem-check.py --all                 # official + verified
     python scripts/ecosystem-check.py --only dbwarden-seeds
     python scripts/ecosystem-check.py --local ~/src         # sibling working copies
 
@@ -11,7 +11,7 @@ Clones each plugin, installs it alongside the local core, and runs its suite.
 The point is to learn that a core change breaks a plugin *before* the release
 that ships it, rather than from a bug report afterwards.
 
-Report-only by design when run over approved (third-party) plugins: their CI is
+Report-only by design when run over verified (third-party) plugins: their CI is
 not core's responsibility and a plugin can be red for reasons that have nothing
 to do with this change. Exit status reflects official plugins only, unless
 --strict is passed.
@@ -33,7 +33,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from dbwarden._approved import APPROVED_METADATA  # noqa: E402
+from dbwarden._verified import VERIFIED_METADATA  # noqa: E402
 from dbwarden._official import OFFICIAL_PLUGINS  # noqa: E402
 
 
@@ -51,15 +51,15 @@ class Result:
     detail: str = ""
 
 
-def _targets(include_approved: bool, only: str | None) -> list[Target]:
+def _targets(include_verified: bool, only: str | None) -> list[Target]:
     targets = [
         Target(name, spec.repository, official=True)
         for name, spec in sorted(OFFICIAL_PLUGINS.items())
     ]
-    if include_approved:
+    if include_verified:
         targets += [
             Target(name, meta.repository, official=False)
-            for name, meta in sorted(APPROVED_METADATA.items())
+            for name, meta in sorted(VERIFIED_METADATA.items())
         ]
     if only:
         targets = [t for t in targets if t.dist_name == only]
@@ -204,12 +204,12 @@ def _check(target: Target, workdir: Path, local_root: Path | None) -> Result:
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--all", action="store_true", help="include approved plugins")
+    parser.add_argument("--all", action="store_true", help="include verified plugins")
     parser.add_argument("--only", help="check a single distribution")
     parser.add_argument(
         "--strict",
         action="store_true",
-        help="fail the run when an approved (third-party) plugin fails",
+        help="fail the run when a verified (third-party) plugin fails",
     )
     parser.add_argument(
         "--local",
@@ -238,7 +238,7 @@ def main(argv: list[str]) -> int:
     with tempfile.TemporaryDirectory(prefix="dbwarden-ecosystem-") as tmp:
         workdir = Path(tmp)
         for target in targets:
-            tier = "official" if target.official else "approved"
+            tier = "official" if target.official else "verified"
             print(f"==> {target.dist_name} ({tier})", flush=True)
             result = _check(target, workdir, local_root)
             results.append(result)
@@ -248,7 +248,7 @@ def main(argv: list[str]) -> int:
     print("Ecosystem check against local core")
     print("=" * 60)
     for result in results:
-        tier = "official" if result.target.official else "approved"
+        tier = "official" if result.target.official else "verified"
         print(f"{result.status.upper():8} {result.target.dist_name} ({tier})")
 
     # "empty" counts as a failure for official plugins: a placeholder on the

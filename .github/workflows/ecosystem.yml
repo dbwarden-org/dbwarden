@@ -20,8 +20,8 @@ on:
     - cron: "0 4 * * *"
   workflow_dispatch:
     inputs:
-      include_approved:
-        description: "Also run approved third-party plugins"
+      include_verified:
+        description: "Also run verified third-party plugins"
         type: boolean
         default: true
   pull_request:
@@ -29,7 +29,7 @@ on:
     paths:
       - "dbwarden/plugin.py"
       - "dbwarden/plugin_conformance.py"
-      - "dbwarden/_approved.py"
+      - "dbwarden/_verified.py"
       - "dbwarden/_official.py"
       - "dbwarden/engine/core/**"
 
@@ -46,7 +46,7 @@ jobs:
 
       - name: Run plugin suites against this core
         run: |
-          if [ "${{ github.event.inputs.include_approved }}" = "false" ]; then
+          if [ "${{ github.event.inputs.include_verified }}" = "false" ]; then
             python scripts/ecosystem-check.py
           else
             python scripts/ecosystem-check.py --all
