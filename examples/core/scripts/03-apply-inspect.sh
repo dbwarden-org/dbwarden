@@ -38,7 +38,7 @@ dbwarden history --database primary
 # Reverts the last N applied migrations.  Executes the --rollback
 # section of each migration in reverse order.  The rollback SQL
 # was generated alongside the upgrade SQL and committed together,
-# so rollbacks are always available — no "sorry, I didn't write a
+# so rollbacks are always available; no "sorry, I didn't write a
 # downgrade" surprises in code review.
 echo ""
 echo "--- Rolling back 1 migration ---"

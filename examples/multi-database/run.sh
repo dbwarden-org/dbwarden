@@ -7,8 +7,8 @@ echo ""
 
 # ── Start database services ────────────────────────────────────
 # docker-compose.yml defines two services:
-#   postgres   — PostgreSQL 16 on port 5432
-#   clickhouse — ClickHouse on ports 8123 (HTTP) and 9000 (native)
+#   postgres   : PostgreSQL 16 on port 5432
+#   clickhouse : ClickHouse on ports 8123 (HTTP) and 9000 (native)
 echo "Starting PostgreSQL and ClickHouse..."
 docker compose up -d
 echo "Waiting for databases to be ready..."

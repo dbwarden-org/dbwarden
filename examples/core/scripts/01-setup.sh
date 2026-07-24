@@ -21,7 +21,7 @@ rm -rf migrations .dbwarden
 dbwarden init
 
 # ── dbwarden config ────────────────────────────────────────────
-# Displays the loaded configuration in human-readable form —
+# Displays the loaded configuration in human-readable form:
 # which databases are registered, their types, URLs, and model
 # paths.  Useful for verifying dbwarden.py was parsed correctly.
 dbwarden config

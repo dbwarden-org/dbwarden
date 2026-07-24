@@ -14,7 +14,7 @@ echo "=== 02: Models & Migrations ==="
 #   4. Names the file as: {database}__{0001}_{description}.sql
 #
 # The description argument becomes part of the filename.  Keep it
-# short and semantic — it's what appears in `dbwarden history`.
+# short and semantic: it's what appears in `dbwarden history`.
 dbwarden make-migrations "create core tables" --database primary
 
 # Show the generated migration file so you can inspect the SQL

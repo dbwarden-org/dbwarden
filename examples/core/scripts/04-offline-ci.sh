@@ -11,7 +11,7 @@ echo "=== 04: Offline & CI Workflows ==="
 #   1. Run `dbwarden export-models` against a database (dev/CI)
 #      to produce a .dbwarden/model_state.json snapshot
 #   2. Commit that JSON file to your repo
-#   3. In CI, run `dbwarden make-migrations --offline` — it
+#   3. In CI, run `dbwarden make-migrations --offline`; it
 #      compares models against the committed snapshot instead of
 #      a live database
 #   4. The snapshot stays in sync as migrations are applied
@@ -34,7 +34,7 @@ cat .dbwarden/model_state.json 2>/dev/null || echo "(file not found)"
 
 # ── Offline migration ──────────────────────────────────────────
 # With model_state.json committed, make-migrations --offline
-# generates SQL using only the file — no database connection
+# generates SQL using only the file; no database connection
 # needed.  The CLI reads the snapshot, compares it against the
 # current Python model definitions, and produces a migration.
 # The snapshot is updated in-place after generation.

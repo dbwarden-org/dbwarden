@@ -7,10 +7,10 @@ echo ""
 
 # ── Start services ────────────────────────────────────────────
 # docker-compose.yml defines three services:
-#   postgres    — PostgreSQL 16 on port 5432
-#   prometheus  — Prometheus on port 9090, configured to scrape
+#   postgres    : PostgreSQL 16 on port 5432
+#   prometheus  : Prometheus on port 9090, configured to scrape
 #                 the FastAPI app's /metrics endpoint
-#   grafana     — Grafana on port 3000, with Prometheus as the
+#   grafana     : Grafana on port 3000, with Prometheus as the
 #                 default data source (anonymous access enabled)
 echo "Starting PostgreSQL, Prometheus, and Grafana..."
 docker compose up -d

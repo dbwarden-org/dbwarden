@@ -358,6 +358,13 @@ See the [plugin documentation](https://dbwarden.emiliano-go.com/plugins/) for in
 
 ---
 
+## Contributors
+
+- [Emiliano Gandini Outeda](https://github.com/emiliano-gandini-outeda): creator and maintainer
+- [Ahmet Cetin](https://github.com/ahmetcetin): ClickHouse metadata support, test fixes
+
+---
+
 ## License
 
 MIT

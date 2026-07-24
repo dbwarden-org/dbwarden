@@ -10,9 +10,9 @@ echo "=== 07: Seeds ==="
 # roles, admin accounts) that must exist in every environment.
 #
 # Seeds can be:
-#   - SQL files (seeds/V*.sql) — plain INSERT statements
-#   - Python files — run arbitrary logic
-#   - @seed_data decorators — inline in model files
+#   - SQL files (seeds/V*.sql): plain INSERT statements
+#   - Python files: run arbitrary logic
+#   - @seed_data decorators: inline in model files
 
 # Ensure migrations are applied (tables must exist before seeding)
 mkdir -p seeds
@@ -45,7 +45,7 @@ fi
 # Applies all pending seeds (those not yet recorded in
 # _dbwarden_seeds).  Each seed is executed in a transaction
 # and its checksum is recorded.  Re-running applies only new
-# or changed seeds — already-applied seeds are skipped.
+# or changed seeds; already-applied seeds are skipped.
 echo ""
 echo "--- Applying seeds ---"
 dbwarden seed apply --database primary
