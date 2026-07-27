@@ -330,11 +330,23 @@ def ch_view_tables_from_models(
             target_table = _expand_agg_target(model_class, spec)
             if target_table:
                 tables.append(target_table)
-
+            # Flatten agg_mv into top-level keys for the MV handler
+            agg_mv = clickhouse_options.get("ch_agg_mv", {})
+            mv_opts: dict[str, Any] = {}
+            to_table = agg_mv.get("ch_to_table")
+            if to_table:
+                mv_opts["ch_to_table"] = to_table
+            select = agg_mv.get("ch_select_statement")
+            if select:
+                mv_opts["ch_select_statement"] = select
+            mv_name = spec.mv_name
+        else:
+            mv_opts = clickhouse_options
+            mv_name = tablename
         mv_table = ModelTable(
-            name=tablename,
+            name=mv_name,
             columns=columns,
-            clickhouse_options=clickhouse_options,
+            clickhouse_options=mv_opts,
             object_type="materialized_view",
         )
         tables.append(mv_table)
@@ -365,6 +377,19 @@ def _expand_agg_target(
     ttl = target_info.get("ttl")
     settings = target_info.get("settings")
 
+    # Build column type strings from aggregates + group-by keys
+    agg_map: dict[str, str] = {}
+    for a in target_info.get("aggregates", []):
+        if a.alias:
+            agg_map[a.alias] = a.target_type()
+    col_names = target_info.get("columns", [])
+    col_defs: list[str] = []
+    for name in col_names:
+        if name in agg_map:
+            col_defs.append(f"{name} {agg_map[name]}")
+        else:
+            col_defs.append(f"{name} String")
+
     clickhouse_options: dict[str, Any] = {
         "ch_engine": "AggregatingMergeTree",
         "ch_object_type": "table",
@@ -379,6 +404,8 @@ def _expand_agg_target(
         clickhouse_options["ch_ttl"] = [ttl] if isinstance(ttl, str) else list(ttl)
     if settings is not None:
         clickhouse_options["ch_settings"] = dict(settings)
+    if col_defs:
+        clickhouse_options["ch_column_defs"] = col_defs
 
     columns = _make_target_columns(model_class, target_info)
     return ModelTable(
@@ -403,6 +430,11 @@ def _make_target_columns(
     col_name_set = set(column_names)
     columns: list[ModelColumn] = []
 
+    agg_map: dict[str, str] = {}
+    for a in target_info.get("aggregates", []):
+        if a.alias:
+            agg_map[a.alias] = a.target_type()
+
     table = getattr(model_class, "__table__", None)
     if table is not None:
         for sa_col in table.columns:
@@ -423,7 +455,7 @@ def _make_target_columns(
         if name not in {c.name for c in columns}:
             columns.append(ModelColumn(
                 name=name,
-                type="String",
+                type=agg_map.get(name, "String"),
                 nullable=True,
                 primary_key=False,
                 unique=False,

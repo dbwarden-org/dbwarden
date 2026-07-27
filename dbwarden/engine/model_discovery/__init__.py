@@ -131,6 +131,14 @@ def get_all_model_tables(
                         seen_tables.add(target.name)
                         tables.append(target)
 
+    # Include ClickHouse views (AggregatingView, MaterializedView)
+    from dbwarden.databases.clickhouse.views import ch_view_tables_from_models
+    ch_tables = ch_view_tables_from_models(model_paths=model_paths, db_name=db_name)
+    for t in ch_tables:
+        if t.name not in seen_tables:
+            seen_tables.add(t.name)
+            tables.append(t)
+
     _get_all_model_tables_cache[cache_key] = (signature, tables)
     return tables
 

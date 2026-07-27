@@ -18,7 +18,7 @@ class ChAggTargetHandler(ObjectHandler):
     object_type: str = "ch_agg_target"
     op_types: tuple[str, ...] = ("create_ch_agg_target", "drop_ch_agg_target")
     run_phase: RunPhase = RunPhase.DIFF
-    statement_order: StatementOrder = StatementOrder.ALTER_TABLE_OPTIONS
+    statement_order: StatementOrder = StatementOrder.CREATE_TABLE
 
     def extract(self, snapshot: dict[str, Any]) -> dict[str, Any]:
         result: dict[str, Any] = {}
@@ -122,7 +122,7 @@ class ChAggTargetHandler(ObjectHandler):
 
         return [
             MigrationStatement(
-                order=StatementOrder.ALTER_TABLE_OPTIONS,
+                order=self.statement_order,
                 upgrade_sql="\n".join(up_parts),
                 rollback_sql="\n".join(rb_parts),
             )
@@ -149,6 +149,10 @@ def _render_agg_target_tail(name: str, opts: dict[str, Any]) -> str:
     col_lines = []
     for col in columns:
         col_lines.append(f"    {col}")
+    if not col_lines:
+        cols_from_opts = opts.get("ch_column_defs")
+        if cols_from_opts:
+            col_lines = [f"    {c}" for c in cols_from_opts]
     if col_lines:
         parts.append(",\n".join(col_lines))
     else:

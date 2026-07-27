@@ -114,7 +114,8 @@ def _generate_clickhouse_materialized_view_sql(
     to_table = options.get("ch_to_table")
     if to_table:
         parts[0] += f" TO {to_table}"
-    parts[0] += f" (\n{columns_sql}\n)"
+    if columns_sql and not to_table:
+        parts[0] += f" (\n{columns_sql}\n)"
 
     if not to_table:
         engine_raw = options.get("ch_engine", "MergeTree")

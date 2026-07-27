@@ -32,6 +32,9 @@ class TableHandler(ObjectHandler):
     def model_spec_from_tables(self, model_tables: list[Any]) -> dict[str, Any]:
         result: dict[str, Any] = {}
         for table in model_tables:
+            ch_opts = table.clickhouse_options or {}
+            if "AggregatingMergeTree" in str(ch_opts.get("ch_engine", "")):
+                continue
             result[table.name] = {
                 "comment": getattr(table, "comment", None),
                 "object_type": getattr(table, "object_type", "table"),

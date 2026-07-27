@@ -44,6 +44,9 @@ jobs:
         with:
           python-version: "3.12.7"
 
+      - name: Install dependencies
+        run: uv sync --dev
+
       - name: Run plugin suites against this core
         run: |
           if [ "${{ github.event.inputs.include_verified }}" = "false" ]; then
