@@ -467,6 +467,8 @@ def extract_column_info(
                 else:
                     ch_type = _map_sa_type_to_clickhouse(column)
                 ch_meta["ch_type"] = ch_type
+        elif "ch_type" not in ch_meta:
+            ch_meta["ch_type"] = _map_sa_type_to_clickhouse(column)
 
         if column.comment:
             comment = column.comment
