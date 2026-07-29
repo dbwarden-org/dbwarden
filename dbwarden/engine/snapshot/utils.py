@@ -5,12 +5,8 @@ from typing import Any
 
 
 def _get_backend(db_name: str | None = None) -> str:
-    try:
-        from dbwarden.config import get_database
-        config = get_database(db_name)
-        return config.database_type
-    except Exception:
-        return "sqlite"
+    from dbwarden.engine.model_discovery.type_mapping import _get_backend_name
+    return _get_backend_name(db_name)
 
 
 def _quote_default_for_sql(default: str) -> str:

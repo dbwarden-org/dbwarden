@@ -8,6 +8,7 @@ from dbwarden.database.queries.store import (
     SQLITE_QUERIES,
     QueryMethod,
 )
+from dbwarden.logging import get_logger
 
 DEFAULT_POSTGRES_SCHEMA = "public"
 
@@ -39,6 +40,12 @@ def get_schema_name(db_name: str | None = None) -> str:
     try:
         return get_database(db_name).postgres_schema or DEFAULT_POSTGRES_SCHEMA
     except Exception:
+        get_logger().warning(
+            "Could not resolve database config for %r; "
+            "falling back to schema %r.  "
+            "Ensure DATABASE_URL is configured.",
+            db_name, DEFAULT_POSTGRES_SCHEMA,
+        )
         return DEFAULT_POSTGRES_SCHEMA
 
 

@@ -21,6 +21,12 @@ def _get_backend_name(db_name: str | None = None) -> str:
         config = get_database(db_name)
         return config.database_type
     except Exception:
+        get_logger().warning(
+            "Could not resolve database config for %r; "
+            "falling back to 'sqlite'.  This may cause the wrong SQL "
+            "dialect to be used.  Ensure DATABASE_URL is configured.",
+            db_name,
+        )
         return "sqlite"
 
 
