@@ -112,6 +112,17 @@ class TestGetBackendName:
             result = _get_backend_name("my_db")
             assert result == "postgresql"
 
+    def test_snapshot_get_backend_delegates_to_type_mapping(self):
+        """Regression: snapshot.utils._get_backend delegates to
+        type_mapping._get_backend_name, so both functions return the same
+        fallback value when config resolution fails."""
+        from dbwarden.engine.snapshot.utils import _get_backend as snap_backend
+        from dbwarden.engine.model_discovery.type_mapping import _get_backend_name
+
+        result_snap = snap_backend("nonexistent_db")
+        result_tm = _get_backend_name("nonexistent_db")
+        assert result_snap == result_tm == "sqlite"
+
 
 class TestMapSqlalchemyTypeToBackendSqlite:
     def test_sqlite_backend(self):

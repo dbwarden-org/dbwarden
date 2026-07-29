@@ -897,6 +897,137 @@ class TestCHViewDiscovery:
         assert len(matching) == 1
         assert matching[0]["view_type"] == "materialized_view"
 
+    def test_get_all_model_tables_includes_ch_views(self, tmp_path):
+        """get_all_model_tables() includes CH view ModelTables from AggregatingView subclasses.
+
+        Regression test: ChView subclasses defined in model files should be
+        discovered via the class registry and emitted as target + MV ModelTables.
+        """
+        import textwrap
+        from dbwarden.engine.model_discovery import get_all_model_tables
+        from dbwarden.databases.clickhouse.views import ChView
+
+        ChView._ch_view_registry.clear()
+
+        models_dir = tmp_path / "models"
+        models_dir.mkdir()
+
+        (models_dir / "__init__.py").write_text("")
+
+        (models_dir / "sa_model.py").write_text(textwrap.dedent("""\
+            from sqlalchemy import Column, Integer, String
+            from sqlalchemy.orm import declarative_base
+            Base = declarative_base()
+            class SomeTable(Base):
+                __tablename__ = "some_table"
+                id = Column(Integer, primary_key=True)
+                dt = Column(String)
+                val = Column(Integer)
+        """))
+
+        (models_dir / "agg_model.py").write_text(textwrap.dedent("""\
+            from sqlalchemy import func
+            from dbwarden.databases.clickhouse import (
+                AggregatingView, CHViewMeta, aggregating_view, agg,
+            )
+            class TestAgg(AggregatingView):
+                __tablename__ = "test_agg_target"
+                class Meta(CHViewMeta):
+                    ch = aggregating_view(
+                        source="some_table",
+                        group_by=[func.toDate("dt").label("day")],
+                        aggregates=[agg.sum("val").as_("total")],
+                        order_by=["day"],
+                    )
+        """))
+
+        tables = get_all_model_tables(model_paths=[str(models_dir)])
+
+        # Should find the SA table
+        assert any(t.name == "some_table" and t.object_type == "table" for t in tables), \
+            "SA model table should be discovered"
+
+        # Should find the aggregating view target table
+        assert any(t.name == "test_agg_target" and t.object_type == "table"
+                   and t.clickhouse_options.get("ch_engine") == "AggregatingMergeTree"
+                   for t in tables), \
+            "AggregatingView target table should be discovered with AggregatingMergeTree engine"
+
+        # Should find the aggregating view MV
+        assert any(t.name == "test_agg_target_mv" and t.object_type == "materialized_view"
+                   for t in tables), \
+            "AggregatingView MV should be discovered as materialized_view"
+
+        assert len(tables) == 3, \
+            f"Expected 3 tables (1 SA + 1 target + 1 MV), got {len(tables)}"
+        assert len(ChView._ch_view_registry) == 1, \
+            f"Registry should have 1 entry, got {len(ChView._ch_view_registry)}"
+
+    def test_get_all_model_tables_ch_views_across_multiple_files(self, tmp_path):
+        """CH views from multiple model files are all discovered."""
+        import textwrap
+        from dbwarden.engine.model_discovery import get_all_model_tables
+        from dbwarden.databases.clickhouse.views import ChView
+
+        ChView._ch_view_registry.clear()
+
+        models_dir = tmp_path / "models2"
+        models_dir.mkdir()
+
+        (models_dir / "__init__.py").write_text("")
+
+        (models_dir / "sa_model.py").write_text(textwrap.dedent("""\
+            from sqlalchemy import Column, Integer, String
+            from sqlalchemy.orm import declarative_base
+            Base = declarative_base()
+            class SomeTable(Base):
+                __tablename__ = "some_table"
+                id = Column(Integer, primary_key=True)
+                dt = Column(String)
+                val = Column(Integer)
+        """))
+
+        (models_dir / "agg_a.py").write_text(textwrap.dedent("""\
+            from sqlalchemy import func
+            from dbwarden.databases.clickhouse import (
+                AggregatingView, CHViewMeta, aggregating_view, agg,
+            )
+            class AggA(AggregatingView):
+                __tablename__ = "agg_a_target"
+                class Meta(CHViewMeta):
+                    ch = aggregating_view(
+                        source="some_table",
+                        group_by=[func.toDate("dt").label("day")],
+                        aggregates=[agg.sum("val").as_("total")],
+                        order_by=["day"],
+                    )
+        """))
+
+        (models_dir / "agg_b.py").write_text(textwrap.dedent("""\
+            from sqlalchemy import func
+            from dbwarden.databases.clickhouse import (
+                AggregatingView, CHViewMeta, aggregating_view, agg,
+            )
+            class AggB(AggregatingView):
+                __tablename__ = "agg_b_target"
+                class Meta(CHViewMeta):
+                    ch = aggregating_view(
+                        source="some_table",
+                        group_by=[func.toDate("dt").label("day")],
+                        aggregates=[agg.sum("val").as_("total")],
+                        order_by=["day"],
+                    )
+        """))
+
+        tables = get_all_model_tables(model_paths=[str(models_dir)])
+
+        agg_tables = [t for t in tables if "agg_" in t.name]
+        assert len(agg_tables) == 4, \
+            f"Expected 4 agg tables (2 targets + 2 MVs), got {len(agg_tables)}"
+        table_names = sorted(t.name for t in agg_tables)
+        assert table_names == ["agg_a_target", "agg_a_target_mv",
+                               "agg_b_target", "agg_b_target_mv"]
+
     def test_expand_agg_target(self):
         from sqlalchemy import String
         from dbwarden.databases.clickhouse.agg import agg
@@ -934,6 +1065,290 @@ class TestCHViewDiscovery:
         assert target.name == "test_agg_expand"
         assert target.object_type == "table"
         assert "AggregatingMergeTree" in str(target.clickhouse_options.get("ch_engine", ""))
+
+    def test_cascade_combinator_detection(self, tmp_path):
+        """Regression: cascade MVs emit *MergeState when source is a string forward
+        reference to another AggregatingView. _resolve_source_column_types must
+        find the source class via ChView._ch_view_registry (not only sys.modules)."""
+        import textwrap
+
+        ChView._ch_view_registry.clear()
+
+        models_dir = tmp_path / "cascade_test"
+        models_dir.mkdir()
+        (models_dir / "__init__.py").write_text("")
+
+        (models_dir / "sa_model.py").write_text(textwrap.dedent("""\
+            from sqlalchemy import Column, Integer
+            from sqlalchemy.orm import declarative_base
+            Base = declarative_base()
+            class FactTable(Base):
+                __tablename__ = "fact_table"
+                id = Column(Integer, primary_key=True)
+                amount = Column(Integer)
+        """))
+
+        (models_dir / "agg_hourly.py").write_text(textwrap.dedent("""\
+            from sqlalchemy import func, column
+            from dbwarden.databases.clickhouse import (
+                AggregatingView, CHViewMeta, aggregating_view, agg,
+            )
+            class HourlyRollup(AggregatingView):
+                __tablename__ = "hourly_rollup"
+                class Meta(CHViewMeta):
+                    ch = aggregating_view(
+                        source="fact_table",
+                        group_by=[column("branch_id")],
+                        aggregates=[agg.sum("amount", "Float64").as_("total")],
+                        order_by=["branch_id"],
+                    )
+        """))
+
+        (models_dir / "agg_daily.py").write_text(textwrap.dedent("""\
+            from sqlalchemy import func, column
+            from dbwarden.databases.clickhouse import (
+                AggregatingView, CHViewMeta, aggregating_view, agg,
+            )
+            class DailyRollup(AggregatingView):
+                __tablename__ = "daily_rollup"
+                class Meta(CHViewMeta):
+                    ch = aggregating_view(
+                        source="HourlyRollup",
+                        group_by=[func.toDate(column("day")).label("day")],
+                        aggregates=[agg.sum("total", "Float64").as_("total")],
+                        order_by=["day"],
+                    )
+        """))
+
+        from dbwarden.engine.model_discovery import get_all_model_tables
+        from dbwarden.databases.clickhouse.materialized_view import (
+            _resolve_source_column_types,
+        )
+
+        tables = get_all_model_tables(model_paths=[str(models_dir)])
+
+        # Verify cascade source is resolvable via registry
+        types = _resolve_source_column_types("HourlyRollup")
+        assert "total" in types, (
+            f"Expected 'total' in resolved types for HourlyRollup, got {types}"
+        )
+        assert "AggregateFunction(sum, Float64)" in types["total"]
+
+        # Verify daily MV SELECT in clickhouse_options uses MergeState
+        daily_mv = next((t for t in tables if t.name == "daily_rollup_mv"), None)
+        assert daily_mv is not None, "daily_rollup_mv not found"
+        assert daily_mv.object_type == "materialized_view"
+        select_stmt = daily_mv.clickhouse_options.get("ch_select_statement", "")
+        assert "sumMergeState" in select_stmt, (
+            f"Expected sumMergeState in cascade MV options, got:\n{select_stmt}"
+        )
+        assert "sumState" not in select_stmt, (
+            f"Cascade MV should not use sumState, got:\n{select_stmt}"
+        )
+
+        ChView._ch_view_registry.clear()
+
+    def test_group_by_key_types_from_source(self):
+        """Regression: group-by keys matching source SA columns resolve their
+        type instead of always falling back to String.  Source passed as a
+        class reference (not string) is resolvable via sys.modules."""
+        from sqlalchemy import Integer
+        from sqlalchemy.orm import DeclarativeBase, mapped_column
+        from dbwarden.databases.clickhouse.agg import agg
+        from dbwarden.databases.clickhouse.views import _expand_agg_target, ChView
+        from dbwarden.schema._meta_reader import apply_meta
+
+        ChView._ch_view_registry.clear()
+
+        class Base(DeclarativeBase):
+            pass
+
+        class Orders(Base):
+            __tablename__ = "orders"
+            id = mapped_column(Integer, primary_key=True)
+            branch_id = mapped_column(Integer)
+            amount = mapped_column(Integer)
+
+        class OrderRollup(AggregatingView):
+            __tablename__ = "order_rollup"
+            class Meta(CHViewMeta):
+                ch = aggregating_view(
+                    source=Orders,
+                    group_by=["branch_id"],
+                    aggregates=[agg.sum("amount", "Float64").as_("total")],
+                    order_by=["branch_id"],
+                )
+
+        apply_meta(OrderRollup)
+        target = _expand_agg_target(OrderRollup, OrderRollup.Meta.ch)
+        assert target is not None
+        col_map = {c.name: c for c in target.columns}
+        assert col_map["branch_id"].type != "String", (
+            f"branch_id should resolve from source SA column, "
+            f"got: {col_map['branch_id'].type}"
+        )
+        assert "INT" in col_map["branch_id"].type.upper(), (
+            f"branch_id should be INTEGER, got: {col_map['branch_id'].type}"
+        )
+
+        ChView._ch_view_registry.clear()
+
+    def test_rollback_drops_mvs_before_target_tables(self):
+        """Regression: rollback SQL must drop materialized views before their
+        dependent target tables. _assemble_migration assigns CREATE_VIEW (8) to
+        MVs and CREATE_TABLE (7) to targets, so when the rollback list is
+        reversed MVs appear first."""
+        from dbwarden.engine.core.statement_order import (
+            MigrationStatement, StatementOrder, _assemble_migration,
+        )
+
+        # Simulate the order emitted by _build_create_table_sequence
+        stmts = [
+            MigrationStatement(
+                order=StatementOrder.CREATE_TABLE,
+                upgrade_sql="CREATE TABLE IF NOT EXISTS target",
+                rollback_sql="DROP TABLE IF EXISTS target",
+            ),
+            MigrationStatement(
+                order=StatementOrder.CREATE_VIEW,
+                upgrade_sql="CREATE MATERIALIZED VIEW IF NOT EXISTS target_mv",
+                rollback_sql="DROP VIEW IF EXISTS target_mv",
+            ),
+        ]
+
+        up_sql, rb_sql = _assemble_migration(stmts)
+
+        # Upgrade: table before MV
+        up_lines = [ln.strip() for ln in up_sql.split("\n\n")]
+        table_idx = next(i for i, ln in enumerate(up_lines) if "CREATE TABLE" in ln)
+        mv_idx = next(i for i, ln in enumerate(up_lines) if "CREATE MATERIALIZED" in ln)
+        assert table_idx < mv_idx, "Upgrade must create table before MV"
+
+        # Rollback: MV before table (reversed order)
+        rb_lines = [ln.strip() for ln in rb_sql.split("\n\n")]
+        mv_rb_idx = next(i for i, ln in enumerate(rb_lines) if "DROP VIEW" in ln)
+        table_rb_idx = next(i for i, ln in enumerate(rb_lines) if "DROP TABLE" in ln)
+        assert mv_rb_idx < table_rb_idx, (
+            f"Rollback must drop MV before table: "
+            f"MV at {mv_rb_idx}, table at {table_rb_idx}"
+        )
+
+    def test_cascade_dependency_ordering(self, tmp_path):
+        """Regression: cascade AggregatingViews with string forward-references
+        loaded via load_model_from_path are topologically sorted in correct
+        dependency order (innermost first).  The views.py:267 sys.modules scan
+        must fall back to ChView._ch_view_registry."""
+        import textwrap
+        from dbwarden.databases.clickhouse.views import ChView
+        from dbwarden.engine.model_discovery import get_all_model_tables
+
+        ChView._ch_view_registry.clear()
+
+        models_dir = tmp_path / "cascade_order"
+        models_dir.mkdir()
+        (models_dir / "__init__.py").write_text("")
+
+        (models_dir / "fact.py").write_text(textwrap.dedent("""\
+            from sqlalchemy import Column, Integer
+            from sqlalchemy.orm import declarative_base
+            Base = declarative_base()
+            class Fact(Base):
+                __tablename__ = "fact"
+                id = Column(Integer, primary_key=True)
+                amount = Column(Integer)
+        """))
+
+        (models_dir / "agg_hourly.py").write_text(textwrap.dedent("""\
+            from sqlalchemy import func, column
+            from dbwarden.databases.clickhouse import (
+                AggregatingView, CHViewMeta, aggregating_view, agg,
+            )
+            class Hourly(AggregatingView):
+                __tablename__ = "hourly"
+                class Meta(CHViewMeta):
+                    ch = aggregating_view(
+                        source="fact",
+                        group_by=[column("branch_id")],
+                        aggregates=[agg.sum("amount", "Float64").as_("total")],
+                        order_by=["branch_id"],
+                    )
+        """))
+
+        (models_dir / "agg_daily.py").write_text(textwrap.dedent("""\
+            from sqlalchemy import func, column
+            from dbwarden.databases.clickhouse import (
+                AggregatingView, CHViewMeta, aggregating_view, agg,
+            )
+            class Daily(AggregatingView):
+                __tablename__ = "daily"
+                class Meta(CHViewMeta):
+                    ch = aggregating_view(
+                        source="Hourly",
+                        group_by=[func.toDate(column("day")).label("day")],
+                        aggregates=[agg.sum("total", "Float64").as_("total")],
+                        order_by=["day"],
+                    )
+        """))
+
+        (models_dir / "agg_weekly.py").write_text(textwrap.dedent("""\
+            from sqlalchemy import func, column
+            from dbwarden.databases.clickhouse import (
+                AggregatingView, CHViewMeta, aggregating_view, agg,
+            )
+            class Weekly(AggregatingView):
+                __tablename__ = "weekly"
+                class Meta(CHViewMeta):
+                    ch = aggregating_view(
+                        source="Daily",
+                        group_by=[func.toDate(column("day")).label("day")],
+                        aggregates=[agg.sum("total", "Float64").as_("total")],
+                        order_by=["day"],
+                    )
+        """))
+
+        # Use get_all_model_tables to trigger model imports (model_paths is
+        # ignored by get_all_ch_views, which is registry-only).
+        tables = get_all_model_tables(model_paths=[str(models_dir)])
+
+        # Filter to ChView-derived tables (target + MV), excluding SA fact
+        ch_names = [t.name for t in tables if t.object_type in ("table", "materialized_view")
+                    and t.name not in ("fact",)]
+        # Expect: hourly, hourly_mv, daily, daily_mv, weekly, weekly_mv
+        hourly_idx = ch_names.index("hourly")
+        daily_idx = ch_names.index("daily")
+        weekly_idx = ch_names.index("weekly")
+        assert hourly_idx < daily_idx < weekly_idx, (
+            f"Dependency order violated: hourly={hourly_idx}, daily={daily_idx}, weekly={weekly_idx}\n"
+            f"Got order: {ch_names}"
+        )
+
+        # MV is emitted right after its target
+        hourly_mv_idx = ch_names.index("hourly_mv")
+        daily_mv_idx = ch_names.index("daily_mv")
+        weekly_mv_idx = ch_names.index("weekly_mv")
+        assert hourly_idx < hourly_mv_idx, "hourly MV must come after hourly target"
+        assert daily_idx < daily_mv_idx, "daily MV must come after daily target"
+        assert weekly_idx < weekly_mv_idx, "weekly MV must come after weekly target"
+
+        ChView._ch_view_registry.clear()
+
+    def test_get_backend_fallback_sqlite_populates_ch_type(self):
+        """Regression: extract_column_info populates ch_meta['ch_type'] even
+        when _get_backend_name falls back to "sqlite".  The fix in
+        extraction.py:467-8 ensures ch_type is set unconditionally."""
+        from sqlalchemy import Column, Integer, MetaData, Table
+        from dbwarden.engine.model_discovery.extraction import extract_column_info
+
+        table = Table("t", MetaData(), Column("year", Integer))
+        col = extract_column_info(table.c.year, backend="sqlite")
+        assert col is not None
+        ch_meta = col.ch_meta
+        assert "ch_type" in ch_meta, (
+            f"ch_type missing when backend='sqlite': got {ch_meta}"
+        )
+        assert ch_meta["ch_type"] is not None and ch_meta["ch_type"].strip(), (
+            f"ch_type should be non-empty, got: {ch_meta['ch_type']!r}"
+        )
 
 
 class TestIndexSpecExtensions:
