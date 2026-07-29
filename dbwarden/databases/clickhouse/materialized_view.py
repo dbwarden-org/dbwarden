@@ -446,15 +446,15 @@ def _resolve_source(source: Any) -> str:
 
     ``source`` may be:
     * A model class with ``__tablename__``, returns the tablename directly.
-    * A string class name (forward reference), scans loaded modules for a
-      class with that name and returns its ``__tablename__``.
+    * A string class name (forward reference), scans loaded modules and the
+      ``ChView._ch_view_registry`` for a class with that name and returns
+      its ``__tablename__``.
     * A bare table name string, returned as-is.
 
     Resolution happens lazily at ``to_dict()`` time, by which point all
     model classes should be loaded.
     """
     if isinstance(source, str):
-        # Try to resolve as a class name first (forward reference)
         import sys
         for mod_name, mod in sys.modules.items():
             if mod is None:
@@ -464,7 +464,12 @@ def _resolve_source(source: Any) -> str:
                 tablename = getattr(cls, "__tablename__", None)
                 if tablename:
                     return tablename
-        # No class found, treat as bare table name
+        from dbwarden.databases.clickhouse.views import ChView
+        for cls in ChView._ch_view_registry:
+            if cls.__name__ == source:
+                tablename = getattr(cls, "__tablename__", None)
+                if tablename:
+                    return tablename
         return source
     tablename = getattr(source, "__tablename__", None)
     if tablename:
@@ -503,7 +508,13 @@ def _resolve_source_column_types(source: Any) -> dict[str, str]:
                 source = cls
                 break
         else:
-            return {}  # bare table name — no type info
+            from dbwarden.databases.clickhouse.views import ChView
+            for cls in ChView._ch_view_registry:
+                if cls.__name__ == source:
+                    source = cls
+                    break
+            else:
+                return {}  # bare table name — no type info
 
     # If source is an aggregating view, derive types from its spec
     source_spec = getattr(getattr(source, "Meta", None), "ch", None)

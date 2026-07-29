@@ -273,6 +273,13 @@ def ch_view_tables_from_models(
                         if src_tablename:
                             break
                 if src_tablename is None:
+                    # Fallback: check the ChView registry for models loaded via
+                    # load_model_from_path (not in sys.modules as module-level attrs).
+                    for cls in ChView._ch_view_registry:
+                        if cls.__name__ == target:
+                            src_tablename = getattr(cls, "__tablename__", None)
+                            break
+                if src_tablename is None:
                     src_tablename = target  # bare table name — not a CH view, so no dep edge
             else:
                 src_tablename = None
@@ -407,6 +414,17 @@ def _expand_agg_target(
     if col_defs:
         clickhouse_options["ch_column_defs"] = col_defs
 
+    from dbwarden.databases.clickhouse.materialized_view import (
+        _resolve_source_column_types,
+    )
+    source_ref = None
+    if isinstance(agg_spec, AggregatingViewSpec):
+        source_ref = agg_spec.source
+    else:
+        source_ref = agg_spec.get("source") if isinstance(agg_spec, dict) else None
+    if source_ref is not None:
+        target_info["_source_column_types"] = _resolve_source_column_types(source_ref)
+
     columns = _make_target_columns(model_class, target_info)
     return ModelTable(
         name=target_name,
@@ -429,6 +447,7 @@ def _make_target_columns(
     column_names = target_info.get("columns", [])
     col_name_set = set(column_names)
     columns: list[ModelColumn] = []
+    _source_column_types: dict[str, str] | None = target_info.get("_source_column_types")
 
     agg_map: dict[str, str] = {}
     for a in target_info.get("aggregates", []):
@@ -453,9 +472,10 @@ def _make_target_columns(
 
     for name in column_names:
         if name not in {c.name for c in columns}:
+            src_type = _source_column_types.get(name) if _source_column_types else None
             columns.append(ModelColumn(
                 name=name,
-                type=agg_map.get(name, "String"),
+                type=agg_map.get(name, src_type or "String"),
                 nullable=True,
                 primary_key=False,
                 unique=False,
