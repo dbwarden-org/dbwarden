@@ -199,8 +199,13 @@ class TableHandler(ObjectHandler):
                     "(/* see .dbwarden/schemas/ for DDL */)"
                 )
             drop_sql = generate_drop_object_sql(drop_table)
+            drop_order = (
+                StatementOrder.DROP_VIEW
+                if drop_table.object_type in ("view", "materialized_view")
+                else StatementOrder.DROP_TABLE
+            )
             stmts.append(MigrationStatement(
-                order=StatementOrder.DROP_TABLE,
+                order=drop_order,
                 upgrade_sql=drop_sql,
                 rollback_sql=rollback_sql,
             ))
