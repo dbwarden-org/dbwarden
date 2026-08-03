@@ -526,6 +526,9 @@ def _resolve_source_column_types(source: Any) -> dict[str, str]:
         for agg in source_spec.aggregates:
             if agg.alias:
                 result[agg.alias] = agg.target_type()
+        # Include group-by column types by resolving through the cascade chain
+        gb_types = _resolve_aggregating_view_group_by_types(source_spec)
+        result.update(gb_types)
         return result
 
     # Plain model class — read column types from __table__
@@ -534,6 +537,73 @@ def _resolve_source_column_types(source: Any) -> dict[str, str]:
         return {col.name: str(col.type) for col in table.columns}
 
     return {}
+
+
+def _resolve_aggregating_view_group_by_types(
+    spec: Any,
+    _depth: int = 0,
+) -> dict[str, str]:
+    """Resolve group-by column types by traversing the cascade chain to the
+    base SA table.
+
+    For each group-by expression in *spec*:
+
+    * If it is a plain column name string that exists in the source's resolved
+      column types, the type is carried over directly.
+    * If it is a ``ch_raw()`` expression, column-name-like identifiers in the
+      SQL are matched against the source's resolved column types.
+    * Otherwise the column is omitted from the result (caller falls back to
+      ``"String"``).
+
+    Recursion is bounded at depth 20 to guard against circular references.
+    """
+    if _depth > 20:
+        return {}
+    from dbwarden.databases.clickhouse.compiler import column_name_from_expr
+    from dbwarden.databases.clickhouse.raw import ChRaw
+
+    source_types = _resolve_source_column_types(spec.source)
+    if not source_types:
+        return {}
+
+    result: dict[str, str] = {}
+    for expr in spec.group_by:
+        col_name = column_name_from_expr(expr)
+        if not col_name:
+            continue
+        if col_name in source_types:
+            result[col_name] = source_types[col_name]
+            continue
+        if isinstance(expr, ChRaw):
+            matched = _match_column_type_from_raw(expr.sql, source_types)
+            if matched:
+                result[col_name] = matched
+        elif isinstance(expr, str) and "(" in expr:
+            matched = _match_column_type_from_raw(expr, source_types)
+            if matched:
+                result[col_name] = matched
+    return result
+
+
+def _match_column_type_from_raw(sql: str, source_types: dict[str, str]) -> str | None:
+    """Try to infer the CH type of a ``ch_raw()`` expression by finding column
+    names from *source_types* that appear as standalone identifiers in the raw
+    SQL string.
+
+    ``"toStartOfHour(toTimeZone(closed_at, 'America/Montevideo'))"``
+    with ``source_types = {"closed_at": "DateTime"}`` returns ``"DateTime"``.
+
+    ``"toDate(hour)"`` with ``source_types = {"hour": "DateTime"}``
+    returns ``"DateTime"``.
+    """
+    import re as _re
+    sql = _re.sub(r"\s+AS\s+\w+$", "", sql, flags=_re.IGNORECASE).strip()
+    if not sql or not source_types:
+        return None
+    for col_name, col_type in source_types.items():
+        if _re.search(r"\b" + _re.escape(col_name) + r"\b", sql):
+            return col_type
+    return None
 
 
 
