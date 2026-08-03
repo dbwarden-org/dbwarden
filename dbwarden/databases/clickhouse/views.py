@@ -361,6 +361,17 @@ def ch_view_tables_from_models(
     return tables
 
 
+def _ch_ddl_type_from_resolved(resolved: str) -> str:
+    """Map a resolved SA-style type string to a ClickHouse DDL type.
+
+    ``_resolve_source_column_types`` returns ``str(sa_col.type)`` (e.g.
+    ``"VARCHAR"``, ``"DATETIME"``), which is not valid ClickHouse DDL.
+    ``AggregateFunction(...)`` strings pass through unchanged.
+    """
+    from dbwarden.engine.backends.clickhouse.extract import _render_ch_type_from_sa
+    return _render_ch_type_from_sa(None, resolved.upper().strip())
+
+
 def _expand_agg_target(
     model_class: type,
     agg_spec: AggregatingViewSpec | dict[str, Any],
@@ -384,6 +395,26 @@ def _expand_agg_target(
     ttl = target_info.get("ttl")
     settings = target_info.get("settings")
 
+    from dbwarden.databases.clickhouse.materialized_view import (
+        _resolve_source_column_types,
+        _resolve_aggregating_view_group_by_types,
+    )
+    source_ref = None
+    if isinstance(agg_spec, AggregatingViewSpec):
+        source_ref = agg_spec.source
+    else:
+        source_ref = agg_spec.get("source") if isinstance(agg_spec, dict) else None
+    src_types: dict[str, str] = {}
+    if source_ref is not None:
+        src_types = _resolve_source_column_types(source_ref)
+        # ch_raw() aliases produced by this view's own group-by (e.g.
+        # "toDate(hour) AS day") are not columns of the source; resolve them
+        # against the source's columns and merge them in.
+        if isinstance(agg_spec, AggregatingViewSpec):
+            own_keys = _resolve_aggregating_view_group_by_types(agg_spec)
+            src_types.update(own_keys)
+        target_info["_source_column_types"] = src_types
+
     # Build column type strings from aggregates + group-by keys
     agg_map: dict[str, str] = {}
     for a in target_info.get("aggregates", []):
@@ -395,7 +426,7 @@ def _expand_agg_target(
         if name in agg_map:
             col_defs.append(f"{name} {agg_map[name]}")
         else:
-            col_defs.append(f"{name} String")
+            col_defs.append(f"{name} {_ch_ddl_type_from_resolved(src_types.get(name, 'String'))}")
 
     clickhouse_options: dict[str, Any] = {
         "ch_engine": "AggregatingMergeTree",
@@ -413,17 +444,6 @@ def _expand_agg_target(
         clickhouse_options["ch_settings"] = dict(settings)
     if col_defs:
         clickhouse_options["ch_column_defs"] = col_defs
-
-    from dbwarden.databases.clickhouse.materialized_view import (
-        _resolve_source_column_types,
-    )
-    source_ref = None
-    if isinstance(agg_spec, AggregatingViewSpec):
-        source_ref = agg_spec.source
-    else:
-        source_ref = agg_spec.get("source") if isinstance(agg_spec, dict) else None
-    if source_ref is not None:
-        target_info["_source_column_types"] = _resolve_source_column_types(source_ref)
 
     columns = _make_target_columns(model_class, target_info)
     return ModelTable(
@@ -459,9 +479,17 @@ def _make_target_columns(
         for sa_col in table.columns:
             if sa_col.name not in col_name_set:
                 continue
+            col_type = str(sa_col.type)
+            if (
+                sa_col.name not in agg_map
+                and _source_column_types
+                and col_type == "String"
+                and sa_col.name in _source_column_types
+            ):
+                col_type = _source_column_types[sa_col.name]
             columns.append(ModelColumn(
                 name=sa_col.name,
-                type=str(sa_col.type),
+                type=col_type,
                 nullable=sa_col.nullable,
                 primary_key=sa_col.primary_key,
                 unique=sa_col.unique,

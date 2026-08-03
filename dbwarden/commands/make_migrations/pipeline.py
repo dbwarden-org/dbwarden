@@ -274,7 +274,7 @@ def _run_offline_migrations(
     header = "-- upgrade\n\n"
     header += "\n\n".join(filtered_statements)
     header += "\n\n-- rollback\n\n"
-    header += "\n\n".join(reversed(filtered_rollback))
+    header += "\n\n".join(filtered_rollback)
     header += "\n"
 
     filepath = os.path.join(migrations_dir, filename)

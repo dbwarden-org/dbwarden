@@ -1459,6 +1459,166 @@ class TestCHViewDiscovery:
             "MV drop should appear before table drop in upgrade"
         )
 
+    def test_offline_pipeline_rollback_not_reversed_twice(self, monkeypatch, tmp_path):
+        """Regression (D1): _run_offline_migrations writes snapshot_diff_to_sql's
+        rollback verbatim. _assemble_migration already reverses the statement
+        list, so a second reversed() in the pipeline put the rollback in
+        forward order (creating the MV before its target table)."""
+        import json
+        from types import SimpleNamespace
+
+        from dbwarden.commands.make_migrations import pipeline as pipeline_mod
+
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / ".dbwarden").mkdir()
+        (tmp_path / ".dbwarden" / "model_state.analytics.json").write_text(
+            json.dumps({"format_version": 2, "tables": {}, "indexes": {},
+                        "constraints": {}, "enums": {}})
+        )
+        (tmp_path / "migrations").mkdir()
+
+        fake_config = SimpleNamespace(
+            model_paths=["/nonexistent/models"],
+            model_tables=None,
+            migrations_dir="migrations",
+            database_type="sqlite",
+        )
+        monkeypatch.setattr(pipeline_mod, "get_database", lambda db_name=None: fake_config)
+        monkeypatch.setattr(pipeline_mod, "get_multi_db_config",
+                            lambda: SimpleNamespace(default="analytics"))
+        monkeypatch.setattr(pipeline_mod, "get_all_model_tables", lambda *a, **k: [])
+        monkeypatch.setattr(pipeline_mod, "validate_model_tables_exist", lambda *a, **k: None)
+        monkeypatch.setattr("dbwarden.engine.offline.diff_model_states", lambda prev, curr: (
+            [{"type": "drop_table", "table": "hourly_mv", "object_type": "materialized_view"},
+             {"type": "drop_table", "table": "hourly"}],
+            [{"type": "drop_table", "table": "hourly"},
+             {"type": "drop_table", "table": "hourly_mv", "object_type": "materialized_view"}],
+        ))
+
+        # Canonical snapshot_diff_to_sql output: upgrade drops MV first; the
+        # rollback list is already reversed (target recreated before its MV).
+        upgrade_sql = "DROP VIEW IF EXISTS hourly_mv\n\nDROP TABLE hourly"
+        rollback_sql = "CREATE TABLE hourly (id UInt32)\n\nCREATE MATERIALIZED VIEW hourly_mv TO hourly"
+        monkeypatch.setattr(
+            "dbwarden.engine.snapshot.snapshot_diff_to_sql",
+            lambda *a, **k: (upgrade_sql, rollback_sql, []),
+        )
+
+        pipeline_mod._run_offline_migrations(description="drop_hourly")
+
+        sql_file = next((tmp_path / "migrations").glob("*.sql"))
+        content = sql_file.read_text()
+        rollback_section = content.split("-- rollback", 1)[1]
+        lines = [ln.strip() for ln in rollback_section.split("\n\n") if ln.strip()]
+        assert lines[0].startswith("CREATE TABLE hourly"), (
+            f"rollback must recreate target before its MV, got:\n{rollback_section}"
+        )
+        mv_idx = next(i for i, ln in enumerate(lines) if "hourly_mv" in ln)
+        assert mv_idx > 0, (
+            f"MV create must come after target create, got:\n{rollback_section}"
+        )
+
+    def test_agg_target_ch_column_defs_resolve_group_by_types(self):
+        """Regression (D2): the aggregating view target's ch_column_defs must
+        use resolved group-by column types mapped to ClickHouse DDL types, not
+        the String fallback. ch_raw() aliases resolve from the source columns
+        and cascade through the chain."""
+        from sqlalchemy import Column, DateTime, Integer, String
+        from sqlalchemy.orm import declarative_base
+        from dbwarden.databases.clickhouse import ch_raw
+        from dbwarden.databases.clickhouse.agg import agg
+        from dbwarden.databases.clickhouse.views import ChView, _expand_agg_target
+
+        ChView._ch_view_registry.clear()
+
+        Base = declarative_base()
+
+        class FactBase(Base):
+            __tablename__ = "fact_base"
+            id = Column(Integer, primary_key=True)
+            closed_at = Column(DateTime)
+            branch_id = Column(Integer)
+            origin = Column(String)
+
+        class BaseRollup(AggregatingView):
+            __tablename__ = "base_rollup"
+            class Meta(CHViewMeta):
+                ch = aggregating_view(
+                    source=FactBase,
+                    group_by=[
+                        ch_raw("toDate(closed_at) AS day"),
+                        "branch_id",
+                    ],
+                    aggregates=[agg.sum("total", "Float64").as_("total")],
+                    order_by=["day"],
+                )
+
+        target = _expand_agg_target(BaseRollup, BaseRollup.Meta.ch)
+        assert target is not None
+        col_defs = target.clickhouse_options["ch_column_defs"]
+        by_name = {d.split(" ")[0]: " ".join(d.split(" ")[1:]) for d in col_defs}
+        assert by_name["day"] == "DateTime", f"day should be DateTime, got {by_name['day']}"
+        assert by_name["branch_id"] == "Int32", f"branch_id should be Int32, got {by_name['branch_id']}"
+        assert by_name["branch_id"] != "String"
+        assert by_name["total"] == "AggregateFunction(sum, Float64)", f"total got {by_name['total']}"
+
+        ChView._ch_view_registry.clear()
+
+    def test_load_model_from_path_registers_source_models(self, tmp_path):
+        """Regression (D3): classes loaded via load_model_from_path must be
+        findable by name so string forward-references resolve to their column
+        types. Plain SA models (not ChViews) previously resolved to {} because
+        the loaded module was never registered in sys.modules."""
+        import sys
+        from dbwarden.databases.clickhouse.materialized_view import (
+            _resolve_source,
+            _resolve_source_column_types,
+        )
+        from dbwarden.databases.clickhouse.views import ChView
+
+        ChView._ch_view_registry.clear()
+
+        model_file = tmp_path / "models_d3.py"
+        model_file.write_text(
+            "from sqlalchemy import Column, DateTime, Integer, String\n"
+            "from sqlalchemy.orm import declarative_base\n"
+            "from dbwarden.databases.clickhouse import AggregatingView, CHViewMeta, aggregating_view, agg, ch_raw\n"
+            "\n"
+            "Base = declarative_base()\n"
+            "\n"
+            "class ChainFact(Base):\n"
+            "    __tablename__ = 'chain_fact'\n"
+            "    id = Column(Integer, primary_key=True)\n"
+            "    closed_at = Column(DateTime)\n"
+            "    branch_id = Column(Integer)\n"
+            "    origin = Column(String)\n"
+            "\n"
+            "class ChainRollup(AggregatingView):\n"
+            "    __tablename__ = 'chain_rollup'\n"
+            "    class Meta(CHViewMeta):\n"
+            "        ch = aggregating_view(\n"
+            "            source='ChainFact',\n"
+            "            group_by=['branch_id'],\n"
+            "            aggregates=[agg.sum('amount', 'Float64').as_('total')],\n"
+            "            order_by=['branch_id'],\n"
+            "        )\n"
+        )
+
+        from dbwarden.engine.model_discovery.path_discovery import load_model_from_path
+        module = load_model_from_path(str(model_file))
+        assert module is not None
+
+        assert module.__name__ in sys.modules, "loaded module should be in sys.modules"
+
+        assert _resolve_source("ChainFact") == "chain_fact"
+        chain_types = _resolve_source_column_types("ChainRollup")
+        assert chain_types.get("branch_id") == "INTEGER", (
+            f"group-by key should resolve to source SA type, got {chain_types.get('branch_id')}"
+        )
+
+        sys.modules.pop(module.__name__, None)
+        ChView._ch_view_registry.clear()
+
 
 class TestIndexSpecExtensions:
     def test_index_spec_to_dict_from_dict(self):

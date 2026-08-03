@@ -16,15 +16,17 @@ def load_model_from_path(filepath: str) -> Optional[ModuleType]:
     if HookRegistry.is_registered("load_model_module"):
         return HookRegistry.execute_single("load_model_module", Path(filepath), base_dir)
 
+    import hashlib
     import importlib.util
+    import sys
 
     try:
-        spec = importlib.util.spec_from_file_location(
-            "_dbwarden_loaded_model", str(filepath)
-        )
+        module_name = "_dbwarden_loaded_model_" + hashlib.md5(str(filepath).encode()).hexdigest()[:12]
+        spec = importlib.util.spec_from_file_location(module_name, str(filepath))
         if spec is None or spec.loader is None:
             return None
         module = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = module
         spec.loader.exec_module(module)
         return module
     except FileNotFoundError:
