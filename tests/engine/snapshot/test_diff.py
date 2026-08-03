@@ -898,7 +898,8 @@ class TestSnapshotDiffToSqlEdgeCases:
         sql, rb_sql, changes = snapshot_diff_to_sql([{"type": "create_table", "table": "users"}], [], db_name="test")
 
         assert "CREATE TABLE IF NOT EXISTS users" in sql
-        assert "CREATE INDEX ix_users_email ON users (email);" in sql
+        assert "-- @dbwarden:autocommit" in sql
+        assert "CREATE INDEX CONCURRENTLY ix_users_email ON users (email);" in sql
         assert "COMMENT ON TABLE users IS 'User table';" in sql
         assert "DROP INDEX ix_users_email" in rb_sql
         assert any(c.operation == "add_index" for c in changes)
