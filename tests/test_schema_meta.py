@@ -1350,6 +1350,115 @@ class TestCHViewDiscovery:
             f"ch_type should be non-empty, got: {ch_meta['ch_type']!r}"
         )
 
+    def test_ch_raw_group_by_types_resolve_through_cascade(self):
+        """Regression: group-by columns defined via ch_raw() resolve their CH
+        types by extracting column references from the raw SQL and looking them
+        up in the source's column types.  Cascade chains are traversed
+        recursively to reach the base SA table."""
+        from sqlalchemy import Column, Integer, DateTime
+        from sqlalchemy.orm import declarative_base
+        from dbwarden.databases.clickhouse.materialized_view import (
+            _resolve_source_column_types,
+        )
+        from dbwarden.databases.clickhouse.views import ChView
+        from dbwarden.databases.clickhouse import ch_raw
+        from dbwarden.databases.clickhouse.agg import agg
+
+        ChView._ch_view_registry.clear()
+
+        Base = declarative_base()
+
+        class FactOrder(Base):
+            __tablename__ = "fact_order"
+            id = Column(Integer, primary_key=True)
+            closed_at = Column(DateTime)
+            branch_id = Column(Integer)
+
+        class Hourly(AggregatingView):
+            __tablename__ = "hourly"
+            class Meta(CHViewMeta):
+                ch = aggregating_view(
+                    source=FactOrder,
+                    group_by=[
+                        ch_raw("toStartOfHour(toTimeZone(closed_at, "
+                               "'America/Montevideo')) AS hour"),
+                        "branch_id",
+                    ],
+                    aggregates=[agg.sum("amount", "Float64").as_("total")],
+                    order_by=["hour"],
+                )
+
+        class Daily(AggregatingView):
+            __tablename__ = "daily"
+            class Meta(CHViewMeta):
+                ch = aggregating_view(
+                    source=Hourly,
+                    group_by=[
+                        ch_raw("toDate(hour) AS day"),
+                        "branch_id",
+                    ],
+                    aggregates=[agg.sum("total", "Float64").as_("total")],
+                    order_by=["day"],
+                )
+
+        # First level: Hourly's group-by keys resolve from FactOrder columns
+        hourly_types = _resolve_source_column_types(Hourly)
+        assert hourly_types.get("branch_id") == "INTEGER", (
+            f"Expected INTEGER for branch_id, got {hourly_types.get('branch_id')}"
+        )
+        assert hourly_types.get("hour") == "DATETIME", (
+            f"Expected DATETIME for hour (from closed_at), "
+            f"got {hourly_types.get('hour')}"
+        )
+
+        # Cascade: Daily's group-by keys resolve through Hourly -> FactOrder
+        daily_types = _resolve_source_column_types(Daily)
+        assert daily_types.get("branch_id") == "INTEGER", (
+            f"Expected INTEGER for branch_id (cascade), "
+            f"got {daily_types.get('branch_id')}"
+        )
+        assert "day" in daily_types, (
+            f"day should be resolved from cascade chain, got {daily_types}"
+        )
+        assert daily_types["day"] != "String", (
+            f"day should not be String in cascade, got {daily_types['day']}"
+        )
+
+        ChView._ch_view_registry.clear()
+
+    def test_drop_table_uses_drop_view_order_for_materialized_views(self):
+        """Regression: TableHandler.emit() for a drop_table op with
+        object_type=materialized_view uses StatementOrder.DROP_VIEW (11) instead
+        of DROP_TABLE (14), so MVs are dropped before their target tables in
+        upgrade order (and created after in rollback order)."""
+        from dbwarden.engine.core.statement_order import (
+            MigrationStatement, StatementOrder,
+        )
+
+        # Simulate what TableHandler.emit() produces with the fix:
+        # MV drop with DROP_VIEW order, table drop with DROP_TABLE order
+        stmts = [
+            MigrationStatement(
+                order=StatementOrder.DROP_VIEW,
+                upgrade_sql="DROP VIEW IF EXISTS hourly_mv",
+                rollback_sql="CREATE MATERIALIZED VIEW hourly_mv ...",
+            ),
+            MigrationStatement(
+                order=StatementOrder.DROP_TABLE,
+                upgrade_sql="DROP TABLE hourly",
+                rollback_sql="CREATE TABLE hourly (...)",
+            ),
+        ]
+
+        sorted_stmts = sorted(stmts, key=lambda s: s.order)
+        assert sorted_stmts[0].order == StatementOrder.DROP_VIEW, (
+            f"drop_view(11) should sort before drop_table(14), "
+            f"got orders: {[s.order for s in sorted_stmts]}"
+        )
+        assert "DROP VIEW" in sorted_stmts[0].upgrade_sql, (
+            "MV drop should appear before table drop in upgrade"
+        )
+
 
 class TestIndexSpecExtensions:
     def test_index_spec_to_dict_from_dict(self):
