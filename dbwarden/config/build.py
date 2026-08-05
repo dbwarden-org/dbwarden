@@ -227,6 +227,8 @@ def get_multi_db_config() -> MultiDbConfig:
     current_cwd = str(Path.cwd().resolve())
     if _resolve._MULTI_DB_CONFIG_CACHE is not None and _resolve._MULTI_DB_CONFIG_CWD == current_cwd:
         return _resolve._MULTI_DB_CONFIG_CACHE
+
+    reset_registry()
     _resolve._MULTI_DB_CONFIG_CWD = current_cwd
 
     source = _resolve_source()
@@ -235,7 +237,6 @@ def get_multi_db_config() -> MultiDbConfig:
         variable_value_expressions = _extract_variable_value_expressions(
             Path(source.value)
         )
-    reset_registry()
     base_dir = _import_source(source)
     entries = registered_entries()
     result = _finalize_entries(entries, base_dir, variable_value_expressions)

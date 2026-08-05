@@ -755,3 +755,116 @@ class TestModelTablesConfig:
         from dbwarden.engine.model_discovery import validate_model_tables_exist, ModelTable, ModelColumn
         table1 = ModelTable(name="users", columns=[ModelColumn(name="id", type="integer", nullable=False, primary_key=True, unique=False, default=None, foreign_key=None)])
         validate_model_tables_exist([table1], None, "test_db")
+
+class TestConfigScanCaching:
+    """Regression tests: repeated get_database()/get_multi_db_config() calls
+    must not re-run the expensive full-repository AST scan.
+
+    Historically reset_registry() cleared the resolved-source cache on every
+    cache miss, so every per-column get_database() call re-scanned the whole
+    workspace (a hang in large repositories).
+    """
+
+    def test_get_database_does_not_rescan_after_first_call(self, monkeypatch):
+        import dbwarden.config.resolve as resolve_mod
+
+        tmp = Path(tempfile.mkdtemp())
+        old_cwd = os.getcwd()
+        os.chdir(str(tmp))
+        try:
+            (tmp / ".git").mkdir()
+            (tmp / "settings.py").write_text(
+                "from dbwarden import database_config\n"
+                "database_config(database_name='primary', default=True, "
+                "database_type='sqlite', database_url_sync='sqlite:///./test.db')\n"
+            )
+
+            scans = {"count": 0}
+            original = resolve_mod._full_scan_database_config_calls
+
+            def counting_scan(root):
+                scans["count"] += 1
+                return original(root)
+
+            monkeypatch.setattr(
+                resolve_mod, "_full_scan_database_config_calls", counting_scan
+            )
+
+            for _ in range(10):
+                config = get_database()
+                assert config.database_type == "sqlite"
+
+            assert scans["count"] == 1
+        finally:
+            os.chdir(old_cwd)
+            import shutil
+            shutil.rmtree(str(tmp), ignore_errors=True)
+
+    def test_resolve_source_does_not_rescan_after_first_call(self, monkeypatch):
+        import dbwarden.config.resolve as resolve_mod
+
+        tmp = Path(tempfile.mkdtemp())
+        old_cwd = os.getcwd()
+        os.chdir(str(tmp))
+        try:
+            (tmp / ".git").mkdir()
+            (tmp / "settings.py").write_text(
+                "from dbwarden import database_config\n"
+                "database_config(database_name='primary', default=True, "
+                "database_type='sqlite', database_url_sync='sqlite:///./test.db')\n"
+            )
+
+            scans = {"count": 0}
+            original = resolve_mod._full_scan_database_config_calls
+
+            def counting_scan(root):
+                scans["count"] += 1
+                return original(root)
+
+            monkeypatch.setattr(
+                resolve_mod, "_full_scan_database_config_calls", counting_scan
+            )
+
+            source1 = resolve_mod._resolve_source()
+            source2 = resolve_mod._resolve_source()
+            assert source1 == source2
+            assert scans["count"] == 1
+        finally:
+            os.chdir(old_cwd)
+            import shutil
+            shutil.rmtree(str(tmp), ignore_errors=True)
+
+    def test_get_multi_db_config_uses_cached_config(self, monkeypatch):
+        import dbwarden.config.resolve as resolve_mod
+
+        tmp = Path(tempfile.mkdtemp())
+        old_cwd = os.getcwd()
+        os.chdir(str(tmp))
+        try:
+            (tmp / ".git").mkdir()
+            (tmp / "settings.py").write_text(
+                "from dbwarden import database_config\n"
+                "database_config(database_name='primary', default=True, "
+                "database_type='sqlite', database_url_sync='sqlite:///./test.db')\n"
+            )
+
+            scans = {"count": 0}
+            original = resolve_mod._full_scan_database_config_calls
+
+            def counting_scan(root):
+                scans["count"] += 1
+                return original(root)
+
+            monkeypatch.setattr(
+                resolve_mod, "_full_scan_database_config_calls", counting_scan
+            )
+
+            mc1 = get_multi_db_config()
+            mc2 = get_multi_db_config()
+            assert mc1 is mc2
+            assert mc2.default == "primary"
+            assert scans["count"] == 1
+        finally:
+            os.chdir(old_cwd)
+            import shutil
+            shutil.rmtree(str(tmp), ignore_errors=True)

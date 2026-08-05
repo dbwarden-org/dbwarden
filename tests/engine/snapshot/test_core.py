@@ -570,5 +570,16 @@ class TestSnapshotSqlGen:
     def test_find_model_table_auto_discover_none(self):
         from dbwarden.engine.snapshot.sql_gen import _find_model_table
 
-        result = _find_model_table("nonexistent", "test")
-        assert result is None
+        with tempfile.TemporaryDirectory() as tmp:
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(tmp)
+                Path("dbwarden.py").write_text(
+                    "from dbwarden import database_config\n"
+                    "database_config(database_name='test', default=True, database_type='sqlite', "
+                    "database_url_sync='sqlite:///./test.db')\n"
+                )
+                result = _find_model_table("nonexistent", "test")
+                assert result is None
+            finally:
+                os.chdir(old_cwd)
