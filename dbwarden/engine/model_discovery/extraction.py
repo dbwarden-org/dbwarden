@@ -1,6 +1,7 @@
 import os
 import time
 import enum as _enum
+import logging
 from typing import Any, Optional
 
 from dbwarden.config import get_database, is_strict_translation
@@ -83,7 +84,7 @@ def extract_table_from_model(
         start = time.time()
         _apply_meta_fast(model_class)
         if debug_timing:
-            get_logger(debug_enabled=True).debug(
+            get_logger(debug_level=logging.DEBUG).debug(
                 "TIMING %s apply_meta %.3fs",
                 model_class.__name__,
                 time.time() - start,
@@ -91,7 +92,7 @@ def extract_table_from_model(
             start = time.time()
         dw_meta = read_meta(model_class)
         if debug_timing:
-            get_logger(debug_enabled=True).debug(
+            get_logger(debug_level=logging.DEBUG).debug(
                 "TIMING %s read_meta %.3fs",
                 model_class.__name__,
                 time.time() - start,
@@ -126,7 +127,7 @@ def extract_table_from_model(
                     "match": fk.match,
                 })
         if debug_timing:
-            get_logger(debug_enabled=True).debug(
+            get_logger(debug_level=logging.DEBUG).debug(
                 "TIMING %s columns %s %.3fs",
                 model_class.__name__,
                 len(columns),
@@ -261,7 +262,7 @@ def extract_table_from_model(
             clickhouse_options = _ch_options_from_meta(model_class)
             object_type = _detect_ch_object_type(clickhouse_options)
         if debug_timing:
-            get_logger(debug_enabled=True).debug(
+            get_logger(debug_level=logging.DEBUG).debug(
                 "TIMING %s finalize %.3fs",
                 model_class.__name__,
                 time.time() - start,

@@ -38,13 +38,14 @@ from dbwarden.commands import (
     handle_version,
     handle_settings_show_command,
 )
-from dbwarden.logging import get_logger
+from dbwarden.logging import get_logger, resolve_debug_level
 from dbwarden.plugin import load_plugins
 
 app = typer.Typer(
     help="""DBWarden - Professional database migration system for SQLAlchemy models
 
-All commands support the --verbose / -v flag for detailed output.""",
+All commands support the --verbose / -v flag for detailed output and the
+--debug / --debug-level flags for DEBUG-level diagnostics.""",
     add_completion=False,
 )
 
@@ -71,12 +72,43 @@ def app_callback(
         "--strict-translation",
         help="Fail when a type/default cannot be translated for target backend",
     ),
+    debug: bool = typer.Option(
+        False,
+        "--debug",
+        help="Enable DEBUG-level logging",
+    ),
+    debug_level: str | None = typer.Option(
+        None,
+        "--debug-level",
+        metavar="LEVEL",
+        help="Exact log level: debug, info, warning, error, critical, or 10/20/30/40/50",
+    ),
 ):
     """Global CLI options."""
     set_dev_mode(dev)
     set_strict_translation(strict_translation)
+    _apply_cli_logging(debug=debug, debug_level=debug_level)
     if ctx.invoked_subcommand != "plugin":
         load_plugins(interactive=True)
+
+
+def _apply_cli_logging(*, debug: bool, debug_level: str | None) -> None:
+    """Resolve and apply --debug / --debug-level to the global logger.
+
+    ``--debug-level`` takes precedence over the bare ``--debug`` switch. The
+    severity level is orthogonal to ``--verbose``: verbosity is applied by each
+    command through ``get_logger(verbose=...)``.
+    """
+    level: int | None = None
+    if debug_level is not None:
+        try:
+            level = resolve_debug_level(debug_level)
+        except ValueError as exc:
+            raise typer.BadParameter(str(exc), param_hint="--debug-level") from exc
+    elif debug:
+        level = resolve_debug_level("debug")
+    if level is not None:
+        get_logger(debug_level=level)
 
 
 @plugin_app.command("list")

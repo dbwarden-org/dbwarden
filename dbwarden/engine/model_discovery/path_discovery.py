@@ -4,6 +4,10 @@ from pathlib import Path
 from types import ModuleType
 from typing import List, Optional
 
+from dbwarden.logging import get_logger
+
+
+logger = get_logger()
 
 _auto_discover_cache: dict[str, tuple[float, list[str]]] = {}
 _AUTO_DISCOVER_CACHE_TTL = 1.0
@@ -24,12 +28,14 @@ def load_model_from_path(filepath: str) -> Optional[ModuleType]:
         module_name = "_dbwarden_loaded_model_" + hashlib.md5(str(filepath).encode()).hexdigest()[:12]
         spec = importlib.util.spec_from_file_location(module_name, str(filepath))
         if spec is None or spec.loader is None:
+            logger.log_model_file_load_failed(str(filepath), "not a loadable module")
             return None
         module = importlib.util.module_from_spec(spec)
         sys.modules[module_name] = module
         spec.loader.exec_module(module)
         return module
     except FileNotFoundError:
+        logger.log_model_file_load_failed(str(filepath), "file not found")
         return None
 
 
@@ -44,6 +50,7 @@ def discover_models_in_directory(directory: str) -> List[str]:
         if filepath.name.startswith("_"):
             continue
         model_files.append(str(filepath))
+        logger.log_model_file_scanned(str(filepath))
 
     return model_files
 
@@ -52,11 +59,13 @@ def _collect_model_files(model_paths: list[str]) -> list[str]:
     model_files: list[str] = []
     for model_path in model_paths:
         if not os.path.exists(model_path):
+            logger.log_model_file_load_failed(model_path, "path does not exist")
             continue
         if os.path.isdir(model_path):
             model_files.extend(discover_models_in_directory(model_path))
         else:
             model_files.append(model_path)
+            logger.log_model_file_scanned(model_path)
     return model_files
 
 

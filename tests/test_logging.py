@@ -822,3 +822,145 @@ class TestLogger:
         reset_logger()
         logger2 = get_logger()
         assert logger1 is not logger2
+
+
+class TestDebugLevel:
+    def test_constructor_accepts_exact_debug_level(self):
+        logger = DBWardenLogger(debug_level=logging.WARNING)
+        assert logger.debug_level == logging.WARNING
+        assert logger.logger.level == logging.WARNING
+        assert logger.debug_enabled is False
+
+    def test_debug_level_takes_precedence_over_debug_enabled(self):
+        logger = DBWardenLogger(debug_enabled=True, debug_level=logging.WARNING)
+        assert logger.debug_level == logging.WARNING
+        assert logger.logger.level == logging.WARNING
+        assert logger.debug_enabled is False
+
+    def test_debug_enabled_property_mirrors_level(self):
+        assert DBWardenLogger(debug_level=logging.DEBUG).debug_enabled is True
+        assert DBWardenLogger(debug_level=logging.INFO).debug_enabled is False
+        assert DBWardenLogger(debug_level=logging.ERROR).debug_enabled is False
+
+    def test_set_debug_level_updates_logger_and_handlers(self):
+        logger = DBWardenLogger(debug_enabled=True)
+        logger.set_debug_level(logging.WARNING)
+        assert logger.debug_level == logging.WARNING
+        assert logger.logger.level == logging.WARNING
+        assert all(h.level == logging.WARNING for h in logger.logger.handlers)
+
+    def test_set_debug_level_rejects_non_int(self):
+        logger = DBWardenLogger(debug_enabled=False)
+        with pytest.raises(TypeError, match="debug_level must be an int"):
+            logger.set_debug_level("warning")
+
+    def test_set_debug_enabled_delegates_to_level(self):
+        logger = DBWardenLogger(debug_enabled=False)
+        logger.set_debug_enabled(False)
+        assert logger.debug_level == logging.INFO
+        logger.set_debug_enabled(True)
+        assert logger.debug_level == logging.DEBUG
+        assert logger.debug_enabled is True
+
+    def test_get_logger_syncs_debug_level_on_singleton(self):
+        from dbwarden.logging import reset_logger
+
+        reset_logger()
+        try:
+            get_logger(debug_level=logging.DEBUG)
+            assert get_logger().debug_level == logging.DEBUG
+            get_logger(debug_level=logging.WARNING)
+            assert get_logger().debug_level == logging.WARNING
+        finally:
+            reset_logger()
+
+    def test_get_logger_plain_call_does_not_clear_debug_level(self):
+        from dbwarden.logging import reset_logger
+
+        reset_logger()
+        try:
+            get_logger(debug_level=logging.DEBUG)
+            get_logger()
+            get_logger(verbose=True)
+            get_logger(db_name="primary")
+            assert get_logger().debug_level == logging.DEBUG
+            assert get_logger().debug_enabled is True
+        finally:
+            reset_logger()
+
+    def test_get_logger_debug_level_priority_over_debug_enabled(self):
+        from dbwarden.logging import reset_logger
+
+        reset_logger()
+        try:
+            get_logger(debug_enabled=True, debug_level=logging.WARNING)
+            assert get_logger().debug_level == logging.WARNING
+        finally:
+            reset_logger()
+
+
+class TestResolveDebugLevel:
+    def test_resolves_named_levels_case_insensitively(self):
+        from dbwarden.logging import resolve_debug_level
+
+        assert resolve_debug_level("debug") == logging.DEBUG
+        assert resolve_debug_level("DEBUG") == logging.DEBUG
+        assert resolve_debug_level("info") == logging.INFO
+        assert resolve_debug_level("warning") == logging.WARNING
+        assert resolve_debug_level("warn") == logging.WARNING
+        assert resolve_debug_level("ERROR") == logging.ERROR
+        assert resolve_debug_level("critical") == logging.CRITICAL
+
+    @pytest.mark.parametrize("value", ["10", "20", "30", "40", "50"])
+    def test_resolves_numeric_levels(self, value):
+        from dbwarden.logging import resolve_debug_level
+
+        assert resolve_debug_level(value) == int(value)
+
+    @pytest.mark.parametrize("value", ["foo", "12", "0", "60", ""])
+    def test_invalid_level_raises_value_error(self, value):
+        from dbwarden.logging import resolve_debug_level
+
+        with pytest.raises(ValueError, match="Invalid debug level"):
+            resolve_debug_level(value)
+
+    def test_whitespace_around_level_is_ignored(self):
+        from dbwarden.logging import resolve_debug_level
+
+        assert resolve_debug_level(" info ") == logging.INFO
+
+
+class TestScanLogging:
+    def test_log_model_file_scanned_emits_debug_message(self):
+        logger = DBWardenLogger(debug_enabled=True)
+        records = []
+
+        class CaptureHandler(logging.Handler):
+            def emit(self, record):
+                records.append(record)
+
+        logger.logger.handlers = [CaptureHandler()]
+        logger.logger.propagate = False
+
+        logger.log_model_file_scanned("/tmp/models/user.py")
+
+        assert len(records) == 1
+        assert records[0].getMessage() == "Scanning model file: /tmp/models/user.py"
+
+    def test_log_model_file_load_failed_emits_debug_message(self):
+        logger = DBWardenLogger(debug_enabled=True)
+        records = []
+
+        class CaptureHandler(logging.Handler):
+            def emit(self, record):
+                records.append(record)
+
+        logger.logger.handlers = [CaptureHandler()]
+        logger.logger.propagate = False
+
+        logger.log_model_file_load_failed("/tmp/missing.py", "file not found")
+
+        assert len(records) == 1
+        assert records[0].getMessage() == (
+            "Failed to load model file: /tmp/missing.py (file not found)"
+        )

@@ -269,7 +269,7 @@ def snapshot_diff_to_sql(
 
     statements: list[MigrationStatement] = []
     changes: list[Any] = []
-    logger = get_logger(debug_enabled=logging.getLogger("dbwarden").isEnabledFor(logging.DEBUG))
+    logger = get_logger(debug_level=logging.getLogger("dbwarden").level)
 
     def _warn_about_rollback(stmt: MigrationStatement, op_type: str, target: str) -> str:
         inferred = _rollback_kind_from_sql(stmt.rollback_sql)

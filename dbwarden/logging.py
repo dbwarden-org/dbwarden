@@ -336,6 +336,7 @@ class DBWardenLogger:
         name: str = "dbwarden",
         verbose: bool = False,
         debug_enabled: bool = False,
+        debug_level: int | None = None,
         verbosity: Verbosity | None = None,
         db_name: str | None = None,
         db_type: str | None = None,
@@ -349,7 +350,11 @@ class DBWardenLogger:
                 ``True`` maps to ``Verbosity.VERBOSE`` and ``False`` falls back
                 to ``Verbosity.NORMAL``.
             debug_enabled: Switches between ``logging.DEBUG`` when true and
-                ``logging.INFO`` when false.
+                ``logging.INFO`` when false. Kept for backward compatibility;
+                ``debug_level`` takes precedence when both are provided.
+            debug_level: Exact stdlib logging level (e.g. ``logging.DEBUG``,
+                ``logging.WARNING``). When ``None``, falls back to
+                ``debug_enabled``.
             verbosity: Explicit INFO-output verbosity. When provided, it takes
                 precedence over ``verbose``.
             db_name: Database name from multi-db config.
@@ -357,7 +362,10 @@ class DBWardenLogger:
         """
         self.logger = logging.getLogger(name)
         self.verbose = verbose
-        self.debug_enabled = debug_enabled
+        if debug_level is not None:
+            self.debug_level = debug_level
+        else:
+            self.debug_level = logging.DEBUG if debug_enabled else logging.INFO
 
         if verbosity is not None and not isinstance(verbosity, Verbosity):
             raise TypeError(
@@ -374,16 +382,21 @@ class DBWardenLogger:
         self.db_type = db_type
         self._setup_logger()
 
+    @property
+    def debug_enabled(self) -> bool:
+        """Whether the logger severity is at ``logging.DEBUG`` level."""
+        return self.debug_level == logging.DEBUG
+
     def _setup_logger(self) -> None:
         """Configure the logger with appropriate handlers and level."""
-        self.logger.setLevel(logging.DEBUG if self.debug_enabled else logging.INFO)
+        self.logger.setLevel(self.debug_level)
 
         for handler in self.logger.handlers[:]:
             self.logger.removeHandler(handler)
 
         if _use_json_logging():
             handler = logging.StreamHandler(sys.stdout)
-            handler.setLevel(logging.DEBUG if self.debug_enabled else logging.INFO)
+            handler.setLevel(self.debug_level)
             formatter: logging.Formatter = JSONFormatter()
             handler.setFormatter(formatter)
         else:
@@ -393,7 +406,7 @@ class DBWardenLogger:
                 show_path=False,
                 markup=False,
             )
-            handler.setLevel(logging.DEBUG if self.debug_enabled else logging.INFO)
+            handler.setLevel(self.debug_level)
             handler.setFormatter(logging.Formatter("%(name)s - %(message)s"))
         self.logger.addHandler(handler)
 
@@ -401,10 +414,20 @@ class DBWardenLogger:
         return dict(kwargs, stacklevel=kwargs.get("stacklevel", 2))
 
     def set_debug_enabled(self, debug_enabled: bool) -> None:
-        self.debug_enabled = debug_enabled
-        self.logger.setLevel(logging.DEBUG if debug_enabled else logging.INFO)
+        """Enable or disable DEBUG severity (backward-compatible helper)."""
+        self.set_debug_level(logging.DEBUG if debug_enabled else logging.INFO)
+
+    def set_debug_level(self, debug_level: int) -> None:
+        """Set the exact stdlib logging severity level for this logger."""
+        if not isinstance(debug_level, int):
+            raise TypeError(
+                f"debug_level must be an int logging level, got {type(debug_level)}"
+            )
+
+        self.debug_level = debug_level
+        self.logger.setLevel(debug_level)
         for handler in self.logger.handlers:
-            handler.setLevel(logging.DEBUG if debug_enabled else logging.INFO)
+            handler.setLevel(debug_level)
 
     def set_verbosity(self, verbosity: Verbosity) -> None:
         if not isinstance(verbosity, Verbosity):
@@ -731,6 +754,30 @@ class DBWardenLogger:
             stacklevel=4,
         )
 
+    def log_model_file_scanned(self, filepath: str) -> None:
+        """Log a model file that was discovered for scanning (debug only)."""
+        self._log_best_candidate(
+            [
+                LogCandidate(
+                    logging.DEBUG,
+                    lambda: f"Scanning model file: {filepath}",
+                ),
+            ],
+            stacklevel=4,
+        )
+
+    def log_model_file_load_failed(self, filepath: str, reason: str) -> None:
+        """Log a model file that failed to load (debug only)."""
+        self._log_best_candidate(
+            [
+                LogCandidate(
+                    logging.DEBUG,
+                    lambda: f"Failed to load model file: {filepath} ({reason})",
+                ),
+            ],
+            stacklevel=4,
+        )
+
     def log_table_columns(self, table_name: str, columns: list) -> None:
         """Log table columns (debug_enabled only)."""
         self._log_best_candidate(
@@ -767,6 +814,7 @@ _global_logger: Optional[DBWardenLogger] = None
 def get_logger(
     debug_enabled: bool = False,
     verbose: bool | None = None,
+    debug_level: int | None = None,
     verbosity: Verbosity | None = None,
     db_name: str | None = None,
     db_type: str | None = None,
@@ -775,11 +823,15 @@ def get_logger(
     Get the global DBWarden logger instance.
 
     Args:
-        debug_enabled: If True, sets logger to DEBUG level.
+        debug_enabled: If True, sets logger to DEBUG level. Kept for backward
+            compatibility; ``debug_level`` takes precedence when both provided.
         verbose: Legacy compatibility flag. Used only when explicitly
             provided and ``verbosity`` is not set, where ``True`` maps to
             ``Verbosity.VERBOSE`` and ``False`` maps to ``Verbosity.NORMAL``.
             When omitted, the existing singleton verbosity is left unchanged.
+        debug_level: Exact stdlib logging level (e.g. ``logging.DEBUG``,
+            ``logging.WARNING``). When provided, sets the singleton severity;
+            ``None`` leaves the current severity untouched.
         verbosity: Explicit INFO-output verbosity. When provided, it takes
             precedence over ``verbose``.
         db_name: Database name from multi-db config.
@@ -792,14 +844,17 @@ def get_logger(
     if _global_logger is None:
         _global_logger = DBWardenLogger(
             debug_enabled=debug_enabled,
+            debug_level=debug_level,
             verbose=verbose if verbose is not None else False,
             verbosity=verbosity,
             db_name=db_name,
             db_type=db_type,
         )
     else:
-        if _global_logger.debug_enabled != debug_enabled:
-            _global_logger.set_debug_enabled(debug_enabled)
+        if debug_level is not None and _global_logger.debug_level != debug_level:
+            _global_logger.set_debug_level(debug_level)
+        elif debug_enabled and not _global_logger.debug_enabled:
+            _global_logger.set_debug_enabled(True)
         if verbosity is not None and _global_logger.verbosity != verbosity:
             _global_logger.set_verbosity(verbosity)
         elif verbose is not None and _global_logger.verbose != verbose:
@@ -809,6 +864,39 @@ def get_logger(
         if db_type is not None:
             _global_logger.db_type = db_type
     return _global_logger
+
+
+def resolve_debug_level(value: str) -> int:
+    """Resolve a CLI debug level name or numeric string to a stdlib logging level.
+
+    Accepts case-insensitive names ``debug``, ``info``, ``warning``/``warn``,
+    ``error``, ``critical``, or an integer string between 10 and 50 that is a
+    valid logging level.
+
+    Raises:
+        ValueError: If the value is not a recognized level.
+    """
+    normalized = str(value).strip().lower()
+    named = {
+        "debug": logging.DEBUG,
+        "info": logging.INFO,
+        "warning": logging.WARNING,
+        "warn": logging.WARNING,
+        "error": logging.ERROR,
+        "critical": logging.CRITICAL,
+    }
+    if normalized in named:
+        return named[normalized]
+
+    if normalized.isdigit():
+        level = int(normalized)
+        if level in (10, 20, 30, 40, 50):
+            return level
+
+    raise ValueError(
+        f"Invalid debug level {value!r}. Expected one of: "
+        "debug, info, warning, error, critical, or a numeric level (10, 20, 30, 40, 50)."
+    )
 
 
 def reset_logger() -> None:

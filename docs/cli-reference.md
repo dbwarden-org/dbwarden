@@ -85,7 +85,14 @@ $ dbwarden [GLOBAL_OPTIONS] COMMAND [ARGS] [COMMAND_OPTIONS]
 |---|---|
 | `--dev` | Use `dev_database_url` and `dev_database_type` for selected database |
 | `--strict-translation` | Fail on unsupported/lossy dev SQLite translation |
+| `--debug` | Enable DEBUG-level logging (shows per-file model scanning on `make-migrations`) |
+| `--debug-level <LEVEL>` | Set an exact log level: `debug`, `info`, `warning`, `error`, `critical`, or `10`/`20`/`30`/`40`/`50` |
 | `--help` | Show help |
+
+`--debug`/`--debug-level` set the logging severity and compose with the
+per-command `--verbose`/`-v` flag, which controls INFO-level verbosity. Use both
+(`--debug` plus `-v`) for DEBUG diagnostics with verbose INFO output. If both
+`--debug` and `--debug-level` are given, `--debug-level` wins.
 
 ## Configuration
 
@@ -110,6 +117,8 @@ $ dbwarden database list
 ```bash
 $ dbwarden make-migrations "create users table" --database primary
 $ dbwarden make-migrations --verbose --database primary
+$ dbwarden --debug make-migrations --database primary
+$ dbwarden --debug-level warning make-migrations --database primary
 $ dbwarden make-migrations --plan --database primary
 $ dbwarden make-migrations --rename users.username:email --database primary
 $ dbwarden make-migrations --rename-table users:accounts --database primary
@@ -122,6 +131,7 @@ Options:
 - `--plan`: Print migration plan JSON without writing files
 - `--offline`: Use model state file instead of live database (run `export-models` first)
 - `--verbose`/`-v`: Verbose output
+- `--debug`/`--debug-level <LEVEL>`: Global options (see Global options table). DEBUG shows every model file scanned during discovery.
 - `--rename`: Repeatable. Declare a column rename in format `table.old_name:new_name`.
 - `--rename-table`: Repeatable. Declare a table rename in format `old_table:new_table`.
 - `--safe-type-change`: Multi-step safe type change strategy.

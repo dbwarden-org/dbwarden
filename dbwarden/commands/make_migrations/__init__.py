@@ -81,7 +81,7 @@ def make_migrations_cmd(
     drop_preserved_clickhouse_table: bool | None = None,
     postgres_auto_using: bool = False,
 ) -> None:
-    logger = get_logger()
+    logger = get_logger(verbose=verbose)
 
     if offline:
         _run_offline_migrations(
