@@ -8,10 +8,9 @@
 {% endblock %}
 
 {% block site_meta %}
+{# _seo_head is emitted by the seoslug.contrib.zensical markdown extension. #}
 {% if page.meta and page.meta._seo_head %}
 {{ page.meta._seo_head | safe }}
-{% elif page.meta and page.meta.seo_html %}
-{{ page.meta.seo_html | safe }}
 {% else %}
 {{ super() }}
 {% endif %}

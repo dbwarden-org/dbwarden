@@ -4,7 +4,12 @@ import ast
 from pathlib import Path
 from typing import Any
 
-from dbwarden.config import display_value, get_multi_db_config, get_settings_source_file
+from dbwarden.config import (
+    display_value,
+    get_database,
+    get_multi_db_config,
+    get_settings_source_file,
+)
 from dbwarden.config_schema import DatabaseEntry
 from dbwarden.output import kv_table, render, section
 
@@ -38,20 +43,30 @@ def handle_settings_show(database: str | None = None, all_databases: bool = Fals
         name = database or config.default
         entries = [(name, config.databases[name])] if name else []
 
-    for name, db_config in entries:
+    for name, _entry in entries:
         is_default = name == config.default
         label = f"Database: {name.upper()}"
         if is_default:
             label += " (default)"
         section(label)
 
+        # get_database() returns the resolved DatabaseConfig. The raw
+        # DatabaseEntry has neither sqlalchemy_url nor secure_display_values,
+        # which display_value() needs to mask secrets.
+        db_config = get_database(name)
+
         _print_field("Default", str(is_default))
         _print_field("Type", _display_db_type(db_config.database_type))
-        _print_field("URL", display_value(db_config.sqlalchemy_url))
-        _print_field("Migrations Directory", db_config.migration_dir)
+        _print_field(
+            "URL", display_value(db_config, "database_url_sync", db_config.sqlalchemy_url)
+        )
+        _print_field("Migrations Directory", db_config.migrations_dir)
         _print_field("Migration Table", db_config.migration_table)
         _print_field("Seed Table", db_config.seed_table)
         _print_field("Model Paths", db_config.model_paths)
         _print_field("Dev Database Type", db_config.dev_database_type)
-        _print_field("Dev Database URL", display_value(db_config.dev_database_url))
+        _print_field(
+            "Dev Database URL",
+            display_value(db_config, "dev_database_url", db_config.dev_database_url),
+        )
         _print_field("Overlap Models", str(db_config.overlap_models))

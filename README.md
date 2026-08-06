@@ -33,7 +33,7 @@
 
 ---
 
-DBWarden is a database migration and schema management tool for SQLAlchemy. You define your schema in Python (in your SQLAlchemy models) and DBWarden derives everything else: migration SQL, rollbacks, snapshots, and safety checks.
+DBWarden is a declarative database migration and schema management tool for SQLAlchemy. You declare the schema you want in your SQLAlchemy models, and DBWarden derives everything else: migration SQL, rollbacks, snapshots, and safety checks.
 
 There are no migration scripts to write or maintain. There is no migration runtime. Your models are the contract. The database is kept in sync with them.
 
@@ -52,7 +52,9 @@ There are no migration scripts to write or maintain. There is no migration runti
 
 ## Why DBWarden
 
-Most migration tools ask you to maintain two representations of your schema: your ORM models and your migration files. When they drift, you find out at deploy time.
+Schema management tools fall into two camps. Imperative tools have you author *changes*: revision scripts that describe how to get from one schema version to the next. Declarative tools have you author the *desired state* and derive the changes for you. DBWarden is declarative: your SQLAlchemy models are the single definition of what the schema should be.
+
+Most imperative tools ask you to maintain two representations of your schema: your ORM models and your migration files. When they drift, you find out at deploy time.
 
 DBWarden eliminates the second representation. Your SQLAlchemy models are the schema definition. DBWarden reads them, diffs them against the current database state, and generates the SQL to close the gap (including rollback) without you writing a line of migration code.
 
@@ -63,7 +65,9 @@ This also means:
 - No schema drift discovered in production: drift is caught at `make-migrations` time
 - Migrations that can be generated in CI without a database connection
 
-DBWarden is not a wrapper around Alembic. It is a different approach to the same problem: Alembic asks you to describe *how* to change the database; DBWarden asks you to describe *what* the schema should be.
+DBWarden is not a wrapper around Alembic. It is a different approach to the same problem. Alembic asks you to describe *how* to change the database; DBWarden asks you to describe *what* the schema should be. Alembic can autogenerate revisions, but each one becomes an imperative Python artifact you own, edit, and chain — the revision history is the source of truth. With DBWarden the models stay the source of truth, and the output is plain SQL.
+
+Unlike tools that apply declarative diffs directly to the database, DBWarden still produces versioned, reviewable migration files with explicit rollbacks: declarative authoring without giving up auditable deploy artifacts.
 
 ## From zero to production
 
@@ -354,7 +358,7 @@ DBWarden features a plugin system with three trust tiers (official, verified, co
 | `dbwarden-sandbox` | [`dbwarden-sandbox`](https://pypi.org/p/dbwarden-sandbox) | Testcontainers sandbox providers for safe migration replay |
 | `dbwarden-seeds` | [`dbwarden-seeds`](https://pypi.org/p/dbwarden-seeds) | Seed data management with code seeds and file-based SQL/Python seeds |
 
-See the [plugin documentation](https://dbwarden.emiliano-go.com/plugins/) for installation, development guides, and the full Approved standard.
+See the [plugin documentation](https://dbwarden.emiliano-go.com/plugins/) for installation, development guides, and the full Verified standard.
 
 ---
 
@@ -371,4 +375,4 @@ MIT
 
 ---
 
-DBWarden is built for teams that want explicit, reviewable, reproducible database changes, derived from the models they already maintain, not from migration scripts they have to write.
+DBWarden is built for teams that want declarative, reviewable, reproducible database changes, derived from the models they already maintain, not from migration scripts they have to write.

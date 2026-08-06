@@ -1,15 +1,62 @@
 name: Publish to PyPI
 
+# A PyPI version number is burned permanently once uploaded: yanking hides a
+# release but never frees the number. The `release: published` event fires
+# regardless of whether CI ever ran on that commit, so publishing is gated on
+# the suite and on a tag/version match before any artifact is built.
+
 on:
   release:
     types: [published]
+  # Retry path. A publish that dies on a flaky service container would otherwise
+  # need the GitHub release deleted and recreated to re-trigger.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build and publish (e.g. v0.16.4)"
+        required: true
+        type: string
 
 jobs:
-  build:
-    name: Build distribution
+  verify-version:
+    name: Verify tag matches pyproject version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Compare tag against pyproject.toml
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          project="$(python3 -c 'import tomllib;print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')"
+          tag="${TAG#v}"
+          echo "pyproject.toml: $project"
+          echo "tag:            $tag"
+          if [ "$project" != "$tag" ]; then
+            echo "::error::Tag '$tag' does not match pyproject.toml version '$project'. Bump the version or fix the tag before publishing."
+            exit 1
+          fi
+
+  test:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+    with:
+      # Must match the ref `build` checks out, or the gate tests one commit
+      # and publishes another.
+      ref: ${{ inputs.tag || github.ref }}
+    secrets: inherit
+
+  build:
+    name: Build distribution
+    needs: [verify-version, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7

@@ -1,95 +1,3 @@
----
-seo:
-  title: Migration Locking - DBWarden Documentation
-  canonical: https://dbwarden.emiliano-go.com/advanced/migration-locking
-  robots: index,follow
-  og:
-    type: website
-    title: Migration Locking - DBWarden Documentation
-    description: DBWarden uses a database-level lock to prevent concurrent schema
-      mutation. This page explains how it works, what happens when it fails, and how
-      to recover from...
-    url: https://dbwarden.emiliano-go.com/advanced/migration-locking
-    image: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-    image:width: 1376
-    image:height: 768
-    image:alt: DBWarden documentation
-    site_name: DBWarden Documentation
-    locale: en_US
-  twitter:
-    card: summary_large_image
-    title: Migration Locking - DBWarden Documentation
-    description: DBWarden uses a database-level lock to prevent concurrent schema
-      mutation. This page explains how it works, what happens when it fails, and how
-      to recover from...
-    image: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-    image:alt: DBWarden documentation
-    site: '@emiliano_go_'
-  description: DBWarden uses a database-level lock to prevent concurrent schema mutation.
-    This page explains how it works, what happens when it fails, and how to recover
-    from...
-  schema_jsonld:
-  - '@context': https://schema.org
-    '@type': WebPage
-    name: Migration Locking - DBWarden Documentation
-    url: https://dbwarden.emiliano-go.com/advanced/migration-locking
-    description: DBWarden uses a database-level lock to prevent concurrent schema
-      mutation. This page explains how it works, what happens when it fails, and how
-      to recover from...
-    image: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-    publisher:
-      '@type': Organization
-      name: Emiliano Gandini Outeda
-      logo: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-  - '@context': https://schema.org
-    '@type': BreadcrumbList
-    itemListElement:
-    - '@type': ListItem
-      position: 1
-      name: Advanced
-      item: https://dbwarden.emiliano-go.com/advanced
-    - '@type': ListItem
-      position: 2
-      name: Migration Locking
-      item: https://dbwarden.emiliano-go.com/advanced/migration-locking
-seo_html: "<title>Migration Locking - DBWarden Documentation</title>\n<meta name=\"\
-  description\" content=\"DBWarden uses a database-level lock to prevent concurrent\
-  \ schema mutation. This page explains how it works, what happens when it fails,\
-  \ and how to recover from...\">\n<link rel=\"canonical\" href=\"https://dbwarden.emiliano-go.com/advanced/migration-locking\"\
-  >\n<meta name=\"robots\" content=\"index,follow\">\n<meta property=\"og:type\" content=\"\
-  website\">\n<meta property=\"og:title\" content=\"Migration Locking - DBWarden Documentation\"\
-  >\n<meta property=\"og:description\" content=\"DBWarden uses a database-level lock\
-  \ to prevent concurrent schema mutation. This page explains how it works, what happens\
-  \ when it fails, and how to recover from...\">\n<meta property=\"og:url\" content=\"\
-  https://dbwarden.emiliano-go.com/advanced/migration-locking\">\n<meta property=\"\
-  og:image\" content=\"https://dbwarden.emiliano-go.com/assets/images/og-image.png\"\
-  >\n<meta property=\"og:image:width\" content=\"1376\">\n<meta property=\"og:image:height\"\
-  \ content=\"768\">\n<meta property=\"og:image:alt\" content=\"DBWarden documentation\"\
-  >\n<meta property=\"og:site_name\" content=\"DBWarden Documentation\">\n<meta property=\"\
-  og:locale\" content=\"en_US\">\n<meta name=\"twitter:card\" content=\"summary_large_image\"\
-  >\n<meta name=\"twitter:title\" content=\"Migration Locking - DBWarden Documentation\"\
-  >\n<meta name=\"twitter:description\" content=\"DBWarden uses a database-level lock\
-  \ to prevent concurrent schema mutation. This page explains how it works, what happens\
-  \ when it fails, and how to recover from...\">\n<meta name=\"twitter:image\" content=\"\
-  https://dbwarden.emiliano-go.com/assets/images/og-image.png\">\n<meta name=\"twitter:image:alt\"\
-  \ content=\"DBWarden documentation\">\n<meta name=\"twitter:site\" content=\"@emiliano_go_\"\
-  >\n<script type=\"application/ld+json\">\n[\n  {\n    \"@context\": \"https://schema.org\"\
-  ,\n    \"@type\": \"WebPage\",\n    \"name\": \"Migration Locking - DBWarden Documentation\"\
-  ,\n    \"url\": \"https://dbwarden.emiliano-go.com/advanced/migration-locking\"\
-  ,\n    \"description\": \"DBWarden uses a database-level lock to prevent concurrent\
-  \ schema mutation. This page explains how it works, what happens when it fails,\
-  \ and how to recover from...\",\n    \"image\": \"https://dbwarden.emiliano-go.com/assets/images/og-image.png\"\
-  ,\n    \"publisher\": {\n      \"@type\": \"Organization\",\n      \"name\": \"\
-  Emiliano Gandini Outeda\",\n      \"logo\": \"https://dbwarden.emiliano-go.com/assets/images/og-image.png\"\
-  \n    }\n  },\n  {\n    \"@context\": \"https://schema.org\",\n    \"@type\": \"\
-  BreadcrumbList\",\n    \"itemListElement\": [\n      {\n        \"@type\": \"ListItem\"\
-  ,\n        \"position\": 1,\n        \"name\": \"Advanced\",\n        \"item\":\
-  \ \"https://dbwarden.emiliano-go.com/advanced\"\n      },\n      {\n        \"@type\"\
-  : \"ListItem\",\n        \"position\": 2,\n        \"name\": \"Migration Locking\"\
-  ,\n        \"item\": \"https://dbwarden.emiliano-go.com/advanced/migration-locking\"\
-  \n      }\n    ]\n  }\n]\n</script>\n"
----
-
 # Migration Locking
 
 DBWarden uses a database-level lock to prevent concurrent schema mutation. This page explains how it works, what happens when it fails, and how to recover from a stuck lock.
@@ -230,10 +138,10 @@ $ dbwarden status --database primary
 
 For multi-instance deployments where multiple application replicas could
 trigger migrations concurrently, DBWarden provides a Redis-backed
-distributed lock through `dbwarden.extensions.fastapi.lock`:
+distributed lock through `dbwarden_fastapi.lock`:
 
 ```python
-from dbwarden.extensions.fastapi import migration_lock
+from dbwarden_fastapi import migration_lock
 
 # Within a FastAPI route or lifespan:
 async with migration_lock() as locked:
@@ -273,7 +181,7 @@ migration context:
 ```python
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from dbwarden.extensions.fastapi import dbwarden_lifespan, migration_lock
+from dbwarden_fastapi import dbwarden_lifespan, migration_lock
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -282,4 +190,6 @@ async def lifespan(app: FastAPI):
             yield
 ```
 
-See also: [Safe Deployment](safe-deployment.md) | [CI/CD Patterns](ci-cd-patterns.md) | [`lock` commands](../commands/lock.md) | [FastAPI Lifespan](../fastapi/index.md)
+See also: [Safe Deployment](safe-deployment.md) | [CI/CD Patterns](ci-cd-patterns.md) | [`lock` commands](../commands/lock.md)
+
+The FastAPI lifespan helper lives in the `dbwarden-fastapi` plugin rather than core: [dbwarden-fastapi](https://github.com/dbwarden-org/dbwarden-fastapi).

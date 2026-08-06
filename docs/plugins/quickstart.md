@@ -88,7 +88,7 @@ The FastAPI integration exposes session dependencies through DBWarden's FastAPI 
 from fastapi import Depends, FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from dbwarden.extensions.fastapi import get_session
+from dbwarden_fastapi import get_session
 
 app = FastAPI()
 

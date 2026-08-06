@@ -1,95 +1,3 @@
----
-seo:
-  title: Modeling Guide - DBWarden Documentation
-  canonical: https://dbwarden.emiliano-go.com/getting-started/modeling
-  robots: index,follow
-  og:
-    type: website
-    title: Modeling Guide - DBWarden Documentation
-    description: This guide walks through the process of defining SQLAlchemy models
-      that DBWarden can read to generate migration SQL. For the complete reference
-      of all...
-    url: https://dbwarden.emiliano-go.com/getting-started/modeling
-    image: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-    image:width: 1376
-    image:height: 768
-    image:alt: DBWarden documentation
-    site_name: DBWarden Documentation
-    locale: en_US
-  twitter:
-    card: summary_large_image
-    title: Modeling Guide - DBWarden Documentation
-    description: This guide walks through the process of defining SQLAlchemy models
-      that DBWarden can read to generate migration SQL. For the complete reference
-      of all...
-    image: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-    image:alt: DBWarden documentation
-    site: '@emiliano_go_'
-  description: This guide walks through the process of defining SQLAlchemy models
-    that DBWarden can read to generate migration SQL. For the complete reference of
-    all...
-  schema_jsonld:
-  - '@context': https://schema.org
-    '@type': WebPage
-    name: Modeling Guide - DBWarden Documentation
-    url: https://dbwarden.emiliano-go.com/getting-started/modeling
-    description: This guide walks through the process of defining SQLAlchemy models
-      that DBWarden can read to generate migration SQL. For the complete reference
-      of all...
-    image: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-    publisher:
-      '@type': Organization
-      name: Emiliano Gandini Outeda
-      logo: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-  - '@context': https://schema.org
-    '@type': BreadcrumbList
-    itemListElement:
-    - '@type': ListItem
-      position: 1
-      name: Get Started
-      item: https://dbwarden.emiliano-go.com/getting-started
-    - '@type': ListItem
-      position: 2
-      name: Modeling Guide
-      item: https://dbwarden.emiliano-go.com/getting-started/modeling
-seo_html: "<title>Modeling Guide - DBWarden Documentation</title>\n<meta name=\"description\"\
-  \ content=\"This guide walks through the process of defining SQLAlchemy models that\
-  \ DBWarden can read to generate migration SQL. For the complete reference of all...\"\
-  >\n<link rel=\"canonical\" href=\"https://dbwarden.emiliano-go.com/getting-started/modeling\"\
-  >\n<meta name=\"robots\" content=\"index,follow\">\n<meta property=\"og:type\" content=\"\
-  website\">\n<meta property=\"og:title\" content=\"Modeling Guide - DBWarden Documentation\"\
-  >\n<meta property=\"og:description\" content=\"This guide walks through the process\
-  \ of defining SQLAlchemy models that DBWarden can read to generate migration SQL.\
-  \ For the complete reference of all...\">\n<meta property=\"og:url\" content=\"\
-  https://dbwarden.emiliano-go.com/getting-started/modeling\">\n<meta property=\"\
-  og:image\" content=\"https://dbwarden.emiliano-go.com/assets/images/og-image.png\"\
-  >\n<meta property=\"og:image:width\" content=\"1376\">\n<meta property=\"og:image:height\"\
-  \ content=\"768\">\n<meta property=\"og:image:alt\" content=\"DBWarden documentation\"\
-  >\n<meta property=\"og:site_name\" content=\"DBWarden Documentation\">\n<meta property=\"\
-  og:locale\" content=\"en_US\">\n<meta name=\"twitter:card\" content=\"summary_large_image\"\
-  >\n<meta name=\"twitter:title\" content=\"Modeling Guide - DBWarden Documentation\"\
-  >\n<meta name=\"twitter:description\" content=\"This guide walks through the process\
-  \ of defining SQLAlchemy models that DBWarden can read to generate migration SQL.\
-  \ For the complete reference of all...\">\n<meta name=\"twitter:image\" content=\"\
-  https://dbwarden.emiliano-go.com/assets/images/og-image.png\">\n<meta name=\"twitter:image:alt\"\
-  \ content=\"DBWarden documentation\">\n<meta name=\"twitter:site\" content=\"@emiliano_go_\"\
-  >\n<script type=\"application/ld+json\">\n[\n  {\n    \"@context\": \"https://schema.org\"\
-  ,\n    \"@type\": \"WebPage\",\n    \"name\": \"Modeling Guide - DBWarden Documentation\"\
-  ,\n    \"url\": \"https://dbwarden.emiliano-go.com/getting-started/modeling\",\n\
-  \    \"description\": \"This guide walks through the process of defining SQLAlchemy\
-  \ models that DBWarden can read to generate migration SQL. For the complete reference\
-  \ of all...\",\n    \"image\": \"https://dbwarden.emiliano-go.com/assets/images/og-image.png\"\
-  ,\n    \"publisher\": {\n      \"@type\": \"Organization\",\n      \"name\": \"\
-  Emiliano Gandini Outeda\",\n      \"logo\": \"https://dbwarden.emiliano-go.com/assets/images/og-image.png\"\
-  \n    }\n  },\n  {\n    \"@context\": \"https://schema.org\",\n    \"@type\": \"\
-  BreadcrumbList\",\n    \"itemListElement\": [\n      {\n        \"@type\": \"ListItem\"\
-  ,\n        \"position\": 1,\n        \"name\": \"Get Started\",\n        \"item\"\
-  : \"https://dbwarden.emiliano-go.com/getting-started\"\n      },\n      {\n    \
-  \    \"@type\": \"ListItem\",\n        \"position\": 2,\n        \"name\": \"Modeling\
-  \ Guide\",\n        \"item\": \"https://dbwarden.emiliano-go.com/getting-started/modeling\"\
-  \n      }\n    ]\n  }\n]\n</script>\n"
----
-
 # Modeling Guide
 
 This guide walks through the process of defining SQLAlchemy models that DBWarden can read to generate migration SQL. For the complete reference of all supported Meta attributes, see [SQLAlchemy Models Reference](../models.md).
@@ -102,6 +10,8 @@ DBWarden discovers models in the directories specified by `model_paths` in your 
 2. **`class Meta` inner class**: backend-specific options like engine specs, partitioning, codecs
 
 All backend-specific metadata uses the `class Meta` pattern. The `__table_args__` approach is not supported for PostgreSQL metadata. Using `mapped_column(info=...)` for backend-specific options raises `DBWardenConfigError`.
+
+The `class Meta` convention is borrowed from Django's model metadata, so the pattern should read as familiar if you have used Django. DBWarden's version is typed and validated at import time: unknown attributes raise `DBWardenConfigError` when the module loads rather than producing incorrect DDL later.
 
 ## Common Meta Attributes
 

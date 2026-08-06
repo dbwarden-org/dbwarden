@@ -176,6 +176,68 @@ class ObjectHandlerRegistration:
     handler: Any
 
 
+# Config keys owned by official plugins, mapped to the distribution that provides
+# them. Core keeps this table (rather than only the live registry) so that a key
+# declared without its plugin installed fails with an actionable message instead
+# of being silently ignored, which is what used to happen.
+PLUGIN_CONFIG_KEY_OWNERS: dict[str, str] = {
+    "pg_roles": "dbwarden-pgsql-rbac",
+    "pg_default_privileges": "dbwarden-pgsql-rbac",
+    "pg_domains": "dbwarden-pgsql-types",
+    "pg_sequences": "dbwarden-pgsql-types",
+    "pg_composite_types": "dbwarden-pgsql-types",
+    "pg_extensions": "dbwarden-pgsql-extensions",
+    "pg_functions": "dbwarden-pgsql-extensions",
+    "pg_triggers": "dbwarden-pgsql-extensions",
+    "pg_event_triggers": "dbwarden-pgsql-extensions",
+    "pg_extended_statistics": "dbwarden-pgsql-extensions",
+    "ch_named_collections": "dbwarden-ch-rbac",
+    "ch_roles": "dbwarden-ch-rbac",
+    "ch_users": "dbwarden-ch-rbac",
+    "ch_row_policies": "dbwarden-ch-rbac",
+    "ch_quotas": "dbwarden-ch-rbac",
+    "ch_settings_profiles": "dbwarden-ch-rbac",
+    "ch_grants": "dbwarden-ch-rbac",
+}
+
+
+class ConfigKeyRegistry:
+    """Config keys contributed by plugins.
+
+    A plugin registers the ``database_config(...)`` keyword arguments it consumes.
+    Core validates against this registry, so an unknown key raises instead of
+    being silently dropped, and a known key whose plugin is missing raises with
+    an install hint.
+    """
+
+    _keys: dict[str, str] = {}
+
+    @classmethod
+    def register(cls, key: str, *, plugin: str) -> None:
+        existing = cls._keys.get(key)
+        if existing is not None and existing != plugin:
+            raise ValueError(
+                f"Config key '{key}' registered by multiple plugins: {existing!r} and {plugin!r}"
+            )
+        cls._keys[key] = plugin
+
+    @classmethod
+    def is_registered(cls, key: str) -> bool:
+        return key in cls._keys
+
+    @classmethod
+    def owner(cls, key: str) -> str | None:
+        return cls._keys.get(key)
+
+    @classmethod
+    def keys(cls) -> tuple[str, ...]:
+        return tuple(sorted(cls._keys))
+
+    @classmethod
+    def reset(cls) -> None:
+        cls._keys = {}
+
+
 class HookRegistry:
     _hooks: dict[str, list[tuple[str, Callable[..., Any]]]] = {}
 
@@ -260,6 +322,11 @@ class PluginRegistrar:
 
     def register_object_handler(self, handler: Any) -> None:
         ObjectPluginRegistry.register(handler, plugin=self._plugin_name)
+
+    def register_config_key(self, *keys: str) -> None:
+        """Declare ``database_config(...)`` keyword arguments this plugin consumes."""
+        for key in keys:
+            ConfigKeyRegistry.register(key, plugin=self._plugin_name)
 
 
 def _dist_name(ep: EntryPoint) -> str:
@@ -849,6 +916,8 @@ def _load_plugin_entry_point(ep: EntryPoint, dist_name: str) -> None:
 # is a promise; removing one is a breaking change.
 __all__ = [
     "HOOK_CALL_SPECS",
+    "ConfigKeyRegistry",
+    "PLUGIN_CONFIG_KEY_OWNERS",
     "HookConflictError",
     "HookNotRegisteredError",
     "HookRegistry",

@@ -1,81 +1,3 @@
----
-seo:
-  title: 9. FastAPI Integration - DBWarden Documentation
-  canonical: https://dbwarden.emiliano-go.com/cookbook/09-fastapi-integration
-  robots: index,follow
-  og:
-    type: website
-    title: 9. FastAPI Integration - DBWarden Documentation
-    description: What You'll Learn
-    url: https://dbwarden.emiliano-go.com/cookbook/09-fastapi-integration
-    image: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-    image:width: 1376
-    image:height: 768
-    image:alt: DBWarden documentation
-    site_name: DBWarden Documentation
-    locale: en_US
-  twitter:
-    card: summary_large_image
-    title: 9. FastAPI Integration - DBWarden Documentation
-    description: What You'll Learn
-    image: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-    image:alt: DBWarden documentation
-    site: '@emiliano_go_'
-  description: What You'll Learn
-  schema_jsonld:
-  - '@context': https://schema.org
-    '@type': WebPage
-    name: 9. FastAPI Integration - DBWarden Documentation
-    url: https://dbwarden.emiliano-go.com/cookbook/09-fastapi-integration
-    description: What You'll Learn
-    image: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-    publisher:
-      '@type': Organization
-      name: Emiliano Gandini Outeda
-      logo: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-  - '@context': https://schema.org
-    '@type': BreadcrumbList
-    itemListElement:
-    - '@type': ListItem
-      position: 1
-      name: Cookbook & Examples
-      item: https://dbwarden.emiliano-go.com/cookbook
-    - '@type': ListItem
-      position: 2
-      name: 09 Fastapi Integration
-      item: https://dbwarden.emiliano-go.com/cookbook/09-fastapi-integration
-seo_html: "<title>9. FastAPI Integration - DBWarden Documentation</title>\n<meta name=\"\
-  description\" content=\"What You&#x27;ll Learn\">\n<link rel=\"canonical\" href=\"\
-  https://dbwarden.emiliano-go.com/cookbook/09-fastapi-integration\">\n<meta name=\"\
-  robots\" content=\"index,follow\">\n<meta property=\"og:type\" content=\"website\"\
-  >\n<meta property=\"og:title\" content=\"9. FastAPI Integration - DBWarden Documentation\"\
-  >\n<meta property=\"og:description\" content=\"What You&#x27;ll Learn\">\n<meta\
-  \ property=\"og:url\" content=\"https://dbwarden.emiliano-go.com/cookbook/09-fastapi-integration\"\
-  >\n<meta property=\"og:image\" content=\"https://dbwarden.emiliano-go.com/assets/images/og-image.png\"\
-  >\n<meta property=\"og:image:width\" content=\"1376\">\n<meta property=\"og:image:height\"\
-  \ content=\"768\">\n<meta property=\"og:image:alt\" content=\"DBWarden documentation\"\
-  >\n<meta property=\"og:site_name\" content=\"DBWarden Documentation\">\n<meta property=\"\
-  og:locale\" content=\"en_US\">\n<meta name=\"twitter:card\" content=\"summary_large_image\"\
-  >\n<meta name=\"twitter:title\" content=\"9. FastAPI Integration - DBWarden Documentation\"\
-  >\n<meta name=\"twitter:description\" content=\"What You&#x27;ll Learn\">\n<meta\
-  \ name=\"twitter:image\" content=\"https://dbwarden.emiliano-go.com/assets/images/og-image.png\"\
-  >\n<meta name=\"twitter:image:alt\" content=\"DBWarden documentation\">\n<meta name=\"\
-  twitter:site\" content=\"@emiliano_go_\">\n<script type=\"application/ld+json\"\
-  >\n[\n  {\n    \"@context\": \"https://schema.org\",\n    \"@type\": \"WebPage\"\
-  ,\n    \"name\": \"9. FastAPI Integration - DBWarden Documentation\",\n    \"url\"\
-  : \"https://dbwarden.emiliano-go.com/cookbook/09-fastapi-integration\",\n    \"\
-  description\": \"What You'll Learn\",\n    \"image\": \"https://dbwarden.emiliano-go.com/assets/images/og-image.png\"\
-  ,\n    \"publisher\": {\n      \"@type\": \"Organization\",\n      \"name\": \"\
-  Emiliano Gandini Outeda\",\n      \"logo\": \"https://dbwarden.emiliano-go.com/assets/images/og-image.png\"\
-  \n    }\n  },\n  {\n    \"@context\": \"https://schema.org\",\n    \"@type\": \"\
-  BreadcrumbList\",\n    \"itemListElement\": [\n      {\n        \"@type\": \"ListItem\"\
-  ,\n        \"position\": 1,\n        \"name\": \"Cookbook & Examples\",\n      \
-  \  \"item\": \"https://dbwarden.emiliano-go.com/cookbook\"\n      },\n      {\n\
-  \        \"@type\": \"ListItem\",\n        \"position\": 2,\n        \"name\": \"\
-  09 Fastapi Integration\",\n        \"item\": \"https://dbwarden.emiliano-go.com/cookbook/09-fastapi-integration\"\
-  \n      }\n    ]\n  }\n]\n</script>\n"
----
-
 # 9. FastAPI Integration
 
 ## What You'll Learn
@@ -112,7 +34,7 @@ The `primary` object is a `DatabaseHandle`. It exposes `primary.async_session` a
 ```python
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from dbwarden.extensions.fastapi import dbwarden_lifespan
+from dbwarden_fastapi import dbwarden_lifespan
 
 
 @asynccontextmanager
@@ -165,7 +87,7 @@ The session is automatically:
 ## Step 4: Health Endpoints
 
 ```python
-from dbwarden.extensions.fastapi import DBWardenHealthRouter
+from dbwarden_fastapi import DBWardenHealthRouter
 
 app.include_router(DBWardenHealthRouter(), prefix="/health")
 ```
@@ -199,7 +121,7 @@ Sample response:
 ## Step 5: Migration Endpoints
 
 ```python
-from dbwarden.extensions.fastapi import DBWardenRouter
+from dbwarden_fastapi import DBWardenRouter
 
 app.include_router(DBWardenRouter(), prefix="/db")
 ```
@@ -216,7 +138,7 @@ These endpoints are useful for management UIs or automated deployment tooling.
 ```python
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from dbwarden.extensions.fastapi import (
+from dbwarden_fastapi import (
     DBWardenHealthRouter,
     DBWardenRouter,
     dbwarden_lifespan,
@@ -284,11 +206,9 @@ curl http://localhost:8000/db/status
 
 ## Related Documentation
 
-- [FastAPI Integration Overview](../fastapi/index.md)
-- [FastAPI Tutorial: First Steps](../fastapi/tutorial/first-steps.md)
-- [FastAPI Tutorial: Complete Application](../fastapi/tutorial/complete-application.md)
-- [Session Dependency](../fastapi/tutorial/session-dependency.md)
-- [Health Endpoints](../fastapi/tutorial/health-endpoints.md)
+FastAPI support is not part of core. It ships as the `dbwarden-fastapi` plugin, which owns the session dependencies, health endpoints, migration routes, and metrics middleware shown above. Install it with `dbwarden plugin add dbwarden-fastapi`.
+
+Full reference and tutorials live in the plugin's repository: [dbwarden-fastapi](https://github.com/dbwarden-org/dbwarden-fastapi).
 
 ## Next
 

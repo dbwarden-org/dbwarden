@@ -1,86 +1,3 @@
----
-seo:
-  title: SQLAlchemy Models Reference - DBWarden Documentation
-  canonical: https://dbwarden.emiliano-go.com/models
-  robots: index,follow
-  og:
-    type: website
-    title: SQLAlchemy Models Reference - DBWarden Documentation
-    description: This page is the reference for all supported Meta attributes across
-      every backend. For a step-by-step walkthrough of defining models, see the Modeling...
-    url: https://dbwarden.emiliano-go.com/models
-    image: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-    image:width: 1376
-    image:height: 768
-    image:alt: DBWarden documentation
-    site_name: DBWarden Documentation
-    locale: en_US
-  twitter:
-    card: summary_large_image
-    title: SQLAlchemy Models Reference - DBWarden Documentation
-    description: This page is the reference for all supported Meta attributes across
-      every backend. For a step-by-step walkthrough of defining models, see the Modeling...
-    image: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-    image:alt: DBWarden documentation
-    site: '@emiliano_go_'
-  description: This page is the reference for all supported Meta attributes across
-    every backend. For a step-by-step walkthrough of defining models, see the Modeling...
-  schema_jsonld:
-  - '@context': https://schema.org
-    '@type': WebPage
-    name: SQLAlchemy Models Reference - DBWarden Documentation
-    url: https://dbwarden.emiliano-go.com/models
-    description: This page is the reference for all supported Meta attributes across
-      every backend. For a step-by-step walkthrough of defining models, see the Modeling...
-    image: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-    publisher:
-      '@type': Organization
-      name: Emiliano Gandini Outeda
-      logo: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-  - '@context': https://schema.org
-    '@type': BreadcrumbList
-    itemListElement:
-    - '@type': ListItem
-      position: 1
-      name: SQLAlchemy Models Reference
-      item: https://dbwarden.emiliano-go.com/models
-seo_html: "<title>SQLAlchemy Models Reference - DBWarden Documentation</title>\n<meta\
-  \ name=\"description\" content=\"This page is the reference for all supported Meta\
-  \ attributes across every backend. For a step-by-step walkthrough of defining models,\
-  \ see the Modeling...\">\n<link rel=\"canonical\" href=\"https://dbwarden.emiliano-go.com/models\"\
-  >\n<meta name=\"robots\" content=\"index,follow\">\n<meta property=\"og:type\" content=\"\
-  website\">\n<meta property=\"og:title\" content=\"SQLAlchemy Models Reference -\
-  \ DBWarden Documentation\">\n<meta property=\"og:description\" content=\"This page\
-  \ is the reference for all supported Meta attributes across every backend. For a\
-  \ step-by-step walkthrough of defining models, see the Modeling...\">\n<meta property=\"\
-  og:url\" content=\"https://dbwarden.emiliano-go.com/models\">\n<meta property=\"\
-  og:image\" content=\"https://dbwarden.emiliano-go.com/assets/images/og-image.png\"\
-  >\n<meta property=\"og:image:width\" content=\"1376\">\n<meta property=\"og:image:height\"\
-  \ content=\"768\">\n<meta property=\"og:image:alt\" content=\"DBWarden documentation\"\
-  >\n<meta property=\"og:site_name\" content=\"DBWarden Documentation\">\n<meta property=\"\
-  og:locale\" content=\"en_US\">\n<meta name=\"twitter:card\" content=\"summary_large_image\"\
-  >\n<meta name=\"twitter:title\" content=\"SQLAlchemy Models Reference - DBWarden\
-  \ Documentation\">\n<meta name=\"twitter:description\" content=\"This page is the\
-  \ reference for all supported Meta attributes across every backend. For a step-by-step\
-  \ walkthrough of defining models, see the Modeling...\">\n<meta name=\"twitter:image\"\
-  \ content=\"https://dbwarden.emiliano-go.com/assets/images/og-image.png\">\n<meta\
-  \ name=\"twitter:image:alt\" content=\"DBWarden documentation\">\n<meta name=\"\
-  twitter:site\" content=\"@emiliano_go_\">\n<script type=\"application/ld+json\"\
-  >\n[\n  {\n    \"@context\": \"https://schema.org\",\n    \"@type\": \"WebPage\"\
-  ,\n    \"name\": \"SQLAlchemy Models Reference - DBWarden Documentation\",\n   \
-  \ \"url\": \"https://dbwarden.emiliano-go.com/models\",\n    \"description\": \"\
-  This page is the reference for all supported Meta attributes across every backend.\
-  \ For a step-by-step walkthrough of defining models, see the Modeling...\",\n  \
-  \  \"image\": \"https://dbwarden.emiliano-go.com/assets/images/og-image.png\",\n\
-  \    \"publisher\": {\n      \"@type\": \"Organization\",\n      \"name\": \"Emiliano\
-  \ Gandini Outeda\",\n      \"logo\": \"https://dbwarden.emiliano-go.com/assets/images/og-image.png\"\
-  \n    }\n  },\n  {\n    \"@context\": \"https://schema.org\",\n    \"@type\": \"\
-  BreadcrumbList\",\n    \"itemListElement\": [\n      {\n        \"@type\": \"ListItem\"\
-  ,\n        \"position\": 1,\n        \"name\": \"SQLAlchemy Models Reference\",\n\
-  \        \"item\": \"https://dbwarden.emiliano-go.com/models\"\n      }\n    ]\n\
-  \  }\n]\n</script>\n"
----
-
 # SQLAlchemy Models Reference
 
 This page is the **reference** for all supported Meta attributes across every backend. For a step-by-step walkthrough of defining models, see the [Modeling Guide](getting-started/modeling.md).
@@ -180,11 +97,10 @@ Plain dicts using the same field names (`name`, `columns`, `expression`, `sql`) 
 
 ### Column-Level Meta Base Class
 
-For IDE autocomplete on column-level inner classes, use `PGColumnMeta` for PostgreSQL, `MyColumnMeta` for MySQL, `MdbColumnMeta` for MariaDB, or `CHColumnMeta` for ClickHouse. All inherit from `FieldMeta`, which defines cross-database attributes (`comment`, `public`) and backend-specific spec objects (`pg`, `ch`, `my`, `mdb`, `sq`):
+For IDE autocomplete on column-level inner classes, use `PGColumnMeta` for PostgreSQL, `MyColumnMeta` for MySQL, `MdbColumnMeta` for MariaDB, or `CHColumnMeta` for ClickHouse. Each defines the cross-database attributes (`comment`, `public`) alongside its backend-specific spec object (`pg`, `ch`, `my`, `mdb`, `sq`). There is no shared `FieldMeta` base: the `*FieldMeta` classes were removed and their fields inlined into each backend's column Meta.
 
 ```python
-from dbwarden.databases import FieldMeta
-from dbwarden.databases.pgsql import pg
+from dbwarden.databases.pgsql import PGColumnMeta, pg
 
 # Use typed spec objects for backend-specific column attributes:
 #   pg = pg.field(collation=..., storage=..., ...)

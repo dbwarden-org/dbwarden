@@ -1,94 +1,3 @@
----
-seo:
-  title: Projections & indexes - DBWarden Documentation
-  canonical: https://dbwarden.emiliano-go.com/databases/clickhouse/projections-indexes
-  robots: index,follow
-  og:
-    type: website
-    title: Projections & indexes - DBWarden Documentation
-    description: Both projections and secondary indexes are acceleration structures,
-      declared inside chtable.
-    url: https://dbwarden.emiliano-go.com/databases/clickhouse/projections-indexes
-    image: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-    image:width: 1376
-    image:height: 768
-    image:alt: DBWarden documentation
-    site_name: DBWarden Documentation
-    locale: en_US
-  twitter:
-    card: summary_large_image
-    title: Projections & indexes - DBWarden Documentation
-    description: Both projections and secondary indexes are acceleration structures,
-      declared inside chtable.
-    image: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-    image:alt: DBWarden documentation
-    site: '@emiliano_go_'
-  description: Both projections and secondary indexes are acceleration structures,
-    declared inside chtable.
-  schema_jsonld:
-  - '@context': https://schema.org
-    '@type': WebPage
-    name: Projections & indexes - DBWarden Documentation
-    url: https://dbwarden.emiliano-go.com/databases/clickhouse/projections-indexes
-    description: Both projections and secondary indexes are acceleration structures,
-      declared inside chtable.
-    image: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-    publisher:
-      '@type': Organization
-      name: Emiliano Gandini Outeda
-      logo: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-  - '@context': https://schema.org
-    '@type': BreadcrumbList
-    itemListElement:
-    - '@type': ListItem
-      position: 1
-      name: Databases
-      item: https://dbwarden.emiliano-go.com/databases
-    - '@type': ListItem
-      position: 2
-      name: ClickHouse
-      item: https://dbwarden.emiliano-go.com/databases/clickhouse
-    - '@type': ListItem
-      position: 3
-      name: Projections Indexes
-      item: https://dbwarden.emiliano-go.com/databases/clickhouse/projections-indexes
-seo_html: "<title>Projections &amp; indexes - DBWarden Documentation</title>\n<meta\
-  \ name=\"description\" content=\"Both projections and secondary indexes are acceleration\
-  \ structures, declared inside chtable.\">\n<link rel=\"canonical\" href=\"https://dbwarden.emiliano-go.com/databases/clickhouse/projections-indexes\"\
-  >\n<meta name=\"robots\" content=\"index,follow\">\n<meta property=\"og:type\" content=\"\
-  website\">\n<meta property=\"og:title\" content=\"Projections &amp; indexes - DBWarden\
-  \ Documentation\">\n<meta property=\"og:description\" content=\"Both projections\
-  \ and secondary indexes are acceleration structures, declared inside chtable.\"\
-  >\n<meta property=\"og:url\" content=\"https://dbwarden.emiliano-go.com/databases/clickhouse/projections-indexes\"\
-  >\n<meta property=\"og:image\" content=\"https://dbwarden.emiliano-go.com/assets/images/og-image.png\"\
-  >\n<meta property=\"og:image:width\" content=\"1376\">\n<meta property=\"og:image:height\"\
-  \ content=\"768\">\n<meta property=\"og:image:alt\" content=\"DBWarden documentation\"\
-  >\n<meta property=\"og:site_name\" content=\"DBWarden Documentation\">\n<meta property=\"\
-  og:locale\" content=\"en_US\">\n<meta name=\"twitter:card\" content=\"summary_large_image\"\
-  >\n<meta name=\"twitter:title\" content=\"Projections &amp; indexes - DBWarden Documentation\"\
-  >\n<meta name=\"twitter:description\" content=\"Both projections and secondary indexes\
-  \ are acceleration structures, declared inside chtable.\">\n<meta name=\"twitter:image\"\
-  \ content=\"https://dbwarden.emiliano-go.com/assets/images/og-image.png\">\n<meta\
-  \ name=\"twitter:image:alt\" content=\"DBWarden documentation\">\n<meta name=\"\
-  twitter:site\" content=\"@emiliano_go_\">\n<script type=\"application/ld+json\"\
-  >\n[\n  {\n    \"@context\": \"https://schema.org\",\n    \"@type\": \"WebPage\"\
-  ,\n    \"name\": \"Projections & indexes - DBWarden Documentation\",\n    \"url\"\
-  : \"https://dbwarden.emiliano-go.com/databases/clickhouse/projections-indexes\"\
-  ,\n    \"description\": \"Both projections and secondary indexes are acceleration\
-  \ structures, declared inside chtable.\",\n    \"image\": \"https://dbwarden.emiliano-go.com/assets/images/og-image.png\"\
-  ,\n    \"publisher\": {\n      \"@type\": \"Organization\",\n      \"name\": \"\
-  Emiliano Gandini Outeda\",\n      \"logo\": \"https://dbwarden.emiliano-go.com/assets/images/og-image.png\"\
-  \n    }\n  },\n  {\n    \"@context\": \"https://schema.org\",\n    \"@type\": \"\
-  BreadcrumbList\",\n    \"itemListElement\": [\n      {\n        \"@type\": \"ListItem\"\
-  ,\n        \"position\": 1,\n        \"name\": \"Databases\",\n        \"item\"\
-  : \"https://dbwarden.emiliano-go.com/databases\"\n      },\n      {\n        \"\
-  @type\": \"ListItem\",\n        \"position\": 2,\n        \"name\": \"ClickHouse\"\
-  ,\n        \"item\": \"https://dbwarden.emiliano-go.com/databases/clickhouse\"\n\
-  \      },\n      {\n        \"@type\": \"ListItem\",\n        \"position\": 3,\n\
-  \        \"name\": \"Projections Indexes\",\n        \"item\": \"https://dbwarden.emiliano-go.com/databases/clickhouse/projections-indexes\"\
-  \n      }\n    ]\n  }\n]\n</script>\n"
----
-
 # Projections & indexes
 
 Both projections and secondary indexes are acceleration structures, declared inside `ch_table()`.
@@ -96,18 +5,16 @@ Both projections and secondary indexes are acceleration structures, declared ins
 ## Projections
 
 ```python
-from dbwarden.databases.clickhouse import ch_projection
+from dbwarden.databases.clickhouse import projection
 
 class Meta(CHTableMeta):
     ch = ch_table(
         engine=merge_tree(),
         order_by=["event_date", "id"],
         projections=[
-            ch_projection(
+            projection(
                 name="daily_agg",
-                select=["event_date", "count()", "sum(amount)"],
-                group_by=["event_date"],
-                order_by=["event_date"],
+                query="SELECT event_date, count(), sum(amount) GROUP BY event_date",
             ),
         ],
     )
@@ -142,16 +49,16 @@ ORDER BY (event_date, id)
 ## Skip indexes
 
 ```python
-from dbwarden.databases.clickhouse import ch_index
+from dbwarden.databases.clickhouse import skip_index
 
 class Meta(CHTableMeta):
     ch = ch_table(
         engine=merge_tree(),
         order_by=["event_date", "id"],
         indexes=[
-            ch_index(
+            skip_index(
                 name="payload_idx",
-                expression="payload",
+                columns=["payload"],
                 type="tokenbf_v1(1024, 3, 0)",
                 granularity=1,
             ),

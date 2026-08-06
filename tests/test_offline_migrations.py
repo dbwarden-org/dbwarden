@@ -616,6 +616,7 @@ def test_offline_check_constraint_no_repeat_diff():
 
 # ── Full integration: make_migrations_cmd(offline=True) ──────────
 
+import pytest
 import json
 import os
 import tempfile
@@ -2278,27 +2279,62 @@ def test_offline_pg_reserved_word_quoting(monkeypatch):
 
 
 def test_offline_pg_extension_sql():
-    """Extensions appear in migration SQL when configured."""
-    from dbwarden.engine.model_discovery import generate_create_table_sql
+    """A plugin-owned config key round-trips once its plugin has registered it."""
     from dbwarden.config import get_database, set_dev_mode
+    from dbwarden.plugin import ConfigKeyRegistry
 
     set_dev_mode(False)
-    with tempfile.TemporaryDirectory() as tmpdir:
-        old_cwd = os.getcwd()
-        try:
-            os.chdir(tmpdir)
-            Path("dbwarden.py").write_text(
-                "from dbwarden import database_config\n\n"
-                "database_config(database_name='primary', default=True, "
-                "database_type='postgresql', database_url_sync='postgresql:///', "
-                "model_paths=['models'], pg_extensions=['citext', 'pgcrypto'])\n",
-                encoding="utf-8",
-            )
-            config = get_database("primary")
-            assert config.pg_extensions == ["citext", "pgcrypto"]
-        finally:
-            os.chdir(old_cwd)
+    # Stand in for dbwarden-pgsql-extensions being installed.
+    ConfigKeyRegistry.register("pg_extensions", plugin="dbwarden-pgsql-extensions")
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(tmpdir)
+                Path("dbwarden.py").write_text(
+                    "from dbwarden import database_config\n\n"
+                    "database_config(database_name='primary', default=True, "
+                    "database_type='postgresql', database_url_sync='postgresql:///', "
+                    "model_paths=['models'], pg_extensions=['citext', 'pgcrypto'])\n",
+                    encoding="utf-8",
+                )
+                config = get_database("primary")
+                assert config.pg_extensions == ["citext", "pgcrypto"]
+            finally:
+                os.chdir(old_cwd)
+    finally:
+        ConfigKeyRegistry.reset()
     set_dev_mode(False)
+
+
+def test_plugin_config_key_without_plugin_raises():
+    """A plugin-owned key declared without its plugin fails loudly, not silently."""
+    from dbwarden.config_registry import database_config
+    from dbwarden.exceptions import DBWardenConfigError
+    from dbwarden.plugin import ConfigKeyRegistry
+
+    ConfigKeyRegistry.reset()
+    with pytest.raises(DBWardenConfigError, match="dbwarden-pgsql-rbac"):
+        database_config(
+            database_name="primary",
+            database_type="postgresql",
+            database_url_sync="postgresql:///",
+            pg_roles=[{"name": "analyst"}],
+        )
+
+
+def test_unknown_config_key_raises():
+    """A key no plugin owns is a typo and must not be silently accepted."""
+    from dbwarden.config_registry import database_config
+    from dbwarden.exceptions import DBWardenConfigError
+
+    with pytest.raises(DBWardenConfigError, match="unexpected keyword argument"):
+        database_config(
+            database_name="primary",
+            database_type="postgresql",
+            database_url_sync="postgresql:///",
+            pg_rolez=[{"name": "typo"}],
+        )
 
 
 def test_offline_diff_rename_column():

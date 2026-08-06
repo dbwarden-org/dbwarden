@@ -132,6 +132,37 @@ def setup(registrar) -> None:
     registrar.register_object_handler(PgExtensionHandler())
 ```
 
+### 8. Declare your config keys
+
+If your handler is driven by `database_config(...)` keys, register them too. A plugin owns its config keys, not just its handlers.
+
+```python
+CONFIG_KEYS = ("pg_extensions",)
+
+
+def setup(registrar) -> None:
+    from dbwarden_example.handler import PgExtensionHandler
+
+    registrar.register_object_handler(PgExtensionHandler())
+    registrar.register_config_key(*CONFIG_KEYS)
+```
+
+Core validates every keyword argument passed to `database_config(...)` against the registered keys. A key no plugin owns is rejected as an unknown argument, and a key belonging to a plugin that is not installed raises `DBWardenConfigError` naming the plugin to install. Both fire when `dbwarden.py` loads, so a missing plugin surfaces immediately rather than as a migration that silently produces nothing.
+
+Read the config values off the `config` object your handler already receives, using the key name directly:
+
+```python
+extensions = getattr(config, "pg_extensions", []) or []
+```
+
+To stay loadable against cores that predate the config-key registry, guard the call:
+
+```python
+    register_config_key = getattr(registrar, "register_config_key", None)
+    if register_config_key is not None:
+        register_config_key(*CONFIG_KEYS)
+```
+
 ## Ordering And The DAG
 
 DBWarden orders all object handlers into a single directed acyclic graph, then emits their statements in that order.

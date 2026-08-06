@@ -22,7 +22,7 @@ Define the hook function at module top level and register it in `setup()`:
 ```python
 # src/dbwarden_example/__init__.py
 def session_factory(database: str | None = None, *, dev: bool = False):
-    from dbwarden.extensions.fastapi.engines import _async_session_factory  # deferred
+    from dbwarden_fastapi.engines import _async_session_factory  # deferred
 
     async def _dependency():
         async with _async_session_factory(database, dev=dev)() as session:
@@ -52,7 +52,7 @@ def setup(registrar) -> None:
     registrar.register("migration_routes", migration_routes) # multi hook
 ```
 
-Each registered function imports what it needs from DBWarden (and FastAPI) **inside its body**, so importing the package registers the hooks without pulling in FastAPI. Core then resolves them where needed: `dbwarden.extensions.fastapi.get_session("primary")` calls the registered `session_factory`; if no plugin registered it, core uses its built-in fallback.
+Each registered function imports what it needs from DBWarden (and FastAPI) **inside its body**, so importing the package registers the hooks without pulling in FastAPI. Core then resolves them where needed: `dbwarden_fastapi.get_session("primary")` calls the registered `session_factory`; if no plugin registered it, core uses its built-in fallback.
 
 ## The Import-Deferred Pattern
 

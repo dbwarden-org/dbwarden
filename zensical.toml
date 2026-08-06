@@ -68,6 +68,7 @@ Overview = [
   {"Your First Migration" = "getting-started/first-migration.md"},
   {"Developing Locally" = "getting-started/developing-locally.md"},
   {Workflows = "getting-started/workflows.md"},
+  {"Migrating from Alembic" = "getting-started/migrating-from-alembic.md"},
 ]
 
 [[project.nav]]
@@ -141,7 +142,7 @@ Plugins = [
     {Overview = "plugins/developing/overview.md"},
     {"Value Plugins" = "plugins/developing/value-plugins.md"},
     {"Object Plugins" = "plugins/developing/object-plugins.md"},
-    {"Approved Standard" = "plugins/developing/approved-standard.md"},
+    {"Verified Standard" = "plugins/developing/verified-standard.md"},
     {Publishing = "plugins/developing/publishing.md"},
   ]},
   {Reference = [
@@ -199,7 +200,7 @@ Reference = [
   default_og_image = "https://dbwarden.emiliano-go.com/assets/images/og-image.png",
   publisher_name = "Emiliano Gandini Outeda",
   locale = "en_US",
-  twitter_site = "@emiliano_gando",
+  twitter_site = "@emiliano_go_",
   auto_generate_schema = true,
 }
 

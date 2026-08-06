@@ -1,87 +1,3 @@
----
-seo:
-  title: Views - DBWarden Documentation
-  canonical: https://dbwarden.emiliano-go.com/databases/postgresql/views
-  robots: index,follow
-  og:
-    type: website
-    title: Views - DBWarden Documentation
-    description: 'Handler: ViewHandler DIFF phase'
-    url: https://dbwarden.emiliano-go.com/databases/postgresql/views
-    image: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-    image:width: 1376
-    image:height: 768
-    image:alt: DBWarden documentation
-    site_name: DBWarden Documentation
-    locale: en_US
-  twitter:
-    card: summary_large_image
-    title: Views - DBWarden Documentation
-    description: 'Handler: ViewHandler DIFF phase'
-    image: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-    image:alt: DBWarden documentation
-    site: '@emiliano_go_'
-  description: 'Handler: ViewHandler DIFF phase'
-  schema_jsonld:
-  - '@context': https://schema.org
-    '@type': WebPage
-    name: Views - DBWarden Documentation
-    url: https://dbwarden.emiliano-go.com/databases/postgresql/views
-    description: 'Handler: ViewHandler DIFF phase'
-    image: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-    publisher:
-      '@type': Organization
-      name: Emiliano Gandini Outeda
-      logo: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-  - '@context': https://schema.org
-    '@type': BreadcrumbList
-    itemListElement:
-    - '@type': ListItem
-      position: 1
-      name: Databases
-      item: https://dbwarden.emiliano-go.com/databases
-    - '@type': ListItem
-      position: 2
-      name: PostgreSQL
-      item: https://dbwarden.emiliano-go.com/databases/postgresql
-    - '@type': ListItem
-      position: 3
-      name: Views
-      item: https://dbwarden.emiliano-go.com/databases/postgresql/views
-seo_html: "<title>Views - DBWarden Documentation</title>\n<meta name=\"description\"\
-  \ content=\"Handler: ViewHandler DIFF phase\">\n<link rel=\"canonical\" href=\"\
-  https://dbwarden.emiliano-go.com/databases/postgresql/views\">\n<meta name=\"robots\"\
-  \ content=\"index,follow\">\n<meta property=\"og:type\" content=\"website\">\n<meta\
-  \ property=\"og:title\" content=\"Views - DBWarden Documentation\">\n<meta property=\"\
-  og:description\" content=\"Handler: ViewHandler DIFF phase\">\n<meta property=\"\
-  og:url\" content=\"https://dbwarden.emiliano-go.com/databases/postgresql/views\"\
-  >\n<meta property=\"og:image\" content=\"https://dbwarden.emiliano-go.com/assets/images/og-image.png\"\
-  >\n<meta property=\"og:image:width\" content=\"1376\">\n<meta property=\"og:image:height\"\
-  \ content=\"768\">\n<meta property=\"og:image:alt\" content=\"DBWarden documentation\"\
-  >\n<meta property=\"og:site_name\" content=\"DBWarden Documentation\">\n<meta property=\"\
-  og:locale\" content=\"en_US\">\n<meta name=\"twitter:card\" content=\"summary_large_image\"\
-  >\n<meta name=\"twitter:title\" content=\"Views - DBWarden Documentation\">\n<meta\
-  \ name=\"twitter:description\" content=\"Handler: ViewHandler DIFF phase\">\n<meta\
-  \ name=\"twitter:image\" content=\"https://dbwarden.emiliano-go.com/assets/images/og-image.png\"\
-  >\n<meta name=\"twitter:image:alt\" content=\"DBWarden documentation\">\n<meta name=\"\
-  twitter:site\" content=\"@emiliano_go_\">\n<script type=\"application/ld+json\"\
-  >\n[\n  {\n    \"@context\": \"https://schema.org\",\n    \"@type\": \"WebPage\"\
-  ,\n    \"name\": \"Views - DBWarden Documentation\",\n    \"url\": \"https://dbwarden.emiliano-go.com/databases/postgresql/views\"\
-  ,\n    \"description\": \"Handler: ViewHandler DIFF phase\",\n    \"image\": \"\
-  https://dbwarden.emiliano-go.com/assets/images/og-image.png\",\n    \"publisher\"\
-  : {\n      \"@type\": \"Organization\",\n      \"name\": \"Emiliano Gandini Outeda\"\
-  ,\n      \"logo\": \"https://dbwarden.emiliano-go.com/assets/images/og-image.png\"\
-  \n    }\n  },\n  {\n    \"@context\": \"https://schema.org\",\n    \"@type\": \"\
-  BreadcrumbList\",\n    \"itemListElement\": [\n      {\n        \"@type\": \"ListItem\"\
-  ,\n        \"position\": 1,\n        \"name\": \"Databases\",\n        \"item\"\
-  : \"https://dbwarden.emiliano-go.com/databases\"\n      },\n      {\n        \"\
-  @type\": \"ListItem\",\n        \"position\": 2,\n        \"name\": \"PostgreSQL\"\
-  ,\n        \"item\": \"https://dbwarden.emiliano-go.com/databases/postgresql\"\n\
-  \      },\n      {\n        \"@type\": \"ListItem\",\n        \"position\": 3,\n\
-  \        \"name\": \"Views\",\n        \"item\": \"https://dbwarden.emiliano-go.com/databases/postgresql/views\"\
-  \n      }\n    ]\n  }\n]\n</script>\n"
----
-
 # Views
 
 **Handler**: `ViewHandler` (DIFF phase)
@@ -268,7 +184,7 @@ Indexes on materialized views are created via `pg_indexes` on `PGTableMeta` (not
 
 ## INSTEAD OF Triggers
 
-For complex views that need to support INSERT/UPDATE/DELETE, use `INSTEAD OF` triggers:
+For complex views that need to support INSERT/UPDATE/DELETE, use `INSTEAD OF` triggers. `pg_triggers` requires the `dbwarden-pgsql-extensions` plugin (`dbwarden plugin add dbwarden-pgsql-extensions`).
 
 ```python
 pg_triggers=[{

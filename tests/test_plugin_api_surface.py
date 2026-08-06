@@ -35,6 +35,8 @@ PLUGIN_NAMES: dict[str, str | None] = {
     "HookRegistry": None,
     "ObjectPluginRegistry": None,
     "ObjectHandlerRegistration": None,
+    "ConfigKeyRegistry": None,
+    "PLUGIN_CONFIG_KEY_OWNERS": None,
     # Errors a plugin can be expected to see or catch.
     "HookNotRegisteredError": None,
     "HookConflictError": None,
@@ -52,6 +54,7 @@ PLUGIN_NAMES: dict[str, str | None] = {
 REGISTRAR_METHODS: dict[str, str] = {
     "register": "(self, hook_name: str, fn: Callable[..., Any]) -> None",
     "register_object_handler": "(self, handler: Any) -> None",
+    "register_config_key": "(self, *keys: str) -> None",
 }
 
 HOOK_REGISTRY_METHODS: dict[str, str] = {

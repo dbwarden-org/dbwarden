@@ -1,83 +1,3 @@
----
-seo:
-  title: Configuration API Reference - DBWarden Documentation
-  canonical: https://dbwarden.emiliano-go.com/reference/configuration-api
-  robots: index,follow
-  og:
-    type: website
-    title: Configuration API Reference - DBWarden Documentation
-    description: Complete reference for the databaseconfig function.
-    url: https://dbwarden.emiliano-go.com/reference/configuration-api
-    image: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-    image:width: 1376
-    image:height: 768
-    image:alt: DBWarden documentation
-    site_name: DBWarden Documentation
-    locale: en_US
-  twitter:
-    card: summary_large_image
-    title: Configuration API Reference - DBWarden Documentation
-    description: Complete reference for the databaseconfig function.
-    image: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-    image:alt: DBWarden documentation
-    site: '@emiliano_go_'
-  description: Complete reference for the databaseconfig function.
-  schema_jsonld:
-  - '@context': https://schema.org
-    '@type': WebPage
-    name: Configuration API Reference - DBWarden Documentation
-    url: https://dbwarden.emiliano-go.com/reference/configuration-api
-    description: Complete reference for the databaseconfig function.
-    image: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-    publisher:
-      '@type': Organization
-      name: Emiliano Gandini Outeda
-      logo: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-  - '@context': https://schema.org
-    '@type': BreadcrumbList
-    itemListElement:
-    - '@type': ListItem
-      position: 1
-      name: Reference
-      item: https://dbwarden.emiliano-go.com/reference
-    - '@type': ListItem
-      position: 2
-      name: Configuration API Reference
-      item: https://dbwarden.emiliano-go.com/reference/configuration-api
-seo_html: "<title>Configuration API Reference - DBWarden Documentation</title>\n<meta\
-  \ name=\"description\" content=\"Complete reference for the databaseconfig function.\"\
-  >\n<link rel=\"canonical\" href=\"https://dbwarden.emiliano-go.com/reference/configuration-api\"\
-  >\n<meta name=\"robots\" content=\"index,follow\">\n<meta property=\"og:type\" content=\"\
-  website\">\n<meta property=\"og:title\" content=\"Configuration API Reference -\
-  \ DBWarden Documentation\">\n<meta property=\"og:description\" content=\"Complete\
-  \ reference for the databaseconfig function.\">\n<meta property=\"og:url\" content=\"\
-  https://dbwarden.emiliano-go.com/reference/configuration-api\">\n<meta property=\"\
-  og:image\" content=\"https://dbwarden.emiliano-go.com/assets/images/og-image.png\"\
-  >\n<meta property=\"og:image:width\" content=\"1376\">\n<meta property=\"og:image:height\"\
-  \ content=\"768\">\n<meta property=\"og:image:alt\" content=\"DBWarden documentation\"\
-  >\n<meta property=\"og:site_name\" content=\"DBWarden Documentation\">\n<meta property=\"\
-  og:locale\" content=\"en_US\">\n<meta name=\"twitter:card\" content=\"summary_large_image\"\
-  >\n<meta name=\"twitter:title\" content=\"Configuration API Reference - DBWarden\
-  \ Documentation\">\n<meta name=\"twitter:description\" content=\"Complete reference\
-  \ for the databaseconfig function.\">\n<meta name=\"twitter:image\" content=\"https://dbwarden.emiliano-go.com/assets/images/og-image.png\"\
-  >\n<meta name=\"twitter:image:alt\" content=\"DBWarden documentation\">\n<meta name=\"\
-  twitter:site\" content=\"@emiliano_go_\">\n<script type=\"application/ld+json\"\
-  >\n[\n  {\n    \"@context\": \"https://schema.org\",\n    \"@type\": \"WebPage\"\
-  ,\n    \"name\": \"Configuration API Reference - DBWarden Documentation\",\n   \
-  \ \"url\": \"https://dbwarden.emiliano-go.com/reference/configuration-api\",\n \
-  \   \"description\": \"Complete reference for the databaseconfig function.\",\n\
-  \    \"image\": \"https://dbwarden.emiliano-go.com/assets/images/og-image.png\"\
-  ,\n    \"publisher\": {\n      \"@type\": \"Organization\",\n      \"name\": \"\
-  Emiliano Gandini Outeda\",\n      \"logo\": \"https://dbwarden.emiliano-go.com/assets/images/og-image.png\"\
-  \n    }\n  },\n  {\n    \"@context\": \"https://schema.org\",\n    \"@type\": \"\
-  BreadcrumbList\",\n    \"itemListElement\": [\n      {\n        \"@type\": \"ListItem\"\
-  ,\n        \"position\": 1,\n        \"name\": \"Reference\",\n        \"item\"\
-  : \"https://dbwarden.emiliano-go.com/reference\"\n      },\n      {\n        \"\
-  @type\": \"ListItem\",\n        \"position\": 2,\n        \"name\": \"Configuration\
-  \ API Reference\",\n        \"item\": \"https://dbwarden.emiliano-go.com/reference/configuration-api\"\
-  \n      }\n    ]\n  }\n]\n</script>\n"
----
-
 # Configuration API Reference
 
 Complete reference for the `database_config()` function.
@@ -106,9 +26,32 @@ def database_config(
     dev_database_url: str | None = None,
     overlap_models: bool = False,
     secure_values: bool = False,
+    pg_schema: str | None = None,
+    pg_migration_lock_timeout: int | None = None,
+    **plugin_config: Any,
 ) -> DatabaseHandle:
     """Register a database in DBWarden and return a handle with session dependencies."""
 ```
+
+## Plugin-contributed arguments
+
+Backend object keys such as `pg_roles`, `pg_functions`, and `ch_grants` are **not** part of core. Each is owned by the plugin that also supplies its object handler, and arrives through `**plugin_config`.
+
+Core validates every extra keyword against the plugins actually installed:
+
+- A key owned by a plugin that is **not installed** raises `DBWardenConfigError` naming the plugin to install.
+- A key **no plugin owns** raises `DBWardenConfigError` as an unexpected keyword argument, so typos fail immediately.
+
+Both fire when your `dbwarden.py` is loaded, not at migration time.
+
+| Config keys | Plugin |
+|---|---|
+| `pg_roles`, `pg_default_privileges` | `dbwarden-pgsql-rbac` |
+| `pg_domains`, `pg_sequences`, `pg_composite_types` | `dbwarden-pgsql-types` |
+| `pg_extensions`, `pg_functions`, `pg_triggers`, `pg_event_triggers`, `pg_extended_statistics` | `dbwarden-pgsql-extensions` |
+| `ch_named_collections`, `ch_roles`, `ch_users`, `ch_row_policies`, `ch_quotas`, `ch_settings_profiles`, `ch_grants` | `dbwarden-ch-rbac` |
+
+Install with `dbwarden plugin add <name>`. `pg_schema` and `pg_migration_lock_timeout` are core and need no plugin.
 
 ## Required arguments
 

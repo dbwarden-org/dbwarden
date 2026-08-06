@@ -1507,6 +1507,84 @@ class TestIndexDiff:
     def test_normalize_mysql_default_strips_on_update_clause(self):
         assert _normalize_mysql_default("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP") == "CURRENT_TIMESTAMP"
 
+    def test_mysql_new_table_emits_no_alter_my_table_ops(self):
+        snapshot = {"tables": {}, "constraints": {}, "indexes": {}}
+        model_tables = [
+            ModelTable(
+                name="users",
+                columns=[ModelColumn("id", "INT", False, True, False, None, None)],
+                my_table={
+                    "my_engine": "InnoDB",
+                    "my_charset": "utf8mb4",
+                    "my_collate": "utf8mb4_unicode_ci",
+                    "my_row_format": "DYNAMIC",
+                },
+            )
+        ]
+        upgrade, rollback = diff_models_against_snapshot(model_tables, snapshot, db_name=None)
+        assert [op["type"] for op in upgrade] == ["create_table"]
+        assert not [op for op in upgrade if op.get("type") == "alter_my_table"]
+        assert not [op for op in rollback if op.get("type") == "alter_my_table"]
+
+    def test_mysql_new_table_does_not_break_rollback_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            old = os.getcwd()
+            try:
+                os.chdir(tmp)
+                Path("dbwarden.py").write_text(
+                    "from dbwarden import database_config\n"
+                    "database_config(database_name='mysql_db', default=True, database_type='mysql', "
+                    "database_url_sync='mysql+pymysql://root:pw@localhost/test')\n"
+                )
+                snapshot = {"tables": {}, "constraints": {}, "indexes": {}}
+                model_tables = [
+                    ModelTable(
+                        name="users",
+                        columns=[ModelColumn("id", "INT", False, True, False, None, None)],
+                        my_table={"my_engine": "InnoDB", "my_charset": "utf8mb4"},
+                    )
+                ]
+                upgrade, rollback = diff_models_against_snapshot(
+                    model_tables, snapshot, db_name="mysql_db"
+                )
+                # Would raise RollbackContractError on the placeholder rollback
+                # ("-- Cannot restore unset engine ...") emitted for a new table.
+                sql, rb_sql, _changes = snapshot_diff_to_sql(
+                    upgrade, rollback, db_name="mysql_db",
+                    enforce_rollback_contract=True,
+                )
+                assert "ALTER TABLE users ENGINE=" not in sql
+                assert "Cannot restore unset" not in rb_sql
+            finally:
+                os.chdir(old)
+
+    def test_mysql_existing_table_engine_change_still_emits_alter(self):
+        snapshot = {
+            "tables": {
+                "users": {
+                    "columns": {
+                        "id": {"type": "integer", "nullable": False, "primary_key": True},
+                    },
+                    "my_table": {"my_engine": "MyISAM"},
+                }
+            },
+            "constraints": {},
+            "indexes": {},
+        }
+        model_tables = [
+            ModelTable(
+                name="users",
+                columns=[ModelColumn("id", "INT", False, True, False, None, None)],
+                my_table={"my_engine": "InnoDB"},
+            )
+        ]
+        upgrade, _rollback = diff_models_against_snapshot(model_tables, snapshot, db_name=None)
+        my_ops = [op for op in upgrade if op.get("type") == "alter_my_table"]
+        assert len(my_ops) == 1
+        assert my_ops[0]["key"] == "my_engine"
+        assert my_ops[0]["to_value"].lower() == "innodb"
+        assert my_ops[0]["from_value"].lower() == "myisam"
+
     def test_mysql_table_diff_ignores_omitted_auto_increment_and_row_format_case(self):
         snapshot = {
             "tables": {

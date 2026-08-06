@@ -191,6 +191,13 @@ def diff_models_against_snapshot(
     _extend_ops(upgrade_ops, _table_up)
     _extend_ops(rollback_ops, _table_rb)
 
+    from dbwarden.engine.backends.mysql.handlers import MyTableHandler
+    _my_driver = RegistryDriver(include_plugins=False)
+    _my_driver.register(MyTableHandler())
+    _my_up, _my_rb = _my_driver.run(snapshot, model_tables, None)
+    _extend_ops(upgrade_ops, _my_up)
+    _extend_ops(rollback_ops, _my_rb)
+
     create_tables = {op["table"] for op in upgrade_ops if op.get("type") == "create_table"}
     if create_tables:
         def _is_redundant_initial_table_op(op: dict[str, Any]) -> bool:
@@ -211,6 +218,11 @@ def diff_models_against_snapshot(
                 return True
             if op.get("type") == "alter_pg_partition":
                 return True
+            # MySQL table options for a brand-new table are emitted inline by
+            # CREATE TABLE, so a separate ALTER TABLE is redundant (and would
+            # target a table that does not exist yet).
+            if op.get("type") == "alter_my_table":
+                return True
             if op.get("type") == "alter_pg_table" and op.get("key") in {
                 "pg_partition",
                 "pg_partition_of",
@@ -224,13 +236,6 @@ def diff_models_against_snapshot(
 
         upgrade_ops = [op for op in upgrade_ops if not _is_redundant_initial_table_op(op)]
         rollback_ops = [op for op in rollback_ops if not _is_redundant_initial_table_op(op)]
-
-    from dbwarden.engine.backends.mysql.handlers import MyTableHandler
-    _my_driver = RegistryDriver(include_plugins=False)
-    _my_driver.register(MyTableHandler())
-    _my_up, _my_rb = _my_driver.run(snapshot, model_tables, None)
-    _extend_ops(upgrade_ops, _my_up)
-    _extend_ops(rollback_ops, _my_rb)
 
     for op in upgrade_ops + rollback_ops:
         if op.get("type") == "recreate_ch_table":

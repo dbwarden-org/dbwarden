@@ -1,90 +1,6 @@
 ---
-description: Define your first SQLAlchemy models, generate a migration, review the
-  generated SQL, apply it, verify the result, and roll it back.
-seo:
-  title: Your First Migration - DBWarden Documentation
-  canonical: https://dbwarden.emiliano-go.com/getting-started/first-migration
-  robots: index,follow
-  og:
-    type: website
-    title: Your First Migration - DBWarden Documentation
-    description: Define your first SQLAlchemy models, generate a migration, review
-      the generated SQL, apply it, verify the result, and roll it back.
-    url: https://dbwarden.emiliano-go.com/getting-started/first-migration
-    image: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-    image:width: 1376
-    image:height: 768
-    image:alt: DBWarden documentation
-    site_name: DBWarden Documentation
-    locale: en_US
-  twitter:
-    card: summary_large_image
-    title: Your First Migration - DBWarden Documentation
-    description: Define your first SQLAlchemy models, generate a migration, review
-      the generated SQL, apply it, verify the result, and roll it back.
-    image: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-    image:alt: DBWarden documentation
-    site: '@emiliano_go_'
-  description: Define your first SQLAlchemy models, generate a migration, review the
-    generated SQL, apply it, verify the result, and roll it back.
-  schema_jsonld:
-  - '@context': https://schema.org
-    '@type': WebPage
-    name: Your First Migration - DBWarden Documentation
-    url: https://dbwarden.emiliano-go.com/getting-started/first-migration
-    description: Define your first SQLAlchemy models, generate a migration, review
-      the generated SQL, apply it, verify the result, and roll it back.
-    image: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-    publisher:
-      '@type': Organization
-      name: Emiliano Gandini Outeda
-      logo: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-  - '@context': https://schema.org
-    '@type': BreadcrumbList
-    itemListElement:
-    - '@type': ListItem
-      position: 1
-      name: Get Started
-      item: https://dbwarden.emiliano-go.com/getting-started
-    - '@type': ListItem
-      position: 2
-      name: Your First Migration
-      item: https://dbwarden.emiliano-go.com/getting-started/first-migration
-seo_html: "<title>Your First Migration - DBWarden Documentation</title>\n<meta name=\"\
-  description\" content=\"Define your first SQLAlchemy models, generate a migration,\
-  \ review the generated SQL, apply it, verify the result, and roll it back.\">\n\
-  <link rel=\"canonical\" href=\"https://dbwarden.emiliano-go.com/getting-started/first-migration\"\
-  >\n<meta name=\"robots\" content=\"index,follow\">\n<meta property=\"og:type\" content=\"\
-  website\">\n<meta property=\"og:title\" content=\"Your First Migration - DBWarden\
-  \ Documentation\">\n<meta property=\"og:description\" content=\"Define your first\
-  \ SQLAlchemy models, generate a migration, review the generated SQL, apply it, verify\
-  \ the result, and roll it back.\">\n<meta property=\"og:url\" content=\"https://dbwarden.emiliano-go.com/getting-started/first-migration\"\
-  >\n<meta property=\"og:image\" content=\"https://dbwarden.emiliano-go.com/assets/images/og-image.png\"\
-  >\n<meta property=\"og:image:width\" content=\"1376\">\n<meta property=\"og:image:height\"\
-  \ content=\"768\">\n<meta property=\"og:image:alt\" content=\"DBWarden documentation\"\
-  >\n<meta property=\"og:site_name\" content=\"DBWarden Documentation\">\n<meta property=\"\
-  og:locale\" content=\"en_US\">\n<meta name=\"twitter:card\" content=\"summary_large_image\"\
-  >\n<meta name=\"twitter:title\" content=\"Your First Migration - DBWarden Documentation\"\
-  >\n<meta name=\"twitter:description\" content=\"Define your first SQLAlchemy models,\
-  \ generate a migration, review the generated SQL, apply it, verify the result, and\
-  \ roll it back.\">\n<meta name=\"twitter:image\" content=\"https://dbwarden.emiliano-go.com/assets/images/og-image.png\"\
-  >\n<meta name=\"twitter:image:alt\" content=\"DBWarden documentation\">\n<meta name=\"\
-  twitter:site\" content=\"@emiliano_go_\">\n<script type=\"application/ld+json\"\
-  >\n[\n  {\n    \"@context\": \"https://schema.org\",\n    \"@type\": \"WebPage\"\
-  ,\n    \"name\": \"Your First Migration - DBWarden Documentation\",\n    \"url\"\
-  : \"https://dbwarden.emiliano-go.com/getting-started/first-migration\",\n    \"\
-  description\": \"Define your first SQLAlchemy models, generate a migration, review\
-  \ the generated SQL, apply it, verify the result, and roll it back.\",\n    \"image\"\
-  : \"https://dbwarden.emiliano-go.com/assets/images/og-image.png\",\n    \"publisher\"\
-  : {\n      \"@type\": \"Organization\",\n      \"name\": \"Emiliano Gandini Outeda\"\
-  ,\n      \"logo\": \"https://dbwarden.emiliano-go.com/assets/images/og-image.png\"\
-  \n    }\n  },\n  {\n    \"@context\": \"https://schema.org\",\n    \"@type\": \"\
-  BreadcrumbList\",\n    \"itemListElement\": [\n      {\n        \"@type\": \"ListItem\"\
-  ,\n        \"position\": 1,\n        \"name\": \"Get Started\",\n        \"item\"\
-  : \"https://dbwarden.emiliano-go.com/getting-started\"\n      },\n      {\n    \
-  \    \"@type\": \"ListItem\",\n        \"position\": 2,\n        \"name\": \"Your\
-  \ First Migration\",\n        \"item\": \"https://dbwarden.emiliano-go.com/getting-started/first-migration\"\
-  \n      }\n    ]\n  }\n]\n</script>\n"
+description: Define your first SQLAlchemy models, generate a migration, review the generated
+  SQL, apply it, verify the result, and roll it back.
 ---
 
 # Your First Migration
@@ -142,6 +58,8 @@ Created migration: migrations/primary/primary__0001_create_core_tables.sql
 ```
 
 DBWarden compares your current models against the live schema, or snapshot state, and writes a new SQL migration file.
+
+The `make-migrations` and `migrate` command names deliberately mirror Django's `makemigrations` and `migrate`, so the generate-then-apply loop is familiar if you have used Django. The rest of the CLI follows its own conventions.
 
 ## Review the Generated SQL
 

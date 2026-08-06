@@ -1,94 +1,26 @@
----
-seo:
-  title: ClickHouse - DBWarden Documentation
-  canonical: https://dbwarden.emiliano-go.com/databases/clickhouse
-  robots: index,follow
-  og:
-    type: website
-    title: ClickHouse - DBWarden Documentation
-    description: DBWarden treats ClickHouse as a first-class backend. Every natively
-      supported feature is reverse-engineered, diffed, and emitted as correct DDL.
-    url: https://dbwarden.emiliano-go.com/databases/clickhouse
-    image: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-    image:width: 1376
-    image:height: 768
-    image:alt: DBWarden documentation
-    site_name: DBWarden Documentation
-    locale: en_US
-  twitter:
-    card: summary_large_image
-    title: ClickHouse - DBWarden Documentation
-    description: DBWarden treats ClickHouse as a first-class backend. Every natively
-      supported feature is reverse-engineered, diffed, and emitted as correct DDL.
-    image: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-    image:alt: DBWarden documentation
-    site: '@emiliano_go_'
-  description: DBWarden treats ClickHouse as a first-class backend. Every natively
-    supported feature is reverse-engineered, diffed, and emitted as correct DDL.
-  schema_jsonld:
-  - '@context': https://schema.org
-    '@type': WebPage
-    name: ClickHouse - DBWarden Documentation
-    url: https://dbwarden.emiliano-go.com/databases/clickhouse
-    description: DBWarden treats ClickHouse as a first-class backend. Every natively
-      supported feature is reverse-engineered, diffed, and emitted as correct DDL.
-    image: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-    publisher:
-      '@type': Organization
-      name: Emiliano Gandini Outeda
-      logo: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-  - '@context': https://schema.org
-    '@type': BreadcrumbList
-    itemListElement:
-    - '@type': ListItem
-      position: 1
-      name: Databases
-      item: https://dbwarden.emiliano-go.com/databases
-    - '@type': ListItem
-      position: 2
-      name: ClickHouse
-      item: https://dbwarden.emiliano-go.com/databases/clickhouse
-seo_html: "<title>ClickHouse - DBWarden Documentation</title>\n<meta name=\"description\"\
-  \ content=\"DBWarden treats ClickHouse as a first-class backend. Every natively\
-  \ supported feature is reverse-engineered, diffed, and emitted as correct DDL.\"\
-  >\n<link rel=\"canonical\" href=\"https://dbwarden.emiliano-go.com/databases/clickhouse\"\
-  >\n<meta name=\"robots\" content=\"index,follow\">\n<meta property=\"og:type\" content=\"\
-  website\">\n<meta property=\"og:title\" content=\"ClickHouse - DBWarden Documentation\"\
-  >\n<meta property=\"og:description\" content=\"DBWarden treats ClickHouse as a first-class\
-  \ backend. Every natively supported feature is reverse-engineered, diffed, and emitted\
-  \ as correct DDL.\">\n<meta property=\"og:url\" content=\"https://dbwarden.emiliano-go.com/databases/clickhouse\"\
-  >\n<meta property=\"og:image\" content=\"https://dbwarden.emiliano-go.com/assets/images/og-image.png\"\
-  >\n<meta property=\"og:image:width\" content=\"1376\">\n<meta property=\"og:image:height\"\
-  \ content=\"768\">\n<meta property=\"og:image:alt\" content=\"DBWarden documentation\"\
-  >\n<meta property=\"og:site_name\" content=\"DBWarden Documentation\">\n<meta property=\"\
-  og:locale\" content=\"en_US\">\n<meta name=\"twitter:card\" content=\"summary_large_image\"\
-  >\n<meta name=\"twitter:title\" content=\"ClickHouse - DBWarden Documentation\"\
-  >\n<meta name=\"twitter:description\" content=\"DBWarden treats ClickHouse as a\
-  \ first-class backend. Every natively supported feature is reverse-engineered, diffed,\
-  \ and emitted as correct DDL.\">\n<meta name=\"twitter:image\" content=\"https://dbwarden.emiliano-go.com/assets/images/og-image.png\"\
-  >\n<meta name=\"twitter:image:alt\" content=\"DBWarden documentation\">\n<meta name=\"\
-  twitter:site\" content=\"@emiliano_go_\">\n<script type=\"application/ld+json\"\
-  >\n[\n  {\n    \"@context\": \"https://schema.org\",\n    \"@type\": \"WebPage\"\
-  ,\n    \"name\": \"ClickHouse - DBWarden Documentation\",\n    \"url\": \"https://dbwarden.emiliano-go.com/databases/clickhouse\"\
-  ,\n    \"description\": \"DBWarden treats ClickHouse as a first-class backend. Every\
-  \ natively supported feature is reverse-engineered, diffed, and emitted as correct\
-  \ DDL.\",\n    \"image\": \"https://dbwarden.emiliano-go.com/assets/images/og-image.png\"\
-  ,\n    \"publisher\": {\n      \"@type\": \"Organization\",\n      \"name\": \"\
-  Emiliano Gandini Outeda\",\n      \"logo\": \"https://dbwarden.emiliano-go.com/assets/images/og-image.png\"\
-  \n    }\n  },\n  {\n    \"@context\": \"https://schema.org\",\n    \"@type\": \"\
-  BreadcrumbList\",\n    \"itemListElement\": [\n      {\n        \"@type\": \"ListItem\"\
-  ,\n        \"position\": 1,\n        \"name\": \"Databases\",\n        \"item\"\
-  : \"https://dbwarden.emiliano-go.com/databases\"\n      },\n      {\n        \"\
-  @type\": \"ListItem\",\n        \"position\": 2,\n        \"name\": \"ClickHouse\"\
-  ,\n        \"item\": \"https://dbwarden.emiliano-go.com/databases/clickhouse\"\n\
-  \      }\n    ]\n  }\n]\n</script>\n"
----
-
 # ClickHouse
 
 DBWarden treats ClickHouse as a first-class backend. Every natively supported feature is reverse-engineered, diffed, and emitted as correct DDL.
 
 **Before reading further:** ClickHouse's object model is fundamentally different from PostgreSQL. What is a `SET` in PG is often a `CREATE` commitment in CH. Read [Immutability](immutability.md) first.
+
+## Documentation Sections
+
+- [Immutability](immutability.md) : What can never change, and what forces a table recreate
+- [Conventions](conventions.md) : Canonicalization, defaults-as-absence, declare-only secrets, the two-door API
+- [Declaring Tables](declaring-tables.md) : The `ch_table()` builder, generated DDL, and legacy `ch_*` attrs
+- [Columns & Types](columns-types.md) : Column-level Meta, `ch.field()` options, type normalization
+- [MergeTree Engines](engines-mergetree.md) : Engine factories, `MergeTreeSettings`, allowed changes, rollback behavior
+- [Integration Engines](engines-integration.md) : Kafka, S3, S3Queue, RabbitMQ, NATS, and the other external sources
+- [Special Engines](engines-special.md) : Distributed, Buffer, Join, Set, Memory, Null, Merge, and the Log family
+- [Materialized Views](materialized-views.md) : The two MV shapes, refreshable MVs, `MODIFY QUERY` vs recreate
+- [Aggregating Views](aggregating-views.md) : `AggregatingMergeTree` views, target tables, populating
+- [Projections & Indexes](projections-indexes.md) : Projections, skip indexes, `MATERIALIZE` as a data operation
+- [Dictionaries](dictionaries.md) : Declaration, source types, layout types, lifetime
+- [Named Collections](named-collections.md) : Credential-bearing collections, declare-only by design (needs `dbwarden-ch-rbac`)
+- [RBAC](rbac.md) : Roles, users, row policies, quotas, settings profiles, grants (needs `dbwarden-ch-rbac`)
+- [Data Operations](data-operations.md) : Partition operations, mutations, `OPTIMIZE`, `POPULATE`
+- [Safety Classification](safety.md) : Classification levels, `--force`, and the recreate pipeline
 
 ## Quick-start
 
@@ -210,8 +142,6 @@ The canonicalizer has **zero version branching**: a single code path covers 24.3
 | | `storage != 'users.xml'` filter | Done |
 | | Drop gating (`--clickhouse-allow-drop-rbac`) | Done |
 | Named collections | Key-set diffed, values declare-only | Done |
-| Clustering | ON CLUSTER via ClusterMode.ON_CLUSTER | Done |
-| | ClusterMode.REPLICATED (emit-side: omit ON CLUSTER) | Done |
 | Class-based views | `ChView`, `MaterializedView`, `AggregatingView` mixin bases | Done |
 | | `CHViewMeta`: Meta class for view models | Done |
 | | `get_all_ch_views()`: view discovery | Done |
@@ -240,6 +170,8 @@ These are not gaps: they are deliberate boundaries, documented with reasoning so
 
 These are the **only** `database_config()` parameters for ClickHouse. Exact key shapes, documented because undocumented config keys are what assistants hallucinate.
 
+**Every key below requires the `dbwarden-ch-rbac` plugin:** `dbwarden plugin add dbwarden-ch-rbac`. The plugin owns both these config keys and the handlers that emit their DDL, so declaring them without it installed raises `DBWardenConfigError` at config load.
+
 ```python
 from dbwarden import database_config
 from dbwarden.databases.clickhouse import (
@@ -249,8 +181,9 @@ from dbwarden.databases.clickhouse import (
 )
 
 database_config(
-    name="analytics",
-    url="clickhouse://...",
+    database_name="analytics",
+    database_type="clickhouse",
+    database_url_sync="clickhouse://...",
     ch_named_collections=[...],       # list[NamedCollectionSpec | dict]
     ch_roles=[...],                   # list[ChRoleSpec | dict]
     ch_users=[...],                   # list[ChUserSpec | dict]
@@ -357,8 +290,9 @@ class ParsedEvents(MaterializedView):
 
 ```python
 database_config(
-    name="analytics",
-    url="clickhouse://localhost:9000",
+    database_name="analytics",
+    database_type="clickhouse",
+    database_url_sync="clickhouse://localhost:9000",
     ch_named_collections=[
         named_collection("ldap_auth", ldap_server="ldap.example.com"),
     ],
@@ -462,16 +396,6 @@ $ dbwarden make-migrations --plan --force -d analytics
 #   RENAME TABLE ...
 
 $ dbwarden migrate --force -d analytics
-```
-
-### Cluster-wide deployment
-
-```bash
-# Deploy to a cluster with 3 nodes
-$ dbwarden migrate -d analytics --cluster-mode on_cluster
-
-# Each DDL statement includes ON CLUSTER '{cluster}'
-# ClickHouse propagates to all nodes automatically
 ```
 
 ### Deploy RBAC changes

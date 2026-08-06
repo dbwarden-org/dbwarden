@@ -32,10 +32,8 @@ dependencies = [
     "packaging>=24.0",
     "pyyaml>=6.0.3",
     "rich>=12.2.0",
-    "seoslug>=2.0.1",
     "sqlalchemy>=2.0.10,<2.1",
     "typer>=0.12.3",
-    "zensical>=0.0.44",
 ]
 
 [project.urls]
@@ -53,8 +51,11 @@ dev = [
     "pytest-asyncio>=0.24.0",
     "pytest-cov>=6.0.0",
     "prometheus-client>=0.21.0",
-    "zensical",
-    "seoslug",
+    # Docs-site tooling only; not imported by the dbwarden package itself.
+    # seoslug 2.1.0 is the floor: zensical.toml loads seoslug.contrib.zensical,
+    # which was added in that release.
+    "zensical>=0.0.44",
+    "seoslug>=2.1.0",
     "httpx2>=2.4.0",
 ]
 

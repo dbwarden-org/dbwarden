@@ -61,27 +61,20 @@ def database_config(
     overlap_models: bool = False,
     auto_apply_seeds: bool = False,
     seed_table: str | None = None,
-    pg_extensions: list[str] | None = None,
-    pg_domains: list[dict] | None = None,
-    pg_sequences: list[dict] | None = None,
-    pg_functions: list[dict] | None = None,
-    pg_triggers: list[dict] | None = None,
-    pg_roles: list[dict] | None = None,
-    pg_default_privileges: list[dict] | None = None,
-    pg_composite_types: list[dict] | None = None,
-    pg_extended_statistics: list[dict] | None = None,
-    pg_event_triggers: list[dict] | None = None,
     pg_schema: str | None = None,
     pg_migration_lock_timeout: int | None = None,
-    ch_named_collections: list[Any] | None = None,
-    ch_roles: list[Any] | None = None,
-    ch_users: list[Any] | None = None,
-    ch_row_policies: list[Any] | None = None,
-    ch_quotas: list[Any] | None = None,
-    ch_settings_profiles: list[Any] | None = None,
-    ch_grants: list[Any] | None = None,
+    **plugin_config: Any,
 ) -> DatabaseHandle:
+    """Declare a database.
+
+    Backend object keys such as ``pg_roles`` or ``ch_grants`` are contributed by
+    plugins and accepted through ``**plugin_config``. They are validated against
+    the plugins actually installed, so a key whose plugin is missing raises here
+    rather than being silently ignored at migration time.
+    """
     from dbwarden.db_handle import DatabaseHandle as _DH
+
+    _validate_plugin_config(plugin_config)
 
     entry = structure_database_entry(
         dict(
@@ -100,26 +93,33 @@ def database_config(
             overlap_models=overlap_models,
             auto_apply_seeds=auto_apply_seeds,
             seed_table=seed_table,
-            pg_extensions=pg_extensions or [],
-            pg_domains=pg_domains or [],
-            pg_sequences=pg_sequences or [],
-            pg_functions=pg_functions or [],
-            pg_triggers=pg_triggers or [],
-            pg_roles=pg_roles or [],
-            pg_default_privileges=pg_default_privileges or [],
-            pg_composite_types=pg_composite_types or [],
-            pg_extended_statistics=pg_extended_statistics or [],
-            pg_event_triggers=pg_event_triggers or [],
             pg_schema=pg_schema,
             pg_migration_lock_timeout=pg_migration_lock_timeout,
-            ch_named_collections=ch_named_collections or [],
-            ch_roles=ch_roles or [],
-            ch_users=ch_users or [],
-            ch_row_policies=ch_row_policies or [],
-            ch_quotas=ch_quotas or [],
-            ch_settings_profiles=ch_settings_profiles or [],
-            ch_grants=ch_grants or [],
+            plugin_config={k: v for k, v in plugin_config.items() if v is not None},
         )
     )
     _REGISTRY.add(entry)
     return _DH(entry.database_name, entry.database_type)
+
+
+def _validate_plugin_config(plugin_config: dict[str, Any]) -> None:
+    from dbwarden.exceptions import DBWardenConfigError
+    from dbwarden.plugin import PLUGIN_CONFIG_KEY_OWNERS, ConfigKeyRegistry
+
+    for key, value in plugin_config.items():
+        if ConfigKeyRegistry.is_registered(key):
+            continue
+        owner = PLUGIN_CONFIG_KEY_OWNERS.get(key)
+        if owner is not None:
+            if not value:
+                # Declared but empty: nothing to migrate either way, so don't
+                # force an install just to pass an empty list.
+                continue
+            raise DBWardenConfigError(
+                f"database_config(...) got '{key}', which is provided by the "
+                f"{owner} plugin, but that plugin is not installed.\n"
+                f"Install it with: dbwarden plugin add {owner}"
+            )
+        raise DBWardenConfigError(
+            f"database_config(...) got an unexpected keyword argument '{key}'."
+        )

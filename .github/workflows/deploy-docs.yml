@@ -27,8 +27,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
-      - run: pip install "seoslug>=2.0.1" zensical
-      - run: python scripts/generate_seo.py
+      # seoslug 2.1.0 added seoslug.contrib.zensical, which zensical.toml loads.
+      - run: pip install "seoslug>=2.1.0" zensical
       - run: python scripts/generate_llms_full.py
       - run: zensical build --clean
       - run: cp docs/robots.txt site/robots.txt

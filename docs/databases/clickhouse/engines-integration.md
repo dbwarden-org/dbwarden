@@ -1,97 +1,3 @@
----
-seo:
-  title: Integration engines - DBWarden Documentation
-  canonical: https://dbwarden.emiliano-go.com/databases/clickhouse/engines-integration
-  robots: index,follow
-  og:
-    type: website
-    title: Integration engines - DBWarden Documentation
-    description: 'dbwarden supports 13 integration engines. Credentials use the named-collectionsnamed-collections.md
-      declare-only pattern: no secret values are diffed.'
-    url: https://dbwarden.emiliano-go.com/databases/clickhouse/engines-integration
-    image: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-    image:width: 1376
-    image:height: 768
-    image:alt: DBWarden documentation
-    site_name: DBWarden Documentation
-    locale: en_US
-  twitter:
-    card: summary_large_image
-    title: Integration engines - DBWarden Documentation
-    description: 'dbwarden supports 13 integration engines. Credentials use the named-collectionsnamed-collections.md
-      declare-only pattern: no secret values are diffed.'
-    image: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-    image:alt: DBWarden documentation
-    site: '@emiliano_go_'
-  description: 'dbwarden supports 13 integration engines. Credentials use the named-collectionsnamed-collections.md
-    declare-only pattern: no secret values are diffed.'
-  schema_jsonld:
-  - '@context': https://schema.org
-    '@type': WebPage
-    name: Integration engines - DBWarden Documentation
-    url: https://dbwarden.emiliano-go.com/databases/clickhouse/engines-integration
-    description: 'dbwarden supports 13 integration engines. Credentials use the named-collectionsnamed-collections.md
-      declare-only pattern: no secret values are diffed.'
-    image: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-    publisher:
-      '@type': Organization
-      name: Emiliano Gandini Outeda
-      logo: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-  - '@context': https://schema.org
-    '@type': BreadcrumbList
-    itemListElement:
-    - '@type': ListItem
-      position: 1
-      name: Databases
-      item: https://dbwarden.emiliano-go.com/databases
-    - '@type': ListItem
-      position: 2
-      name: ClickHouse
-      item: https://dbwarden.emiliano-go.com/databases/clickhouse
-    - '@type': ListItem
-      position: 3
-      name: Engines Integration
-      item: https://dbwarden.emiliano-go.com/databases/clickhouse/engines-integration
-seo_html: "<title>Integration engines - DBWarden Documentation</title>\n<meta name=\"\
-  description\" content=\"dbwarden supports 13 integration engines. Credentials use\
-  \ the named-collectionsnamed-collections.md declare-only pattern: no secret values\
-  \ are diffed.\">\n<link rel=\"canonical\" href=\"https://dbwarden.emiliano-go.com/databases/clickhouse/engines-integration\"\
-  >\n<meta name=\"robots\" content=\"index,follow\">\n<meta property=\"og:type\" content=\"\
-  website\">\n<meta property=\"og:title\" content=\"Integration engines - DBWarden\
-  \ Documentation\">\n<meta property=\"og:description\" content=\"dbwarden supports\
-  \ 13 integration engines. Credentials use the named-collectionsnamed-collections.md\
-  \ declare-only pattern: no secret values are diffed.\">\n<meta property=\"og:url\"\
-  \ content=\"https://dbwarden.emiliano-go.com/databases/clickhouse/engines-integration\"\
-  >\n<meta property=\"og:image\" content=\"https://dbwarden.emiliano-go.com/assets/images/og-image.png\"\
-  >\n<meta property=\"og:image:width\" content=\"1376\">\n<meta property=\"og:image:height\"\
-  \ content=\"768\">\n<meta property=\"og:image:alt\" content=\"DBWarden documentation\"\
-  >\n<meta property=\"og:site_name\" content=\"DBWarden Documentation\">\n<meta property=\"\
-  og:locale\" content=\"en_US\">\n<meta name=\"twitter:card\" content=\"summary_large_image\"\
-  >\n<meta name=\"twitter:title\" content=\"Integration engines - DBWarden Documentation\"\
-  >\n<meta name=\"twitter:description\" content=\"dbwarden supports 13 integration\
-  \ engines. Credentials use the named-collectionsnamed-collections.md declare-only\
-  \ pattern: no secret values are diffed.\">\n<meta name=\"twitter:image\" content=\"\
-  https://dbwarden.emiliano-go.com/assets/images/og-image.png\">\n<meta name=\"twitter:image:alt\"\
-  \ content=\"DBWarden documentation\">\n<meta name=\"twitter:site\" content=\"@emiliano_go_\"\
-  >\n<script type=\"application/ld+json\">\n[\n  {\n    \"@context\": \"https://schema.org\"\
-  ,\n    \"@type\": \"WebPage\",\n    \"name\": \"Integration engines - DBWarden Documentation\"\
-  ,\n    \"url\": \"https://dbwarden.emiliano-go.com/databases/clickhouse/engines-integration\"\
-  ,\n    \"description\": \"dbwarden supports 13 integration engines. Credentials\
-  \ use the named-collectionsnamed-collections.md declare-only pattern: no secret\
-  \ values are diffed.\",\n    \"image\": \"https://dbwarden.emiliano-go.com/assets/images/og-image.png\"\
-  ,\n    \"publisher\": {\n      \"@type\": \"Organization\",\n      \"name\": \"\
-  Emiliano Gandini Outeda\",\n      \"logo\": \"https://dbwarden.emiliano-go.com/assets/images/og-image.png\"\
-  \n    }\n  },\n  {\n    \"@context\": \"https://schema.org\",\n    \"@type\": \"\
-  BreadcrumbList\",\n    \"itemListElement\": [\n      {\n        \"@type\": \"ListItem\"\
-  ,\n        \"position\": 1,\n        \"name\": \"Databases\",\n        \"item\"\
-  : \"https://dbwarden.emiliano-go.com/databases\"\n      },\n      {\n        \"\
-  @type\": \"ListItem\",\n        \"position\": 2,\n        \"name\": \"ClickHouse\"\
-  ,\n        \"item\": \"https://dbwarden.emiliano-go.com/databases/clickhouse\"\n\
-  \      },\n      {\n        \"@type\": \"ListItem\",\n        \"position\": 3,\n\
-  \        \"name\": \"Engines Integration\",\n        \"item\": \"https://dbwarden.emiliano-go.com/databases/clickhouse/engines-integration\"\
-  \n      }\n    ]\n  }\n]\n</script>\n"
----
-
 # Integration engines
 
 dbwarden supports 13 integration engines. Credentials use the [named-collections](named-collections.md) declare-only pattern: no secret values are diffed.
@@ -99,11 +5,11 @@ dbwarden supports 13 integration engines. Credentials use the [named-collections
 ## Kafka
 
 ```python
-from dbwarden.databases.clickhouse import kafka_engine
+from dbwarden.databases.clickhouse import kafka
 
 class Meta(CHTableMeta):
     ch = ch_table(
-        engine=kafka_engine(
+        engine=kafka(
             named_collection="kafka_prod",
             topic="events",
             format="JSONEachRow",
@@ -150,11 +56,11 @@ settings: KafkaSettings = {
 ## S3
 
 ```python
-from dbwarden.databases.clickhouse import s3_engine
+from dbwarden.databases.clickhouse import s3
 
 class Meta(CHTableMeta):
     ch = ch_table(
-        engine=s3_engine(
+        engine=s3(
             named_collection="s3_prod",
             pattern="events/*.parquet",
             format="Parquet",
@@ -176,11 +82,11 @@ Parameters:
 ## S3Queue
 
 ```python
-from dbwarden.databases.clickhouse import s3queue_engine
+from dbwarden.databases.clickhouse import s3_queue
 
 class Meta(CHTableMeta):
     ch = ch_table(
-        engine=s3queue_engine(
+        engine=s3_queue(
             named_collection="s3_prod",
             pattern="incoming/*.json",
             format="JSONEachRow",
@@ -193,11 +99,11 @@ class Meta(CHTableMeta):
 ## RabbitMQ
 
 ```python
-from dbwarden.databases.clickhouse import rabbitmq_engine
+from dbwarden.databases.clickhouse import rabbitmq
 
 class Meta(CHTableMeta):
     ch = ch_table(
-        engine=rabbitmq_engine(
+        engine=rabbitmq(
             named_collection="rabbit_prod",
             format="JSONEachRow",
         ),
@@ -209,11 +115,11 @@ class Meta(CHTableMeta):
 ## NATS
 
 ```python
-from dbwarden.databases.clickhouse import nats_engine
+from dbwarden.databases.clickhouse import nats
 
 class Meta(CHTableMeta):
     ch = ch_table(
-        engine=nats_engine(
+        engine=nats(
             named_collection="nats_prod",
             format="JSONEachRow",
         ),
@@ -225,7 +131,7 @@ class Meta(CHTableMeta):
 ## MySQL, PostgreSQL, MongoDB, Redis
 
 ```python
-from dbwarden.databases.clickhouse import mysql_engine, postgresql_engine, mongodb_engine, redis_engine
+from dbwarden.databases.clickhouse import mysql_engine, postgresql_engine, mongodb, redis
 
 # MySQL engine
 engine = mysql_engine(
@@ -240,13 +146,13 @@ engine = postgresql_engine(
 )
 
 # MongoDB engine
-engine = mongodb_engine(
+engine = mongodb(
     named_collection="mongo_prod",
     collection="source_collection",
 )
 
 # Redis engine
-engine = redis_engine(
+engine = redis(
     named_collection="redis_prod",
     key="prefix:*",
 )
@@ -269,14 +175,14 @@ named_collection(
     },
 )
 
-engine = kafka_engine(
+engine = kafka(
     named_collection="aws_prod",
     topic="events",
     format="JSONEachRow",
     group_name="ch_consumer",
 )
 
-engine2 = s3_engine(
+engine2 = s3(
     named_collection="aws_prod",
     pattern="data/*.parquet",
     format="Parquet",
@@ -286,7 +192,7 @@ engine2 = s3_engine(
 ### S3Queue with complex settings
 
 ```python
-engine = s3queue_engine(
+engine = s3_queue(
     named_collection="aws_prod",
     pattern="incoming/*.json",
     format="JSONEachRow",
@@ -360,11 +266,11 @@ class Meta(CHTableMeta):
 ## HDFS
 
 ```python
-from dbwarden.databases.clickhouse import hdfs_engine
+from dbwarden.databases.clickhouse import hdfs
 
 class Meta(CHTableMeta):
     ch = ch_table(
-        engine=hdfs_engine(
+        engine=hdfs(
             named_collection="hdfs_prod",
             format="Parquet",
         ),

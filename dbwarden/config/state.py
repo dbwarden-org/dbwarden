@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
+from dbwarden.plugin import PLUGIN_CONFIG_KEY_OWNERS
+
 DatabaseType = Literal["sqlite", "postgresql", "mysql", "mariadb", "clickhouse"]
 DEFAULT_MIGRATION_TABLE = "_dbwarden_migrations"
 DEFAULT_SEEDS_TABLE = "_dbwarden_seeds"
@@ -41,24 +43,16 @@ class DatabaseConfig:
     dev_database_url: str | None = None
     dev_database_type: DatabaseType | None = None
     overlap_models: bool = False
-    pg_extensions: list[str] = field(default_factory=list)
-    pg_domains: list[dict] = field(default_factory=list)
-    pg_sequences: list[dict] = field(default_factory=list)
-    pg_functions: list[dict] = field(default_factory=list)
-    pg_triggers: list[dict] = field(default_factory=list)
-    pg_roles: list[dict] = field(default_factory=list)
-    pg_default_privileges: list[dict] = field(default_factory=list)
-    pg_composite_types: list[dict] = field(default_factory=list)
-    pg_extended_statistics: list[dict] = field(default_factory=list)
-    pg_event_triggers: list[dict] = field(default_factory=list)
     pg_migration_lock_timeout: int | None = None
-    ch_named_collections: list[dict] = field(default_factory=list)
-    ch_roles: list[dict] = field(default_factory=list)
-    ch_users: list[dict] = field(default_factory=list)
-    ch_row_policies: list[dict] = field(default_factory=list)
-    ch_quotas: list[dict] = field(default_factory=list)
-    ch_settings_profiles: list[dict] = field(default_factory=list)
-    ch_grants: list[dict] = field(default_factory=list)
+    # Backend object keys contributed by plugins (pg_roles, ch_grants, and so on).
+    plugin_config: dict[str, Any] = field(default_factory=dict)
+
+    def __getattr__(self, name: str) -> Any:
+        # Keeps getattr(config, "pg_roles", None) working for callers across the
+        # engine. Restricted to plugin-owned key names so typos still raise.
+        if name in PLUGIN_CONFIG_KEY_OWNERS:
+            return self.plugin_config.get(name, [])
+        raise AttributeError(name)
 
     @property
     def sqlalchemy_url(self) -> str:

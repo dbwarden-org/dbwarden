@@ -1,90 +1,8 @@
----
-seo:
-  title: Seed Management - DBWarden Documentation
-  canonical: https://dbwarden.emiliano-go.com/seeds
-  robots: index,follow
-  og:
-    type: website
-    title: Seed Management - DBWarden Documentation
-    description: DBWarden provides built-in seed data management for populating databases
-      with initial or reference data. Seeds complement migrations by handling data
-      that...
-    url: https://dbwarden.emiliano-go.com/seeds
-    image: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-    image:width: 1376
-    image:height: 768
-    image:alt: DBWarden documentation
-    site_name: DBWarden Documentation
-    locale: en_US
-  twitter:
-    card: summary_large_image
-    title: Seed Management - DBWarden Documentation
-    description: DBWarden provides built-in seed data management for populating databases
-      with initial or reference data. Seeds complement migrations by handling data
-      that...
-    image: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-    image:alt: DBWarden documentation
-    site: '@emiliano_go_'
-  description: DBWarden provides built-in seed data management for populating databases
-    with initial or reference data. Seeds complement migrations by handling data that...
-  schema_jsonld:
-  - '@context': https://schema.org
-    '@type': WebPage
-    name: Seed Management - DBWarden Documentation
-    url: https://dbwarden.emiliano-go.com/seeds
-    description: DBWarden provides built-in seed data management for populating databases
-      with initial or reference data. Seeds complement migrations by handling data
-      that...
-    image: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-    publisher:
-      '@type': Organization
-      name: Emiliano Gandini Outeda
-      logo: https://dbwarden.emiliano-go.com/assets/images/og-image.png
-  - '@context': https://schema.org
-    '@type': BreadcrumbList
-    itemListElement:
-    - '@type': ListItem
-      position: 1
-      name: Seed Management
-      item: https://dbwarden.emiliano-go.com/seeds
-seo_html: "<title>Seed Management - DBWarden Documentation</title>\n<meta name=\"\
-  description\" content=\"DBWarden provides built-in seed data management for populating\
-  \ databases with initial or reference data. Seeds complement migrations by handling\
-  \ data that...\">\n<link rel=\"canonical\" href=\"https://dbwarden.emiliano-go.com/seeds\"\
-  >\n<meta name=\"robots\" content=\"index,follow\">\n<meta property=\"og:type\" content=\"\
-  website\">\n<meta property=\"og:title\" content=\"Seed Management - DBWarden Documentation\"\
-  >\n<meta property=\"og:description\" content=\"DBWarden provides built-in seed data\
-  \ management for populating databases with initial or reference data. Seeds complement\
-  \ migrations by handling data that...\">\n<meta property=\"og:url\" content=\"https://dbwarden.emiliano-go.com/seeds\"\
-  >\n<meta property=\"og:image\" content=\"https://dbwarden.emiliano-go.com/assets/images/og-image.png\"\
-  >\n<meta property=\"og:image:width\" content=\"1376\">\n<meta property=\"og:image:height\"\
-  \ content=\"768\">\n<meta property=\"og:image:alt\" content=\"DBWarden documentation\"\
-  >\n<meta property=\"og:site_name\" content=\"DBWarden Documentation\">\n<meta property=\"\
-  og:locale\" content=\"en_US\">\n<meta name=\"twitter:card\" content=\"summary_large_image\"\
-  >\n<meta name=\"twitter:title\" content=\"Seed Management - DBWarden Documentation\"\
-  >\n<meta name=\"twitter:description\" content=\"DBWarden provides built-in seed\
-  \ data management for populating databases with initial or reference data. Seeds\
-  \ complement migrations by handling data that...\">\n<meta name=\"twitter:image\"\
-  \ content=\"https://dbwarden.emiliano-go.com/assets/images/og-image.png\">\n<meta\
-  \ name=\"twitter:image:alt\" content=\"DBWarden documentation\">\n<meta name=\"\
-  twitter:site\" content=\"@emiliano_go_\">\n<script type=\"application/ld+json\"\
-  >\n[\n  {\n    \"@context\": \"https://schema.org\",\n    \"@type\": \"WebPage\"\
-  ,\n    \"name\": \"Seed Management - DBWarden Documentation\",\n    \"url\": \"\
-  https://dbwarden.emiliano-go.com/seeds\",\n    \"description\": \"DBWarden provides\
-  \ built-in seed data management for populating databases with initial or reference\
-  \ data. Seeds complement migrations by handling data that...\",\n    \"image\":\
-  \ \"https://dbwarden.emiliano-go.com/assets/images/og-image.png\",\n    \"publisher\"\
-  : {\n      \"@type\": \"Organization\",\n      \"name\": \"Emiliano Gandini Outeda\"\
-  ,\n      \"logo\": \"https://dbwarden.emiliano-go.com/assets/images/og-image.png\"\
-  \n    }\n  },\n  {\n    \"@context\": \"https://schema.org\",\n    \"@type\": \"\
-  BreadcrumbList\",\n    \"itemListElement\": [\n      {\n        \"@type\": \"ListItem\"\
-  ,\n        \"position\": 1,\n        \"name\": \"Seed Management\",\n        \"\
-  item\": \"https://dbwarden.emiliano-go.com/seeds\"\n      }\n    ]\n  }\n]\n</script>\n"
----
-
 # Seed Management
 
-DBWarden provides built-in seed data management for populating databases with initial or reference data. Seeds complement migrations by handling data that belongs in version control.
+**Requires the `dbwarden-seeds` plugin:** `dbwarden plugin add dbwarden-seeds`. Seed management was previously built into core and now ships as an official plugin. The `dbwarden seed` commands still exist in core, but without the plugin installed each one exits with a message telling you to install it.
+
+DBWarden provides seed data management for populating databases with initial or reference data. Seeds complement migrations by handling data that belongs in version control.
 
 ## Overview
 
@@ -501,6 +419,6 @@ The `DBWardenRouter` includes seed status in its `GET /status` response:
 }
 ```
 
-See [FastAPI Reference](fastapi/reference.md) for details.
+FastAPI integration ships separately as the `dbwarden-fastapi` plugin, so its reference lives with the plugin: [dbwarden-fastapi](https://github.com/dbwarden-org/dbwarden-fastapi).
 
 See also: [Cookbook: Seeds](../cookbook/07-seeds.md)

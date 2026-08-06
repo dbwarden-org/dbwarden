@@ -3,6 +3,16 @@ name: CI
 on:
   push:
   pull_request:
+  # Callable so the release pipeline can gate publishing on this exact suite
+  # instead of keeping a second copy of it that drifts.
+  workflow_call:
+    inputs:
+      ref:
+        # The release path needs to test the tag being published, not whatever
+        # branch the run was started from. Empty on push/pull_request.
+        description: "Ref to check out and test. Defaults to the triggering ref."
+        required: false
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -17,6 +27,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -36,6 +48,7 @@ jobs:
         run: uv run pytest --cov --cov-branch --cov-report=xml
 
       - name: Upload coverage to Codecov
+        if: github.event_name != 'release'
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -46,6 +59,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -74,6 +89,8 @@ jobs:
           --env CLICKHOUSE_PASSWORD=clickhouse
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -117,6 +134,8 @@ jobs:
           --health-retries 5
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7

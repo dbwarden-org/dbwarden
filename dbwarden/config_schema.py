@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 import re
 
 import cattrs
@@ -8,6 +8,7 @@ from attrs import define, field, validators
 from cattrs import transform_error
 
 from dbwarden.exceptions import ConfigurationError
+from dbwarden.plugin import PLUGIN_CONFIG_KEY_OWNERS
 
 DatabaseType = Literal["sqlite", "postgresql", "mysql", "mariadb", "clickhouse"]
 VALID_DATABASE_TYPES = frozenset(
@@ -102,25 +103,19 @@ class DatabaseEntry:
     overlap_models: bool = False
     auto_apply_seeds: bool = False
     seed_table: str | None = field(default=None, validator=_validate_seed_table)
-    pg_extensions: list[str] = field(factory=list)
-    pg_domains: list[dict] = field(factory=list)
-    pg_sequences: list[dict] = field(factory=list)
-    pg_functions: list[dict] = field(factory=list)
-    pg_triggers: list[dict] = field(factory=list)
-    pg_roles: list[dict] = field(factory=list)
-    pg_default_privileges: list[dict] = field(factory=list)
-    pg_composite_types: list[dict] = field(factory=list)
-    pg_extended_statistics: list[dict] = field(factory=list)
-    pg_event_triggers: list[dict] = field(factory=list)
     pg_schema: str | None = None
     pg_migration_lock_timeout: int | None = None
-    ch_named_collections: list[dict] = field(factory=list)
-    ch_roles: list[dict] = field(factory=list)
-    ch_users: list[dict] = field(factory=list)
-    ch_row_policies: list[dict] = field(factory=list)
-    ch_quotas: list[dict] = field(factory=list)
-    ch_settings_profiles: list[dict] = field(factory=list)
-    ch_grants: list[dict] = field(factory=list)
+    # Backend object keys contributed by plugins (pg_roles, ch_grants, and so on).
+    # Kept as a dict so core does not have to know each plugin's key list.
+    plugin_config: dict[str, Any] = field(factory=dict)
+
+    def __getattr__(self, name: str) -> Any:
+        # Lets consumers keep reading entry.pg_roles / entry.ch_grants. Only fires
+        # for attributes attrs did not define, and only answers for keys a plugin
+        # could own, so genuine typos still raise.
+        if name in PLUGIN_CONFIG_KEY_OWNERS:
+            return self.plugin_config.get(name, [])
+        raise AttributeError(name)
 
 
 @define(slots=False)

@@ -513,10 +513,10 @@ $ dbwarden status --database primary
 
 For multi-instance deployments where multiple application replicas could
 trigger migrations concurrently, DBWarden provides a Redis-backed
-distributed lock through `dbwarden.extensions.fastapi.lock`:
+distributed lock through `dbwarden_fastapi.lock`:
 
 ```python
-from dbwarden.extensions.fastapi import migration_lock
+from dbwarden_fastapi import migration_lock
 
 # Within a FastAPI route or lifespan:
 async with migration_lock() as locked:
@@ -556,7 +556,7 @@ migration context:
 ```python
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from dbwarden.extensions.fastapi import dbwarden_lifespan, migration_lock
+from dbwarden_fastapi import dbwarden_lifespan, migration_lock
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -565,7 +565,9 @@ async def lifespan(app: FastAPI):
             yield
 ```
 
-See also: [Safe Deployment](safe-deployment.md) | [CI/CD Patterns](ci-cd-patterns.md) | [`lock` commands](../commands/lock.md) | [FastAPI Lifespan](../fastapi/index.md)
+See also: [Safe Deployment](safe-deployment.md) | [CI/CD Patterns](ci-cd-patterns.md) | [`lock` commands](../commands/lock.md)
+
+The FastAPI lifespan helper lives in the `dbwarden-fastapi` plugin rather than core: [dbwarden-fastapi](https://github.com/dbwarden-org/dbwarden-fastapi).
 
 ========================================================================
 PAGE: https://dbwarden.emiliano-go.com/advanced/safe-deployment/
@@ -916,7 +918,14 @@ $ dbwarden [GLOBAL_OPTIONS] COMMAND [ARGS] [COMMAND_OPTIONS]
 |---|---|
 | `--dev` | Use `dev_database_url` and `dev_database_type` for selected database |
 | `--strict-translation` | Fail on unsupported/lossy dev SQLite translation |
+| `--debug` | Enable DEBUG-level logging (shows per-file model scanning on `make-migrations`) |
+| `--debug-level <LEVEL>` | Set an exact log level: `debug`, `info`, `warning`, `error`, `critical`, or `10`/`20`/`30`/`40`/`50` |
 | `--help` | Show help |
+
+`--debug`/`--debug-level` set the logging severity and compose with the
+per-command `--verbose`/`-v` flag, which controls INFO-level verbosity. Use both
+(`--debug` plus `-v`) for DEBUG diagnostics with verbose INFO output. If both
+`--debug` and `--debug-level` are given, `--debug-level` wins.
 
 ## Configuration
 
@@ -941,6 +950,8 @@ $ dbwarden database list
 ```bash
 $ dbwarden make-migrations "create users table" --database primary
 $ dbwarden make-migrations --verbose --database primary
+$ dbwarden --debug make-migrations --database primary
+$ dbwarden --debug-level warning make-migrations --database primary
 $ dbwarden make-migrations --plan --database primary
 $ dbwarden make-migrations --rename users.username:email --database primary
 $ dbwarden make-migrations --rename-table users:accounts --database primary
@@ -953,6 +964,7 @@ Options:
 - `--plan`: Print migration plan JSON without writing files
 - `--offline`: Use model state file instead of live database (run `export-models` first)
 - `--verbose`/`-v`: Verbose output
+- `--debug`/`--debug-level <LEVEL>`: Global options (see Global options table). DEBUG shows every model file scanned during discovery.
 - `--rename`: Repeatable. Declare a column rename in format `table.old_name:new_name`.
 - `--rename-table`: Repeatable. Declare a table rename in format `old_table:new_table`.
 - `--safe-type-change`: Multi-step safe type change strategy.
@@ -8274,6 +8286,7 @@ PAGE: https://dbwarden.emiliano-go.com/cookbook/07-seeds/
 
 - Completed [Section 3](03-apply-and-inspect.md) (migrations applied, tables exist)
 - `examples/core/` project
+- Seed plugin installed: `dbwarden plugin add dbwarden-seeds`
 
 ## Step 1: Define a Code Seed
 
@@ -8753,7 +8766,7 @@ The `primary` object is a `DatabaseHandle`. It exposes `primary.async_session` a
 ```python
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from dbwarden.extensions.fastapi import dbwarden_lifespan
+from dbwarden_fastapi import dbwarden_lifespan
 
 
 @asynccontextmanager
@@ -8806,7 +8819,7 @@ The session is automatically:
 ## Step 4: Health Endpoints
 
 ```python
-from dbwarden.extensions.fastapi import DBWardenHealthRouter
+from dbwarden_fastapi import DBWardenHealthRouter
 
 app.include_router(DBWardenHealthRouter(), prefix="/health")
 ```
@@ -8840,7 +8853,7 @@ Sample response:
 ## Step 5: Migration Endpoints
 
 ```python
-from dbwarden.extensions.fastapi import DBWardenRouter
+from dbwarden_fastapi import DBWardenRouter
 
 app.include_router(DBWardenRouter(), prefix="/db")
 ```
@@ -8857,7 +8870,7 @@ These endpoints are useful for management UIs or automated deployment tooling.
 ```python
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from dbwarden.extensions.fastapi import (
+from dbwarden_fastapi import (
     DBWardenHealthRouter,
     DBWardenRouter,
     dbwarden_lifespan,
@@ -8886,6 +8899,7 @@ app.include_router(DBWardenRouter(), prefix="/db")
 ```bash
 # Install dependencies
 uv add dbwarden sqlalchemy fastapi uvicorn asyncpg
+dbwarden plugin add dbwarden-fastapi
 
 # Start PostgreSQL
 docker run -d --name pg -e POSTGRES_USER=user \
@@ -8924,11 +8938,9 @@ curl http://localhost:8000/db/status
 
 ## Related Documentation
 
-- [FastAPI Integration Overview](../fastapi/index.md)
-- [FastAPI Tutorial: First Steps](../fastapi/tutorial/first-steps.md)
-- [FastAPI Tutorial: Complete Application](../fastapi/tutorial/complete-application.md)
-- [Session Dependency](../fastapi/tutorial/session-dependency.md)
-- [Health Endpoints](../fastapi/tutorial/health-endpoints.md)
+FastAPI support is not part of core. It ships as the `dbwarden-fastapi` plugin, which owns the session dependencies, health endpoints, migration routes, and metrics middleware shown above. Install it with `dbwarden plugin add dbwarden-fastapi`.
+
+Full reference and tutorials live in the plugin's repository: [dbwarden-fastapi](https://github.com/dbwarden-org/dbwarden-fastapi).
 
 ## Next
 
@@ -8948,7 +8960,7 @@ PAGE: https://dbwarden.emiliano-go.com/cookbook/10-auto-schemas/
 
 ## Prerequisites
 
-- `examples/auto-schema/` directory (no config file needed; `@auto_schema` works at model definition time)
+- `dbwarden-fastapi` plugin installed: `dbwarden plugin add dbwarden-fastapi`
 - `uv add dbwarden sqlalchemy`
 
 ## The Problem
@@ -8961,7 +8973,7 @@ DBWarden's `@auto_schema` eliminates this duplication by deriving Pydantic schem
 
 ```python
 from dbwarden.databases import TableMeta
-from dbwarden.databases import auto_schema
+from dbwarden_fastapi import auto_schema
 
 
 @auto_schema
@@ -9053,7 +9065,7 @@ All mapped columns, including those marked `public = False`.
 ## Step 4: Customizing Schema Generation
 
 ```python
-from dbwarden.databases import auto_schema, SchemaConfig
+from dbwarden_fastapi import auto_schema, SchemaConfig
 
 
 @auto_schema(config=SchemaConfig(
@@ -9120,6 +9132,7 @@ Install with metrics support:
 
 ```bash
 uv add "dbwarden[metrics]"
+dbwarden plugin add dbwarden-fastapi
 ```
 
 DBWarden exposes six Prometheus metric families:
@@ -9136,7 +9149,7 @@ DBWarden exposes six Prometheus metric families:
 ## Step 2: Add Metrics to FastAPI
 
 ```python
-from dbwarden.extensions.fastapi import MetricsMiddleware, MetricsRouter
+from dbwarden_fastapi import MetricsMiddleware, MetricsRouter
 
 # Middleware captures request duration and counts
 app.add_middleware(MetricsMiddleware)
@@ -9185,7 +9198,7 @@ JSON logs are easier to ingest into ELK, Datadog, or other log aggregators.
 ## Step 4: Query Tracing
 
 ```python
-from dbwarden.extensions.fastapi import QueryTracingMiddleware
+from dbwarden_fastapi import QueryTracingMiddleware
 
 app.add_middleware(QueryTracingMiddleware)
 ```
@@ -9204,7 +9217,7 @@ Useful for:
 ## Step 5: Pool Metrics Collector
 
 ```python
-from dbwarden.extensions.fastapi import PoolMetricsCollector
+from dbwarden_fastapi import PoolMetricsCollector
 ```
 
 This monitors SQLAlchemy connection pool health and exposes:
@@ -9219,7 +9232,7 @@ This monitors SQLAlchemy connection pool health and exposes:
 ```python
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from dbwarden.extensions.fastapi import (
+from dbwarden_fastapi import (
     DBWardenHealthRouter,
     dbwarden_lifespan,
     MetricsMiddleware,
@@ -9283,7 +9296,8 @@ In Grafana, add Prometheus data source (`http://prometheus:9090`) and create das
 ## Related Documentation
 
 - [Observability Guide](../observability.md)
-- [FastAPI Metrics](../fastapi/tutorial/first-steps.md) (see FastAPI tutorial)
+
+The FastAPI metrics middleware and routers are part of the `dbwarden-fastapi` plugin, documented in its own repository: [dbwarden-fastapi](https://github.com/dbwarden-org/dbwarden-fastapi).
 
 ========================================================================
 PAGE: https://dbwarden.emiliano-go.com/cookbook/
@@ -9302,7 +9316,7 @@ examples/
 ├── core/                 # Sections 1-7: progressive SQL workflow
 ├── multi-database/       # Section 8
 ├── fastapi-app/          # Section 9
-├── auto-schema/          # Section 10
+├── fastapi-app/          # Sections 9-10 (FastAPI + auto-schema examples)
 └── observability/        # Section 11
 ```
 
@@ -9319,7 +9333,7 @@ examples/
 | 7 | [Seeds](07-seeds.md) | `seed create/apply/rollback/list`, SQL seeds, `@seed_data` | `examples/core/` |
 | 8 | [Multi-Database](08-multi-database.md) | Multiple `database_config()`, PG + ClickHouse, `--all` flag | `examples/multi-database/` |
 | 9 | [FastAPI Integration](09-fastapi-integration.md) | Lifespan hooks, health endpoints, session DI, migration endpoints | `examples/fastapi-app/` |
-| 10 | [Auto Schemas](10-auto-schemas.md) | `@auto_schema`, `CreateSchema`, `UpdateSchema`, `PublicSchema` | `examples/auto-schema/` |
+| 10 | [Auto Schemas](10-auto-schemas.md) | `@auto_schema`, `CreateSchema`, `UpdateSchema`, `PublicSchema` (requires `dbwarden-fastapi` plugin) | `examples/fastapi-app/` |
 | 11 | [Observability](11-observability.md) | Prometheus metrics, structured logging, query tracing | `examples/observability/` |
 
 ## Quick Start (Core)
@@ -11760,172 +11774,6 @@ They contribute both the aggregating target model and the materialized view to
 the model list.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/clickhouse/clustering/
-========================================================================
-
-# Clustering
-
-## ON CLUSTER
-
-For cluster-wide DDL, set `cluster_mode` on the table or config:
-
-```python
-from dbwarden.databases.clickhouse import ClusterMode
-
-class Event(Base):
-    __tablename__ = "events"
-    id: Mapped[int] = mapped_column(primary_key=True)
-
-    class Meta(CHTableMeta):
-        ch = ch_table(
-            engine=replicated_merge_tree("/zk/table", "{replica}"),
-            order_by=["id"],
-            cluster_mode=ClusterMode.ON_CLUSTER,
-        )
-```
-
-Generated DDL:
-
-```sql
-CREATE TABLE events ON CLUSTER '{cluster}' (
-    id Int64
-) ENGINE = ReplicatedMergeTree('/zk/table', '{replica}')
-ORDER BY id
-```
-
-`ClusterMode.ON_CLUSTER` appends `ON CLUSTER '{cluster}'` to every DDL statement emitted for this object.
-
-## ClusterMode.REPLICATED
-
-```python
-class Meta(CHTableMeta):
-    ch = ch_table(
-        engine=replicated_merge_tree("/zk/table", "{replica}"),
-        cluster_mode=ClusterMode.REPLICATED,
-    )
-```
-
-This mode omits `ON CLUSTER`: the engine handles replication via ZK. DDL statements reference only the local node.
-
-Use `REPLICATED` when the database is already `Replicated`.
-
-## Additional model examples
-
-### ON CLUSTER with Distributed engine
-
-```python
-class LocalEvents(Base):
-    __tablename__ = "local_events"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    data: Mapped[str] = mapped_column()
-
-    class Meta(CHTableMeta):
-        ch = ch_table(
-            engine=replicated_merge_tree("/zk/events", "{replica}"),
-            order_by="id",
-            cluster_mode=ClusterMode.ON_CLUSTER,
-        )
-
-class GlobalEvents(Base):
-    __tablename__ = "global_events"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    data: Mapped[str] = mapped_column()
-
-    class Meta(CHTableMeta):
-        ch = ch_table(
-            engine=distributed_engine(
-                cluster="analytics_cluster",
-                database="analytics",
-                table="local_events",
-                sharding_key="id",
-            ),
-            cluster_mode=ClusterMode.ON_CLUSTER,
-        )
-```
-
-Generated DDL for `local_events`:
-
-```sql
-CREATE TABLE local_events ON CLUSTER '{cluster}' (
-    id Int64,
-    data String
-) ENGINE = ReplicatedMergeTree('/zk/events', '{replica}')
-ORDER BY id
-```
-
-Generated DDL for `global_events`:
-
-```sql
-CREATE TABLE global_events ON CLUSTER '{cluster}' (
-    id Int64,
-    data String
-) ENGINE = Distributed('analytics_cluster', 'analytics', 'local_events', id)
-```
-
-### REPLICATED mode with Replicated database
-
-```python
-# When the database itself is ENGINE = Replicated, use REPLICATED mode:
-class ReplicatedDBTable(Base):
-    __tablename__ = "replicated_db_table"
-    id: Mapped[int] = mapped_column()
-
-    class Meta(CHTableMeta):
-        ch = ch_table(
-            engine=merge_tree(),  # not ReplicatedMergeTree!
-            order_by="id",
-            cluster_mode=ClusterMode.REPLICATED,
-        )
-```
-
-DDL emits without `ON CLUSTER` because the database engine handles replication.
-
-### Toggle between modes
-
-```python
-# From ON_CLUSTER to REPLICATED (requires --force)
-class Meta(CHTableMeta):
-    ch = ch_table(
-        engine=replicated_merge_tree("/zk/t", "{replica}"),
-        order_by="id",
-        # cluster_mode=ClusterMode.ON_CLUSTER,  # old
-        cluster_mode=ClusterMode.REPLICATED,      # new
-    )
-```
-
-dbwarden classifies this as CRITICAL and requires `--force`.
-
-## Gap: Replicated database is extraction-only
-
-`CREATE DATABASE ... ENGINE = Replicated` is not declared by dbwarden. dbwarden operates *within* a database: it reads the database-level engine from the server's response during reverse-engineering but does not emit `CREATE DATABASE` statements.
-
-When the server database is `Replicated`, dbwarden detects this and uses the `REPLICATED` cluster mode behavior (no `ON CLUSTER`). This is automatic: no config key is needed.
-
-## What changes are allowed
-
-| Change | Safety |
-|--------|--------|
-| Toggle `ON_CLUSTER` ↔ `REPLICATED` | CRITICAL: changes DDL emission |
-| Change cluster name (config) | INFO |
-| ZK path change | CRITICAL: requires recreate |
-
-## Rollback behavior
-
-Cluster mode changes are structural: they affect all emitted DDL for the database and require careful migration planning. The rollback restores the previous cluster mode.
-
-## Config keys
-
-```python
-from dbwarden import database_config
-
-database_config(
-    name="analytics",
-    url="clickhouse://...",
-    ch_cluster="analytics_cluster",  # Config-wide cluster name
-)
-```
-
-========================================================================
 PAGE: https://dbwarden.emiliano-go.com/databases/clickhouse/columns-types/
 ========================================================================
 
@@ -12192,7 +12040,7 @@ Every operation has two paths:
 
 | Path | Purpose |
 |------|---------|
-| Builder (e.g., `ch_table()`, `ch_role_spec()`) | Primary. Provides type-checking, autocomplete, and validation. Covers 95% of use cases. |
+| Builder (e.g., `ch_table()`, `ChRoleSpec()`) | Primary. Provides type-checking, autocomplete, and validation. Covers 95% of use cases. |
 | Raw dict (e.g., `{"type": "MergeTree"}`) | Escape hatch. For infrequent or edge-case settings the builder doesn't expose. |
 
 Raw dicts are passed through without validation:
@@ -12557,46 +12405,41 @@ PAGE: https://dbwarden.emiliano-go.com/databases/clickhouse/dictionaries/
 
 ## Declaration
 
-Use `ch_dict_*` factory functions inside `CHTableMeta`:
+Dictionaries are declared with flat `ch_dict_*` attributes on `class Meta`, not with builder functions. Set `ch_dictionary = True` to mark the model as a dictionary:
 
 ```python
-from dbwarden.databases.clickhouse import ch, ch_dict, ch_dict_source
+from sqlalchemy.orm import Mapped, mapped_column
+from dbwarden.databases.clickhouse import CHTableMeta
 
 class CountryLookup(Base):
     __tablename__ = "country_lookup"
 
-    code: Mapped[str] = mapped_column()
+    code: Mapped[str] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column()
 
     class Meta(CHTableMeta):
-        ch = ch_table(
-            engine=dictionary_engine(),
-        )
+        ch_dictionary = True
+        ch_dict_primary_key = "code"
+        ch_dict_layout = "flat"
+        ch_dict_source = {
+            "clickhouse": {"query": "SELECT code, name FROM source_countries"},
+        }
+        ch_dict_lifetime = 300
 ```
 
-But dictionaries are declared via `ch_dict_spec()` or `ch_dict_*()` builders, not as a normal table. The table above becomes:
+The five recognised attributes are `ch_dictionary`, `ch_dict_primary_key`, `ch_dict_layout`, `ch_dict_source`, and `ch_dict_lifetime`. Because `CHTableMeta` is validated at import time, a misspelled attribute raises `DBWardenConfigError` when the module loads.
+
+There is also a `dictionary()` helper that builds a `DictSpec` directly, for code that constructs specs programmatically rather than declaring them on a model:
 
 ```python
-from dbwarden.databases.clickhouse import (
-    ch_dictionary, ch_dict_source,
-    ch_dict_layout, ch_dict_lifetime,
-)
+from dbwarden.databases.clickhouse import dictionary
 
-class Meta(CHTableMeta):
-    ch = ch_dictionary(
-        primary_key="code",
-        source=ch_dict_source(
-            type="clickhouse",
-            query="SELECT code, name FROM source_countries",
-            host="...",
-            port=9000,
-            user="...",
-            password="...",
-            db="source_db",
-        ),
-        layout=ch_dict_layout("flat"),
-        lifetime=ch_dict_lifetime(min=300, max=600),
-    )
+spec = dictionary(
+    layout="hashed",
+    source={"clickhouse": {"table": "dim_users"}},
+    lifetime=300,
+    primary_key="id",
+)
 ```
 
 ## Additional model examples
@@ -12611,16 +12454,16 @@ class MySQLCountry(Base):
     name: Mapped[str] = mapped_column()
 
     class Meta(CHTableMeta):
-        ch = ch_dictionary(
-            primary_key="code",
-            source=ch_dict_source(
-                type="mysql",
-                named_collection="mysql_dict",
-                query="SELECT iso_code, full_name FROM ref.countries",
-            ),
-            layout=ch_dict_layout("hashed"),
-            lifetime=ch_dict_lifetime(min=60, max=300),
-        )
+        ch_dictionary = True
+        ch_dict_primary_key = "code"
+        ch_dict_layout = "hashed"
+        ch_dict_source = {
+            "mysql": {
+                "named_collection": "mysql_dict",
+                "query": "SELECT iso_code, full_name FROM ref.countries",
+            },
+        }
+        ch_dict_lifetime = "MIN 60 MAX 300"
 ```
 
 ### HTTP-sourced dictionary with complex key
@@ -12633,16 +12476,16 @@ class CurrencyRate(Base):
     rate: Mapped[float] = mapped_column()
 
     class Meta(CHTableMeta):
-        ch = ch_dictionary(
-            primary_key="currency",
-            source=ch_dict_source(
-                type="http",
-                url="https://api.example.com/rates",
-                format="JSONEachRow",
-            ),
-            layout=ch_dict_layout("cache", size_in_cells=1000),
-            lifetime=ch_dict_lifetime(3600),
-        )
+        ch_dictionary = True
+        ch_dict_primary_key = "currency"
+        ch_dict_layout = "cache"
+        ch_dict_source = {
+            "http": {
+                "url": "https://api.example.com/rates",
+                "format": "JSONEachRow",
+            },
+        }
+        ch_dict_lifetime = 3600
 ```
 
 ### Range-hashed dictionary for time-based lookup
@@ -12655,15 +12498,15 @@ class TaxRate(Base):
     rate: Mapped[float] = mapped_column()
 
     class Meta(CHTableMeta):
-        ch = ch_dictionary(
-            primary_key=["region", "valid_from"],
-            source=ch_dict_source(
-                type="clickhouse",
-                query="SELECT region, valid_from, valid_to, rate FROM ref.tax_rates",
-            ),
-            layout=ch_dict_layout("range_hashed"),
-            lifetime=ch_dict_lifetime(86400),
-        )
+        ch_dictionary = True
+        ch_dict_primary_key = ["region", "valid_from"]
+        ch_dict_layout = "range_hashed"
+        ch_dict_source = {
+            "clickhouse": {
+                "query": "SELECT region, valid_from, valid_to, rate FROM ref.tax_rates",
+            },
+        }
+        ch_dict_lifetime = 86400
 ```
 
 Usage in queries:
@@ -12674,59 +12517,46 @@ SELECT dictGet('tax_rate', 'rate', ('CA', today()))
 
 ## Source types
 
-Supported sources and their factory:
+`ch_dict_source` is a dict keyed by source type, whose value carries that source's settings:
 
-| Source type | Factory |
-|-------------|---------|
-| ClickHouse | `ch_dict_source(type="clickhouse", ...)` |
-| MySQL | `ch_dict_source(type="mysql", ...)` |
-| PostgreSQL | `ch_dict_source(type="postgresql", ...)` |
-| MongoDB | `ch_dict_source(type="mongodb", ...)` |
-| HTTP(S) | `ch_dict_source(type="http", ...)` |
-| Local file | `ch_dict_source(type="file", ...)` |
-| Executable | `ch_dict_source(type="executable", ...)` |
+| Source type | `ch_dict_source` |
+|-------------|------------------|
+| ClickHouse | `{"clickhouse": {"query": "..."}}` |
+| MySQL | `{"mysql": {...}}` |
+| PostgreSQL | `{"postgresql": {...}}` |
+| MongoDB | `{"mongodb": {...}}` |
+| HTTP(S) | `{"http": {...}}` |
+| Local file | `{"file": {...}}` |
+| Executable | `{"executable": {...}}` |
 
-For connection secrets, always use a named collection:
+For connection secrets, reference a named collection rather than inlining credentials:
 
 ```python
-source=ch_dict_source(
-    type="clickhouse",
-    named_collection="clickhouse_dict_source",
-)
+ch_dict_source = {"clickhouse": {"named_collection": "clickhouse_dict_source"}}
 ```
 
 ## Layout types
 
-```python
-from dbwarden.databases.clickhouse import ch_dict_layout
-
-layout = ch_dict_layout("flat")                # One key, single value
-layout = ch_dict_layout("hashed")              # Hash table, all in memory
-layout = ch_dict_layout("sparse_hashed")       # Like hashed but sparse
-layout = ch_dict_layout("cache")               # LRU cache
-layout = ch_dict_layout("complex_key_hashed")  # Composite keys
-layout = ch_dict_layout("ip_trie")             # IP prefix matching
-layout = ch_dict_layout("direct")              # No caching
-layout = ch_dict_layout("range_hashed")        # Time ranges
-```
-
-Some layouts support additional parameters:
+`ch_dict_layout` is the layout name as a string:
 
 ```python
-layout = ch_dict_layout("cache", size_in_cells=50000)
-layout = ch_dict_layout("complex_key_cache", size_in_cells=100000)
+ch_dict_layout = "flat"                # One key, single value
+ch_dict_layout = "hashed"              # Hash table, all in memory
+ch_dict_layout = "sparse_hashed"       # Like hashed but sparse
+ch_dict_layout = "cache"               # LRU cache
+ch_dict_layout = "complex_key_hashed"  # Composite keys
+ch_dict_layout = "ip_trie"             # IP prefix matching
+ch_dict_layout = "direct"              # No caching
+ch_dict_layout = "range_hashed"        # Time ranges
 ```
 
 ## Lifetime
 
+`ch_dict_lifetime` accepts an integer for a fixed interval, or a string for ClickHouse's ranged form:
+
 ```python
-from dbwarden.databases.clickhouse import ch_dict_lifetime
-
-# Fixed interval
-lifetime = ch_dict_lifetime(300)
-
-# Ranged
-lifetime = ch_dict_lifetime(min=300, max=600)
+ch_dict_lifetime = 300              # Fixed interval, in seconds
+ch_dict_lifetime = "MIN 300 MAX 600"  # Ranged
 ```
 
 ## What changes are allowed
@@ -12754,11 +12584,11 @@ dbwarden supports 13 integration engines. Credentials use the [named-collections
 ## Kafka
 
 ```python
-from dbwarden.databases.clickhouse import kafka_engine
+from dbwarden.databases.clickhouse import kafka
 
 class Meta(CHTableMeta):
     ch = ch_table(
-        engine=kafka_engine(
+        engine=kafka(
             named_collection="kafka_prod",
             topic="events",
             format="JSONEachRow",
@@ -12805,11 +12635,11 @@ settings: KafkaSettings = {
 ## S3
 
 ```python
-from dbwarden.databases.clickhouse import s3_engine
+from dbwarden.databases.clickhouse import s3
 
 class Meta(CHTableMeta):
     ch = ch_table(
-        engine=s3_engine(
+        engine=s3(
             named_collection="s3_prod",
             pattern="events/*.parquet",
             format="Parquet",
@@ -12831,11 +12661,11 @@ Parameters:
 ## S3Queue
 
 ```python
-from dbwarden.databases.clickhouse import s3queue_engine
+from dbwarden.databases.clickhouse import s3_queue
 
 class Meta(CHTableMeta):
     ch = ch_table(
-        engine=s3queue_engine(
+        engine=s3_queue(
             named_collection="s3_prod",
             pattern="incoming/*.json",
             format="JSONEachRow",
@@ -12848,11 +12678,11 @@ class Meta(CHTableMeta):
 ## RabbitMQ
 
 ```python
-from dbwarden.databases.clickhouse import rabbitmq_engine
+from dbwarden.databases.clickhouse import rabbitmq
 
 class Meta(CHTableMeta):
     ch = ch_table(
-        engine=rabbitmq_engine(
+        engine=rabbitmq(
             named_collection="rabbit_prod",
             format="JSONEachRow",
         ),
@@ -12864,11 +12694,11 @@ class Meta(CHTableMeta):
 ## NATS
 
 ```python
-from dbwarden.databases.clickhouse import nats_engine
+from dbwarden.databases.clickhouse import nats
 
 class Meta(CHTableMeta):
     ch = ch_table(
-        engine=nats_engine(
+        engine=nats(
             named_collection="nats_prod",
             format="JSONEachRow",
         ),
@@ -12880,7 +12710,7 @@ class Meta(CHTableMeta):
 ## MySQL, PostgreSQL, MongoDB, Redis
 
 ```python
-from dbwarden.databases.clickhouse import mysql_engine, postgresql_engine, mongodb_engine, redis_engine
+from dbwarden.databases.clickhouse import mysql_engine, postgresql_engine, mongodb, redis
 
 # MySQL engine
 engine = mysql_engine(
@@ -12895,13 +12725,13 @@ engine = postgresql_engine(
 )
 
 # MongoDB engine
-engine = mongodb_engine(
+engine = mongodb(
     named_collection="mongo_prod",
     collection="source_collection",
 )
 
 # Redis engine
-engine = redis_engine(
+engine = redis(
     named_collection="redis_prod",
     key="prefix:*",
 )
@@ -12924,14 +12754,14 @@ named_collection(
     },
 )
 
-engine = kafka_engine(
+engine = kafka(
     named_collection="aws_prod",
     topic="events",
     format="JSONEachRow",
     group_name="ch_consumer",
 )
 
-engine2 = s3_engine(
+engine2 = s3(
     named_collection="aws_prod",
     pattern="data/*.parquet",
     format="Parquet",
@@ -12941,7 +12771,7 @@ engine2 = s3_engine(
 ### S3Queue with complex settings
 
 ```python
-engine = s3queue_engine(
+engine = s3_queue(
     named_collection="aws_prod",
     pattern="incoming/*.json",
     format="JSONEachRow",
@@ -13015,11 +12845,11 @@ class Meta(CHTableMeta):
 ## HDFS
 
 ```python
-from dbwarden.databases.clickhouse import hdfs_engine
+from dbwarden.databases.clickhouse import hdfs
 
 class Meta(CHTableMeta):
     ch = ch_table(
-        engine=hdfs_engine(
+        engine=hdfs(
             named_collection="hdfs_prod",
             format="Parquet",
         ),
@@ -13235,9 +13065,9 @@ These engines do not participate in `ORDER BY`: they are storage-format-specific
 
 ```python
 from dbwarden.databases.clickhouse import (
-    null_engine, memory_engine, merge_engine,
+    null, memory, merge,
     set_engine, join_engine, dictionary_engine,
-    log_engine, tinylog_engine, stripelog_engine,
+    log, tiny_log, stripe_log,
 )
 ```
 
@@ -13253,7 +13083,7 @@ class NullSink(Base):
 
     class Meta(CHTableMeta):
         ch = ch_table(
-            engine=null_engine(),
+            engine=null(),
         )
 
 class ViewFromSink(Base):
@@ -13281,7 +13111,7 @@ class AllEvents(Base):
 
     class Meta(CHTableMeta):
         ch = ch_table(
-            engine=merge_engine(
+            engine=merge(
                 source_database="analytics",
                 table_regex="events_202[0-9]_*",
             ),
@@ -13306,7 +13136,7 @@ The dictionary is declared separately via `ch_dictionary()`. See [Dictionaries](
 ## Null
 
 ```python
-engine = null_engine()
+engine = null()
 ```
 
 DDL: `ENGINE = Null`. Accepts any data and discards it. Used as the target of a materialized view that does its own aggregation.
@@ -13314,7 +13144,7 @@ DDL: `ENGINE = Null`. Accepts any data and discards it. Used as the target of a 
 ## Memory
 
 ```python
-engine = memory_engine()
+engine = memory()
 ```
 
 DDL: `ENGINE = Memory`. In-memory storage, lost on restart. Schema management only.
@@ -13322,7 +13152,7 @@ DDL: `ENGINE = Memory`. In-memory storage, lost on restart. Schema management on
 ## Merge
 
 ```python
-engine = merge_engine(
+engine = merge(
     source_database="analytics",
     table_regex="events_.*",
 )
@@ -13360,9 +13190,9 @@ DDL: `ENGINE = Dictionary(<dict_name>)`. References a [Dictionary](dictionaries.
 ## Log, TinyLog, StripeLog
 
 ```python
-engine = log_engine()
-engine = tinylog_engine()
-engine = stripelog_engine()
+engine = log()
+engine = tiny_log()
+engine = stripe_log()
 ```
 
 DDLs: `ENGINE = Log`, `TinyLog`, `StripeLog`. Append-only file-based storage. No ORDER BY, no parts merging. StripeLog is multithreaded on read; TinyLog is the simplest.
@@ -13518,6 +13348,24 @@ DBWarden treats ClickHouse as a first-class backend. Every natively supported fe
 
 **Before reading further:** ClickHouse's object model is fundamentally different from PostgreSQL. What is a `SET` in PG is often a `CREATE` commitment in CH. Read [Immutability](immutability.md) first.
 
+## Documentation Sections
+
+- [Immutability](immutability.md) : What can never change, and what forces a table recreate
+- [Conventions](conventions.md) : Canonicalization, defaults-as-absence, declare-only secrets, the two-door API
+- [Declaring Tables](declaring-tables.md) : The `ch_table()` builder, generated DDL, and legacy `ch_*` attrs
+- [Columns & Types](columns-types.md) : Column-level Meta, `ch.field()` options, type normalization
+- [MergeTree Engines](engines-mergetree.md) : Engine factories, `MergeTreeSettings`, allowed changes, rollback behavior
+- [Integration Engines](engines-integration.md) : Kafka, S3, S3Queue, RabbitMQ, NATS, and the other external sources
+- [Special Engines](engines-special.md) : Distributed, Buffer, Join, Set, Memory, Null, Merge, and the Log family
+- [Materialized Views](materialized-views.md) : The two MV shapes, refreshable MVs, `MODIFY QUERY` vs recreate
+- [Aggregating Views](aggregating-views.md) : `AggregatingMergeTree` views, target tables, populating
+- [Projections & Indexes](projections-indexes.md) : Projections, skip indexes, `MATERIALIZE` as a data operation
+- [Dictionaries](dictionaries.md) : Declaration, source types, layout types, lifetime
+- [Named Collections](named-collections.md) : Credential-bearing collections, declare-only by design (needs `dbwarden-ch-rbac`)
+- [RBAC](rbac.md) : Roles, users, row policies, quotas, settings profiles, grants (needs `dbwarden-ch-rbac`)
+- [Data Operations](data-operations.md) : Partition operations, mutations, `OPTIMIZE`, `POPULATE`
+- [Safety Classification](safety.md) : Classification levels, `--force`, and the recreate pipeline
+
 ## Quick-start
 
 Set up a table, a materialized view, and an aggregated table:
@@ -13638,8 +13486,6 @@ The canonicalizer has **zero version branching**: a single code path covers 24.3
 | | `storage != 'users.xml'` filter | Done |
 | | Drop gating (`--clickhouse-allow-drop-rbac`) | Done |
 | Named collections | Key-set diffed, values declare-only | Done |
-| Clustering | ON CLUSTER via ClusterMode.ON_CLUSTER | Done |
-| | ClusterMode.REPLICATED (emit-side: omit ON CLUSTER) | Done |
 | Class-based views | `ChView`, `MaterializedView`, `AggregatingView` mixin bases | Done |
 | | `CHViewMeta`: Meta class for view models | Done |
 | | `get_all_ch_views()`: view discovery | Done |
@@ -13668,6 +13514,8 @@ These are not gaps: they are deliberate boundaries, documented with reasoning so
 
 These are the **only** `database_config()` parameters for ClickHouse. Exact key shapes, documented because undocumented config keys are what assistants hallucinate.
 
+**Every key below requires the `dbwarden-ch-rbac` plugin:** `dbwarden plugin add dbwarden-ch-rbac`. The plugin owns both these config keys and the handlers that emit their DDL, so declaring them without it installed raises `DBWardenConfigError` at config load.
+
 ```python
 from dbwarden import database_config
 from dbwarden.databases.clickhouse import (
@@ -13677,8 +13525,9 @@ from dbwarden.databases.clickhouse import (
 )
 
 database_config(
-    name="analytics",
-    url="clickhouse://...",
+    database_name="analytics",
+    database_type="clickhouse",
+    database_url_sync="clickhouse://...",
     ch_named_collections=[...],       # list[NamedCollectionSpec | dict]
     ch_roles=[...],                   # list[ChRoleSpec | dict]
     ch_users=[...],                   # list[ChUserSpec | dict]
@@ -13785,8 +13634,9 @@ class ParsedEvents(MaterializedView):
 
 ```python
 database_config(
-    name="analytics",
-    url="clickhouse://localhost:9000",
+    database_name="analytics",
+    database_type="clickhouse",
+    database_url_sync="clickhouse://localhost:9000",
     ch_named_collections=[
         named_collection("ldap_auth", ldap_server="ldap.example.com"),
     ],
@@ -13890,16 +13740,6 @@ $ dbwarden make-migrations --plan --force -d analytics
 #   RENAME TABLE ...
 
 $ dbwarden migrate --force -d analytics
-```
-
-### Cluster-wide deployment
-
-```bash
-# Deploy to a cluster with 3 nodes
-$ dbwarden migrate -d analytics --cluster-mode on_cluster
-
-# Each DDL statement includes ON CLUSTER '{cluster}'
-# ClickHouse propagates to all nodes automatically
 ```
 
 ### Deploy RBAC changes
@@ -14182,6 +14022,8 @@ PAGE: https://dbwarden.emiliano-go.com/databases/clickhouse/named-collections/
 
 # Named collections
 
+**Requires the `dbwarden-ch-rbac` plugin:** `dbwarden plugin add dbwarden-ch-rbac`. The `ch_named_collection` object handler ships in that plugin, not in core.
+
 Named collections are the mechanism for declaring credentials without exposing secret values. They are declared in the config layer, referenced by name from engine and RBAC specs.
 
 ## Declaration
@@ -14191,8 +14033,9 @@ from dbwarden import database_config
 from dbwarden.databases.clickhouse import named_collection
 
 database_config(
-    name="analytics",
-    url="clickhouse://...",
+    database_name="analytics",
+    database_type="clickhouse",
+    database_url_sync="clickhouse://...",
     ch_named_collections=[
         named_collection(
             name="kafka_prod",
@@ -14254,7 +14097,7 @@ named_collection(
 Engine usage:
 
 ```python
-engine = kafka_engine(
+engine = kafka(
     named_collection="kafka_secure",
     topic="events",
     format="Avro",
@@ -14266,8 +14109,9 @@ engine = kafka_engine(
 
 ```python
 database_config(
-    name="analytics",
-    url="clickhouse://localhost:9000",
+    database_name="analytics",
+    database_type="clickhouse",
+    database_url_sync="clickhouse://localhost:9000",
     ch_named_collections=[
         {
             "name": "s3_data",
@@ -14283,7 +14127,7 @@ database_config(
 ## Reference from engines
 
 ```python
-engine = kafka_engine(
+engine = kafka(
     named_collection="kafka_prod",
     topic="events",
 )
@@ -14294,7 +14138,7 @@ The engine gets credentials from the named collection. The named collection is r
 ## Reference from RBAC
 
 ```python
-ch_user_spec(
+ChUserSpec(
     named_collection="ldap_prod",
     ...
 )
@@ -14326,18 +14170,16 @@ Both projections and secondary indexes are acceleration structures, declared ins
 ## Projections
 
 ```python
-from dbwarden.databases.clickhouse import ch_projection
+from dbwarden.databases.clickhouse import projection
 
 class Meta(CHTableMeta):
     ch = ch_table(
         engine=merge_tree(),
         order_by=["event_date", "id"],
         projections=[
-            ch_projection(
+            projection(
                 name="daily_agg",
-                select=["event_date", "count()", "sum(amount)"],
-                group_by=["event_date"],
-                order_by=["event_date"],
+                query="SELECT event_date, count(), sum(amount) GROUP BY event_date",
             ),
         ],
     )
@@ -14372,16 +14214,16 @@ ORDER BY (event_date, id)
 ## Skip indexes
 
 ```python
-from dbwarden.databases.clickhouse import ch_index
+from dbwarden.databases.clickhouse import skip_index
 
 class Meta(CHTableMeta):
     ch = ch_table(
         engine=merge_tree(),
         order_by=["event_date", "id"],
         indexes=[
-            ch_index(
+            skip_index(
                 name="payload_idx",
-                expression="payload",
+                columns=["payload"],
                 type="tokenbf_v1(1024, 3, 0)",
                 granularity=1,
             ),
@@ -14540,6 +14382,8 @@ PAGE: https://dbwarden.emiliano-go.com/databases/clickhouse/rbac/
 
 # RBAC (roles, users, policies, quotas, profiles, grants)
 
+**Requires the `dbwarden-ch-rbac` plugin:** `dbwarden plugin add dbwarden-ch-rbac`. The plugin owns both the `ch_*` RBAC config keys and the object handlers that emit their DDL. Core ships the spec dataclasses only, so declaring these keys without the plugin installed raises `DBWardenConfigError` when your `dbwarden.py` loads.
+
 All RBAC objects are declared in the config layer via `database_config()`.
 
 ## Config keys
@@ -14547,13 +14391,14 @@ All RBAC objects are declared in the config layer via `database_config()`.
 ```python
 from dbwarden import database_config
 from dbwarden.databases.clickhouse import (
-    ch_role_spec, ch_user_spec, ch_row_policy_spec,
-    ch_quota_spec, ch_settings_profile_spec, ch_grant_spec,
+    ChRoleSpec, ChUserSpec, ChRowPolicySpec,
+    ChQuotaSpec, ChSettingsProfileSpec, ChGrantSpec,
 )
 
 database_config(
-    name="analytics",
-    url="clickhouse://...",
+    database_name="analytics",
+    database_type="clickhouse",
+    database_url_sync="clickhouse://...",
     ch_roles=[...],
     ch_users=[...],
     ch_row_policies=[...],
@@ -14567,8 +14412,8 @@ database_config(
 
 ```python
 ch_roles=[
-    ch_role_spec(name="analyst"),
-    ch_role_spec(name="admin"),
+    ChRoleSpec(name="analyst"),
+    ChRoleSpec(name="admin"),
 ]
 ```
 
@@ -14585,7 +14430,7 @@ No diff beyond name: roles are identifiers.
 
 ```python
 ch_users=[
-    ch_user_spec(
+    ChUserSpec(
         name="alice",
         # Authentication: declare-only via named collection
         named_collection="ldap_prod",
@@ -14609,7 +14454,7 @@ SETTINGS max_memory_usage = 10000000000;
 
 ```python
 ch_row_policies=[
-    ch_row_policy_spec(
+    ChRowPolicySpec(
         name="analyst_filter",
         table="events",
         as_restriction="event_date >= '2024-01-01'",
@@ -14631,7 +14476,7 @@ TO analyst;
 
 ```python
 ch_quotas=[
-    ch_quota_spec(
+    ChQuotaSpec(
         name="monthly_reads",
         interval={"month": [1000000, 0, 0]},
     ),
@@ -14651,7 +14496,7 @@ TO analyst;
 
 ```python
 ch_settings_profiles=[
-    ch_settings_profile_spec(
+    ChSettingsProfileSpec(
         name="strict",
         settings={"max_memory_usage": 10000000000},
         constraints={"max_memory_usage": "READONLY"},
@@ -14670,7 +14515,7 @@ SETTINGS max_memory_usage = 10000000000 CONSTRAINED READONLY;
 
 ```python
 ch_grants=[
-    ch_grant_spec(
+    ChGrantSpec(
         privileges=["SELECT", "INSERT"],
         on="analytics.events",
         to="analyst",
@@ -14690,18 +14535,19 @@ GRANT SELECT, INSERT ON analytics.events TO analyst;
 
 ```python
 database_config(
-    name="analytics",
-    url="clickhouse://localhost:9000",
+    database_name="analytics",
+    database_type="clickhouse",
+    database_url_sync="clickhouse://localhost:9000",
     ch_named_collections=[
         named_collection("ldap_corp", keys={"ldap_server": "ldap.corp.example.com"}),
     ],
     ch_roles=[
-        ch_role_spec("readonly"),
-        ch_role_spec("analyst"),
-        ch_role_spec("admin"),
+        ChRoleSpec("readonly"),
+        ChRoleSpec("analyst"),
+        ChRoleSpec("admin"),
     ],
     ch_settings_profiles=[
-        ch_settings_profile_spec(
+        ChSettingsProfileSpec(
             name="strict_read",
             settings={
                 "max_memory_usage": 5000000000,
@@ -14714,13 +14560,13 @@ database_config(
         ),
     ],
     ch_users=[
-        ch_user_spec(
+        ChUserSpec(
             name="alice",
             named_collection="ldap_corp",
             default_role="analyst",
             settings_profile="strict_read",
         ),
-        ch_user_spec(
+        ChUserSpec(
             name="bob",
             identified_by="sha256_password",
             password="changeme",  # declare-only: not diffed after creation
@@ -14728,22 +14574,22 @@ database_config(
         ),
     ],
     ch_row_policies=[
-        ch_row_policy_spec(
+        ChRowPolicySpec(
             name="analyst_filter",
             table="analytics.events",
             as_restriction="event_date >= '2024-01-01'",
         ),
     ],
     ch_quotas=[
-        ch_quota_spec(
+        ChQuotaSpec(
             name="monthly_cap",
             interval={"month": [100000, 0, 0]},
         ),
     ],
     ch_grants=[
-        ch_grant_spec(privileges=["SELECT"], on="analytics.*", to="readonly"),
-        ch_grant_spec(privileges=["SELECT", "INSERT"], on="analytics.*", to="analyst"),
-        ch_grant_spec(privileges=["ALL"], on="analytics.*", to="admin"),
+        ChGrantSpec(privileges=["SELECT"], on="analytics.*", to="readonly"),
+        ChGrantSpec(privileges=["SELECT", "INSERT"], on="analytics.*", to="analyst"),
+        ChGrantSpec(privileges=["ALL"], on="analytics.*", to="admin"),
     ],
 )
 ```
@@ -14752,8 +14598,9 @@ database_config(
 
 ```python
 database_config(
-    name="analytics",
-    url="clickhouse://localhost:9000",
+    database_name="analytics",
+    database_type="clickhouse",
+    database_url_sync="clickhouse://localhost:9000",
     ch_roles=[{"name": "analyst"}, {"name": "engineer"}],
     ch_users=[{
         "name": "carol",
@@ -15348,7 +15195,7 @@ class User(Base):
 | Attribute | Type | SQL |
 |-----------|------|-----|
 | `comment` | `str` | `MODIFY COLUMN ... COMMENT '...'` |
-| `public` | `bool` | Controls field visibility in schemap auto-schema |
+| `public` | `bool` | Controls field visibility in `@auto_schema` (requires `dbwarden-fastapi` plugin) |
 | `my` | `MyFieldSpec` | MySQL-specific column options (see table below) |
 
 MySQL-specific `MyFieldSpec` fields (set via `my.field(...)`):
@@ -15641,6 +15488,17 @@ PAGE: https://dbwarden.emiliano-go.com/databases/postgresql/config-keys/
 # Config Keys
 
 PostgreSQL features are configured through keys in your `database_config(...)` call. These keys live alongside the connection URL and model paths.
+
+**Most of these keys are contributed by plugins.** The plugin owns both the config key and the object handler that emits its DDL. Declaring a key whose plugin is not installed raises `DBWardenConfigError` when your `dbwarden.py` loads, naming the plugin to install. Keys that no plugin owns are rejected as unknown arguments, so typos fail immediately instead of being silently ignored.
+
+| Config key | Required plugin |
+|---|---|
+| `pg_roles`, `pg_default_privileges` | `dbwarden-pgsql-rbac` |
+| `pg_domains`, `pg_sequences`, `pg_composite_types` | `dbwarden-pgsql-types` |
+| `pg_extensions`, `pg_functions`, `pg_triggers`, `pg_event_triggers`, `pg_extended_statistics` | `dbwarden-pgsql-extensions` |
+| `pg_schema`, `pg_migration_lock_timeout` | None, core |
+
+Install with `dbwarden plugin add <name>`.
 
 ```python
 primary = database_config(
@@ -16626,6 +16484,8 @@ PAGE: https://dbwarden.emiliano-go.com/databases/postgresql/event-triggers/
 
 # Event Triggers
 
+**Requires the `dbwarden-pgsql-extensions` plugin:** `dbwarden plugin add dbwarden-pgsql-extensions`. The `event_trigger` object handler ships in that plugin, not in core.
+
 **Handler**: `EventTriggerHandler` (PREAMBLE phase, config-driven)
 
 Event triggers fire on database-level DDL events. They are scoped to the entire database cluster (not per-schema).
@@ -16731,6 +16591,8 @@ PAGE: https://dbwarden.emiliano-go.com/databases/postgresql/extended-statistics/
 
 # Extended Statistics
 
+**Requires the `dbwarden-pgsql-extensions` plugin:** `dbwarden plugin add dbwarden-pgsql-extensions`. The `extended_statistics` object handler ships in that plugin, not in core.
+
 **Handler**: `ExtendedStatisticsHandler` (PREAMBLE phase, config-driven, PG 14+)
 
 Extended statistics give the query planner better estimates for correlated columns.
@@ -16776,10 +16638,10 @@ Values range from `-1` (use system default, typically 100) to `10000`.
 
 ### ANALYZE Requirements
 
-`CREATE STATISTICS` defines the statistics object but does not populate it. Run `ANALYZE` on the table to collect the first statistics sample:
+`CREATE STATISTICS` defines the statistics object but does not populate it. Run `ANALYZE` on the table against the database directly to collect the first statistics sample:
 
-```bash
-$ dbwarden analyze -d primary  # If available via handler
+```sql
+ANALYZE users;
 ```
 
 ## Examples
@@ -16828,6 +16690,8 @@ PAGE: https://dbwarden.emiliano-go.com/databases/postgresql/functions-and-trigge
 ========================================================================
 
 # Functions & Triggers
+
+**Requires the `dbwarden-pgsql-extensions` plugin:** `dbwarden plugin add dbwarden-pgsql-extensions`. The plugin owns the `pg_functions` and `pg_triggers` config keys and their object handlers, so declaring them without it installed raises `DBWardenConfigError` at config load.
 
 Functions and triggers are **config-driven** objects processed during the PREAMBLE phase (before table diffing). They are declared in `database_config(...)`.
 
@@ -17115,6 +16979,8 @@ PAGE: https://dbwarden.emiliano-go.com/databases/postgresql/grants-and-roles/
 ========================================================================
 
 # Grants & Roles
+
+**Requires the `dbwarden-pgsql-rbac` plugin:** `dbwarden plugin add dbwarden-pgsql-rbac`. The plugin owns the `pg_roles` and `pg_default_privileges` config keys along with the handlers described below, so declaring them without it installed raises `DBWardenConfigError` at config load.
 
 Grants are handled by `GrantsHandler` (DIFF phase). Roles are handled by `RoleHandler` (PREAMBLE phase). Default privileges are handled by `DefaultPrivilegesHandler` (PREAMBLE phase).
 
@@ -17944,6 +17810,8 @@ PAGE: https://dbwarden.emiliano-go.com/databases/postgresql/rls-and-policies/
 
 # RLS & Policies
 
+**Requires the `dbwarden-pgsql-rbac` plugin:** `dbwarden plugin add dbwarden-pgsql-rbac`. The policies handler ships in that plugin, not in core.
+
 **Handler**: `PoliciesHandler` (DIFF phase)
 
 Row-Level Security and policies are model-derived, declared on `PGTableMeta`.
@@ -18187,7 +18055,7 @@ PostgreSQL creates a `pg_temp_*` schema for temporary tables. Temporary tables t
 
 ## Extensions
 
-Extensions are created during the PREAMBLE phase via `pg_extensions`:
+Extensions are created during the PREAMBLE phase via `pg_extensions`, which requires the `dbwarden-pgsql-extensions` plugin (`dbwarden plugin add dbwarden-pgsql-extensions`). Without it, the key raises `DBWardenConfigError` at config load.
 
 ```python
 pg_extensions=["uuid-ossp", "pgcrypto"]
@@ -18204,6 +18072,8 @@ PAGE: https://dbwarden.emiliano-go.com/databases/postgresql/sequences/
 ========================================================================
 
 # Sequences
+
+**Requires the `dbwarden-pgsql-types` plugin:** `dbwarden plugin add dbwarden-pgsql-types`. The `sequence` object handler ships in that plugin, not in core.
 
 **Handler**: `SequenceHandler` (PREAMBLE phase, config-driven)
 
@@ -18346,6 +18216,8 @@ PAGE: https://dbwarden.emiliano-go.com/databases/postgresql/storage-params/
 ========================================================================
 
 # Storage Parameters
+
+**Table storage parameters require the `dbwarden-pgsql-extensions` plugin:** `dbwarden plugin add dbwarden-pgsql-extensions`. The `storage_params` object handler ships in that plugin. Index-level storage parameters are part of core index handling and need no plugin.
 
 PostgreSQL supports table-level and index-level storage parameters that control physical storage behaviour, autovacuum tuning, and performance characteristics.
 
@@ -18864,6 +18736,8 @@ PAGE: https://dbwarden.emiliano-go.com/databases/postgresql/types/
 
 # Types
 
+**Requires the `dbwarden-pgsql-types` plugin:** `dbwarden plugin add dbwarden-pgsql-types`. The `enum`, `domain`, and `composite_type` object handlers ship in that plugin, not in core.
+
 DBWarden supports three object-level type families: enums, domains, and composite types. Enums are model-derived (auto-discovered from table columns). Domains and composite types are config-driven.
 
 ## Enums
@@ -19208,7 +19082,7 @@ Indexes on materialized views are created via `pg_indexes` on `PGTableMeta` (not
 
 ## INSTEAD OF Triggers
 
-For complex views that need to support INSERT/UPDATE/DELETE, use `INSTEAD OF` triggers:
+For complex views that need to support INSERT/UPDATE/DELETE, use `INSTEAD OF` triggers. `pg_triggers` requires the `dbwarden-pgsql-extensions` plugin (`dbwarden plugin add dbwarden-pgsql-extensions`).
 
 ```python
 pg_triggers=[{
@@ -19913,6 +19787,8 @@ Created migration: migrations/primary/primary__0001_create_core_tables.sql
 
 DBWarden compares your current models against the live schema, or snapshot state, and writes a new SQL migration file.
 
+The `make-migrations` and `migrate` command names deliberately mirror Django's `makemigrations` and `migrate`, so the generate-then-apply loop is familiar if you have used Django. The rest of the CLI follows its own conventions.
+
 ## Review the Generated SQL
 
 Open the new file. It will look roughly like this:
@@ -20205,6 +20081,142 @@ Use status to confirm pending/applied counts and history to confirm execution or
 - [Developing Locally](developing-locally.md)
 
 ========================================================================
+PAGE: https://dbwarden.emiliano-go.com/getting-started/migrating-from-alembic/
+========================================================================
+
+# Migrating from Alembic
+
+This guide is for teams with an existing Alembic setup who want to switch to DBWarden. The migration is low-risk by design: your SQLAlchemy models stay exactly where they are, your database is never rebuilt, and your Alembic history remains in git. You are replacing the migration workflow, not the schema.
+
+If you are evaluating rather than migrating, read [Why DBWarden](../index.md#why-dbwarden) first. The short version: Alembic maintains schema truth in a chain of revision scripts, DBWarden maintains it in your models and derives plain SQL migrations from them.
+
+## Concept mapping
+
+Every Alembic concept has a DBWarden counterpart. This table is the mental model for the whole guide.
+
+| Alembic | DBWarden |
+|---|---|
+| `alembic.ini` + `env.py` | `dbwarden.py` config file |
+| Revision script (`.py`) | Migration file (`.sql`) with `-- upgrade` / `-- rollback` sections |
+| Revision chain as source of truth | SQLAlchemy models as source of truth |
+| `alembic revision --autogenerate` | `dbwarden make-migrations "description"` |
+| `alembic upgrade head` | `dbwarden migrate` |
+| `alembic downgrade -1` | `dbwarden rollback` |
+| `alembic stamp <rev>` | `dbwarden migrate --baseline` |
+| `alembic current` | `dbwarden status` |
+| `alembic history` | `dbwarden history` |
+| `alembic upgrade head --sql` (offline mode) | `dbwarden make-migrations --sql`, or full offline generation via `export-models` + `--offline` |
+| `alembic_version` table | DBWarden migration table |
+| Hand-written revision | `dbwarden new "description"` (manual SQL migration) |
+
+Two Alembic features have no direct equivalent, and you should know that before starting:
+
+- **Python data migrations.** Alembic revisions can run arbitrary Python. DBWarden manual migrations (`dbwarden new`) are SQL. Most backfills express well in SQL; if yours do not, plan for how you will run them (application scripts, one-off jobs) before switching.
+- **Revision branching and merging.** DBWarden uses a linear versioned sequence per database. If your team relies on `alembic merge` workflows, the linear model is a real change to your process.
+
+## Prerequisites
+
+- Python 3.12+ and SQLAlchemy 2.0+
+- A database whose schema currently matches your models (run your pending Alembic migrations first, and resolve any drift)
+- Your SQLAlchemy models importable from the project
+
+## Step 1: Install and configure
+
+```bash
+uv add dbwarden
+```
+
+Create `dbwarden.py` in your project root. This replaces `alembic.ini` and `env.py`:
+
+```python
+from dbwarden import database_config
+
+primary = database_config(
+    database_name="primary",
+    default=True,
+    database_type="postgresql",
+    database_url_sync="postgresql://user:pass@localhost:5432/myapp",
+    database_url_async="postgresql+asyncpg://user:pass@localhost:5432/myapp",
+)
+```
+
+Model discovery is automatic. If you want explicit control over which modules are scanned, pass `model_paths`. See [Setup](setup.md) and [Model Discovery](../configuration/model-discovery.md).
+
+Then initialize:
+
+```bash
+dbwarden init
+```
+
+## Step 2: Generate the baseline migration
+
+Your first `make-migrations` run has no prior DBWarden state, so it generates the full schema from your models:
+
+```bash
+dbwarden make-migrations "baseline from alembic"
+```
+
+Review the generated `.sql` file. It should describe the schema you already have. If something looks wrong here, your models and your database disagree, and it is far better to learn that now than later. Fix the models (or the database) and regenerate before continuing.
+
+## Step 3: Baseline the existing database
+
+Your database already has the schema, so the baseline migration must be recorded as applied without executing:
+
+```bash
+dbwarden migrate --baseline
+```
+
+This marks the migration as applied in DBWarden's migration table. Nothing runs against the database. This is the equivalent of `alembic stamp head` for a fresh setup.
+
+## Step 4: Verify convergence
+
+```bash
+dbwarden status
+dbwarden check
+dbwarden diff
+```
+
+`status` should show no pending migrations. `diff` compares your models against the live database and should report no differences. If `diff` is clean, DBWarden and reality agree, and the migration is effectively done.
+
+For extra confidence, make a trivial model change (add a nullable column), run `dbwarden make-migrations`, inspect the generated SQL and its rollback, then revert the change and delete the generated file. That exercise shows you the full loop before you rely on it.
+
+## Step 5 (optional): Set up offline generation for CI
+
+If your CI previously needed a database service for `alembic revision --autogenerate` checks, you can drop it entirely:
+
+```bash
+dbwarden export-models --database primary
+git add .dbwarden/model_state.primary.json
+```
+
+The state file is named after the database, so a database called `primary` produces `.dbwarden/model_state.primary.json`.
+
+From then on, any machine can generate migrations without a database connection:
+
+```bash
+dbwarden make-migrations "description" --offline
+```
+
+See [Cookbook: Offline & CI](../cookbook/04-offline-ci.md). Do not delete the model state file; it is the offline source of truth. If it is ever lost, restore it from git or regenerate with `export-models`.
+
+## Step 6: Retire Alembic
+
+Once you trust the new workflow:
+
+- Remove `alembic.ini`, `env.py`, and the `versions/` directory from the active workflow. They stay in git history, which is where migration archaeology belongs.
+- Remove `alembic` from your dependencies and any `alembic upgrade head` calls from deploy scripts, replacing them with `dbwarden migrate`.
+- The `alembic_version` table in your database is inert. Drop it when convenient, or leave it; DBWarden does not touch it.
+
+If you prefer a transition period, both tools can coexist: they track state in separate tables. Generate the same change with both and compare the SQL until you are confident. Keep the overlap short, since two sources of truth defeats the point.
+
+## Workflow changes to communicate to your team
+
+- **Renames are explicit.** Where autogenerate guessed (usually as drop-and-create), DBWarden requires `--rename table.old:new` or `--rename-table old:new`. A rename never becomes silent data loss, but your team must know the flags exist.
+- **Rollback is a contract.** Generated migrations include an executable `-- rollback` section, and placeholder rollbacks are refused. Irreversible changes must be declared with `-- dbwarden: irreversible`. See [Rollback Generation](../correctness/rollback-generation.md).
+- **Table metadata moves into `class Meta`.** Comments, advanced indexes, and backend-specific options that previously lived in revision scripts or raw SQL are declared on the model. See [Modeling](modeling.md).
+- **Destructive changes can be checked first.** `dbwarden check-impact` reports which code still references a column or table you are about to drop. Make it part of review for destructive migrations.
+
+========================================================================
 PAGE: https://dbwarden.emiliano-go.com/getting-started/modeling/
 ========================================================================
 
@@ -20220,6 +20232,8 @@ DBWarden discovers models in the directories specified by `model_paths` in your 
 2. **`class Meta` inner class**: backend-specific options like engine specs, partitioning, codecs
 
 All backend-specific metadata uses the `class Meta` pattern. The `__table_args__` approach is not supported for PostgreSQL metadata. Using `mapped_column(info=...)` for backend-specific options raises `DBWardenConfigError`.
+
+The `class Meta` convention is borrowed from Django's model metadata, so the pattern should read as familiar if you have used Django. DBWarden's version is typed and validated at import time: unknown attributes raise `DBWardenConfigError` when the module loads rather than producing incorrect DDL later.
 
 ## Common Meta Attributes
 
@@ -20367,10 +20381,14 @@ Use `@auto_schema` to generate four Pydantic schema classes on your model:
 | `Model.UpdateSchema` | All fields optional |
 | `Model.PublicSchema` | Excludes fields where `public=False` or name starts with `_` |
 
+Requires the `dbwarden-fastapi` plugin:
+
+```bash
+dbwarden plugin add dbwarden-fastapi
+```
+
 ```python
-from sqlalchemy import Integer, String
-from sqlalchemy.orm import Mapped, mapped_column
-from dbwarden.databases import auto_schema
+from dbwarden_fastapi import auto_schema
 
 @auto_schema
 class User(Base):
@@ -20397,7 +20415,7 @@ The decorator reads `class Meta` to infer `SchemaConfig`, then calls `schemap` t
 To customize schema generation, pass a `SchemaConfig` explicitly:
 
 ```python
-from dbwarden.databases import auto_schema, SchemaConfig
+from dbwarden_fastapi import auto_schema, SchemaConfig
 
 @auto_schema(config=SchemaConfig(exclude_public=["internal_note"]))
 class Order(Base):
@@ -20433,7 +20451,7 @@ For these cases run `dbwarden new` and write the SQL by hand, or use the relevan
 - **Review generated migrations**: always read the `.sql` file before running `dbwarden migrate`.
 - **Use `--dev` for local development**: configure a `dev_database_url` (SQLite works well) and use `dbwarden --dev` to iterate quickly without touching your real database.
 - **Keep Meta classes minimal**: only set attributes that differ from the default. Default values are omitted from generated migrations, reducing noise.
-- **Use `@auto_schema` for API projects**: generates Pydantic schemas from your model annotations. Fields with `public=False` or a leading `_` are excluded from `PublicSchema`.
+- **Use `@auto_schema` for API projects** (requires `dbwarden-fastapi` plugin): generates Pydantic schemas from your model annotations. Fields with `public=False` or a leading `_` are excluded from `PublicSchema`.
 
 See also: [Cookbook: Models & Migrations](../cookbook/02-models-and-migrations.md)
 
@@ -20797,7 +20815,7 @@ PAGE: https://dbwarden.emiliano-go.com/glossary/
 ## A
 
 **Auto Schema**
-: A feature that generates Pydantic schemas from SQLAlchemy model annotations using `@auto_schema`, eliminating duplication between ORM and API layers in FastAPI applications.
+: A feature that generates Pydantic schemas from SQLAlchemy model annotations using `@auto_schema` (from the `dbwarden-fastapi` plugin), eliminating duplication between ORM and API layers in FastAPI applications.
 
 ## B
 
@@ -20891,7 +20909,7 @@ PAGE: https://dbwarden.emiliano-go.com/glossary/
 ## P
 
 **Pydantic Schema (auto-generated)**
-: Request/response schemas automatically generated from SQLAlchemy model annotations using `@auto_schema`, keeping API contracts in sync with database models.
+: Request/response schemas automatically generated from SQLAlchemy model annotations using `@auto_schema` (from the `dbwarden-fastapi` plugin), keeping API contracts in sync with database models.
 
 ## R
 
@@ -20979,7 +20997,7 @@ PAGE: https://dbwarden.emiliano-go.com/
 
 ---
 
-DBWarden is a database migration and schema management tool for SQLAlchemy. You define your schema in Python (in your SQLAlchemy models) and DBWarden derives everything else: migration SQL, rollbacks, snapshots, safety checks, and seed lifecycle.
+DBWarden is a declarative database migration and schema management tool for SQLAlchemy. You declare the schema you want in your SQLAlchemy models, and DBWarden derives everything else: migration SQL, rollbacks, snapshots, and safety checks.
 
 There are no migration scripts to write or maintain. There is no migration runtime. Your models are the contract. The database is kept in sync with them.
 
@@ -20989,7 +21007,7 @@ There are no migration scripts to write or maintain. There is no migration runti
 - Supports PostgreSQL, MySQL, MariaDB, SQLite, and ClickHouse
 - Uses a registry driven PostgreSQL pipeline for diffs and SQL emission
 - Manages one or many databases from one typed config source
-- Adds safety tooling, schema diffing, seed tracking, and status commands
+- Adds safety tooling, schema diffing, and status commands
 
 - Migrations generated from your models, not written by hand
 - Plain SQL output: reviewable, committable, executable anywhere
@@ -20999,12 +21017,14 @@ There are no migration scripts to write or maintain. There is no migration runti
 - Schema snapshots for deterministic diffs and rename detection
 - Typed `class Meta` system with import-time validation
 - Multi-database support: PostgreSQL, MySQL, ClickHouse, MariaDB, SQLite
-- Versioned seed lifecycle with checksum drift detection
+- Extensible plugin system with official plugins for seeds, RBAC, FastAPI, sandbox testing, and PostgreSQL/ClickHouse extensions
 - Reverse-engineer live databases into models with `generate-models`
 
 ## Why DBWarden
 
-Most migration tools ask you to maintain two representations of your schema: your ORM models and your migration files. When they drift, you find out at deploy time.
+Schema management tools fall into two camps. Imperative tools have you author *changes*: revision scripts that describe how to get from one schema version to the next. Declarative tools have you author the *desired state* and derive the changes for you. DBWarden is declarative: your SQLAlchemy models are the single definition of what the schema should be.
+
+Most imperative tools ask you to maintain two representations of your schema: your ORM models and your migration files. When they drift, you find out at deploy time.
 
 DBWarden eliminates the second representation. Your SQLAlchemy models are the schema definition. DBWarden reads them, diffs them against the current database state, and generates the SQL to close the gap (including rollback) without you writing a line of migration code.
 
@@ -21015,7 +21035,9 @@ This also means:
 - No schema drift discovered in production: drift is caught at `make-migrations` time
 - Migrations that can be generated in CI without a database connection
 
-DBWarden is not a wrapper around Alembic. It is a different approach to the same problem: Alembic asks you to describe *how* to change the database; DBWarden asks you to describe *what* the schema should be.
+DBWarden is not a wrapper around Alembic. It is a different approach to the same problem. Alembic asks you to describe *how* to change the database; DBWarden asks you to describe *what* the schema should be. Alembic can autogenerate revisions, but each one becomes an imperative Python artifact you own, edit, and chain — the revision history is the source of truth. With DBWarden the models stay the source of truth, and the output is plain SQL.
+
+Unlike tools that apply declarative diffs directly to the database, DBWarden still produces versioned, reviewable migration files with explicit rollbacks: declarative authoring without giving up auditable deploy artifacts.
 
 ## From zero to production
 
@@ -21281,32 +21303,6 @@ Schema layer is complete with `MdbTableMeta` / `MdbColumnMeta` and `mdb.field()`
 
 ---
 
-## Seed lifecycle
-
-DBWarden manages versioned database seeds alongside migrations. Seeds are defined as Python classes and applied with checksum drift detection.
-
-```python
-from dbwarden import Seed
-
-class CountrySeed(Seed):
-    __seed_database__ = "primary"
-    rows = [
-        Country(code="US", name="United States"),
-        Country(code="UY", name="Uruguay"),
-    ]
-```
-
-Rows take model instances: full IDE autocomplete on every field. Versions are assigned automatically by class order, no manual numbering.
-
-Conflict resolution, auto-apply after `dbwarden migrate`, and SQL export for stateless production deployment are all supported.
-
-```bash
-dbwarden seed export   # renders seeds as plain SQL for stateless deploy
-dbwarden seed list     # shows applied seeds and checksum status
-```
-
----
-
 ## Developer experience
 
 **Dev mode**: Run SQLite locally against a PostgreSQL production schema with automatic SQL translation.
@@ -21321,19 +21317,38 @@ dbwarden seed list     # shows applied seeds and checksum status
 
 ---
 
+## Official plugins
+
+DBWarden features a plugin system with three trust tiers (official, verified, community). Official plugins extend core with features that were previously built-in, now maintained independently:
+
+| Plugin | PyPI | Purpose |
+|---|---|---|
+| `dbwarden-ch-rbac` | [`dbwarden-ch-rbac`](https://pypi.org/p/dbwarden-ch-rbac) | ClickHouse RBAC: roles, users, grants, row policies, quotas, settings profiles |
+| `dbwarden-fastapi` | [`dbwarden-fastapi`](https://pypi.org/p/dbwarden-fastapi) | FastAPI session dependencies, health endpoints, migration routes |
+| `dbwarden-pgsql-extensions` | [`dbwarden-pgsql-extensions`](https://pypi.org/p/dbwarden-pgsql-extensions) | PostgreSQL extensions, event triggers, functions, triggers, storage parameters |
+| `dbwarden-pgsql-rbac` | [`dbwarden-pgsql-rbac`](https://pypi.org/p/dbwarden-pgsql-rbac) | PostgreSQL RBAC: roles, grants, default privileges, policies |
+| `dbwarden-pgsql-types` | [`dbwarden-pgsql-types`](https://pypi.org/p/dbwarden-pgsql-types) | PostgreSQL custom types: ENUMs, domains, composite types, sequences |
+| `dbwarden-sandbox` | [`dbwarden-sandbox`](https://pypi.org/p/dbwarden-sandbox) | Testcontainers sandbox providers for safe migration replay |
+| `dbwarden-seeds` | [`dbwarden-seeds`](https://pypi.org/p/dbwarden-seeds) | Seed data management with code seeds and file-based SQL/Python seeds |
+
+See the [plugin documentation](plugins/) for installation, development guides, and the full Verified standard.
+
+---
+
 ## License
 
 MIT
 
 ---
 
-DBWarden is built for teams that want explicit, reviewable, reproducible database changes, derived from the models they already maintain, not from migration scripts they have to write.
+DBWarden is built for teams that want declarative, reviewable, reproducible database changes, derived from the models they already maintain, not from migration scripts they have to write.
 
 ## Next Steps
 
 - Start with [Features](features.md)
 - Follow the guides in [Get Started](getting-started/setup.md)
 - Explore [Cookbook & Examples](cookbook/index.md)
+- Browse [Plugins](plugins/) to extend DBWarden's capabilities
 - Use [CLI Reference](cli-reference.md) as command lookup
 
 ========================================================================
@@ -21783,7 +21798,7 @@ Typed spec classes (`IndexSpec`, `UniqueSpec`, `CheckSpec`) provide full IDE aut
 | Attribute | Type | SQL | Backends |
 |-----------|------|-----|----------|
 | `comment` | `str` | `COMMENT ON COLUMN t.c IS '...'` | All |
-| `public` | `bool` | Controls field visibility in schemap auto-schema | All |
+| `public` | `bool` | Controls field visibility in `@auto_schema` (requires `dbwarden-fastapi` plugin) | All |
 
 ```python
 class Meta(TableMeta):
@@ -21817,11 +21832,10 @@ Plain dicts using the same field names (`name`, `columns`, `expression`, `sql`) 
 
 ### Column-Level Meta Base Class
 
-For IDE autocomplete on column-level inner classes, use `PGColumnMeta` for PostgreSQL, `MyColumnMeta` for MySQL, `MdbColumnMeta` for MariaDB, or `CHColumnMeta` for ClickHouse. All inherit from `FieldMeta`, which defines cross-database attributes (`comment`, `public`) and backend-specific spec objects (`pg`, `ch`, `my`, `mdb`, `sq`):
+For IDE autocomplete on column-level inner classes, use `PGColumnMeta` for PostgreSQL, `MyColumnMeta` for MySQL, `MdbColumnMeta` for MariaDB, or `CHColumnMeta` for ClickHouse. Each defines the cross-database attributes (`comment`, `public`) alongside its backend-specific spec object (`pg`, `ch`, `my`, `mdb`, `sq`). There is no shared `FieldMeta` base: the `*FieldMeta` classes were removed and their fields inlined into each backend's column Meta.
 
 ```python
-from dbwarden.databases import FieldMeta
-from dbwarden.databases.pgsql import pg
+from dbwarden.databases.pgsql import PGColumnMeta, pg
 
 # Use typed spec objects for backend-specific column attributes:
 #   pg = pg.field(collation=..., storage=..., ...)
@@ -22339,7 +22353,7 @@ The `MetricsRouter` exposes a `GET /metrics` endpoint in Prometheus text format:
 
 ```python
 from fastapi import FastAPI
-from dbwarden.extensions.fastapi import MetricsRouter
+from dbwarden_fastapi import MetricsRouter
 
 app = FastAPI()
 app.include_router(MetricsRouter(), prefix="/metrics")
@@ -22364,7 +22378,7 @@ The `MetricsMiddleware` is an ASGI middleware that refreshes pending-migration g
 
 ```python
 from fastapi import FastAPI
-from dbwarden.extensions.fastapi import MetricsMiddleware, MetricsRouter
+from dbwarden_fastapi import MetricsMiddleware, MetricsRouter
 
 app = FastAPI()
 app.add_middleware(MetricsMiddleware)
@@ -22414,89 +22428,6 @@ When enabled, all DBWarden log output uses newline-delimited JSON format:
 | `DBWARDEN_HEALTH_AUTH` | API key string | Require `X-API-Key` header for health endpoints |
 
 See also: [Cookbook: Observability](../cookbook/11-observability.md)
-
-========================================================================
-PAGE: https://dbwarden.emiliano-go.com/plugins/developing/approved-standard/
-========================================================================
-
-# Approved Plugin Standard
-
-The **Approved** tier earns a plugin the **Verified** badge: it loads without per-user consent once its installed version meets the approved minimum. To qualify, the plugin must pass a focused, automatable conformance suite that proves it respects the DBWarden contract, does not compromise the user's environment, and (for object plugins) integrates correctly with the diff pipeline.
-
-The suite is deliberately minimal. It does **not** review business logic, performance, or security; it ensures the plugin is a well-behaved citizen.
-
-!!! warning "Approval is not a security audit"
-    The Verified badge is a statement of contract adherence, not fitness for purpose. It says the plugin respects DBWarden's rules, will not break core, and will not execute code before you consent. It does **not** certify the plugin is free of vulnerabilities or malicious behavior, and it grants no sandboxing. A loaded plugin runs with full process privileges. Vet the source yourself for anything sensitive.
-
-## The Conformance Harness
-
-DBWarden ships the checks as `dbwarden.plugin_conformance`, so verification is reproducible rather than a one-time manual event. Each function raises `ConformanceError` with an explanation on failure. The [plugin template](publishing.md#starting-from-the-template) already wires them into `tests/test_conformance.py`; copy that file and adjust the distribution/package names.
-
-## Required Tests
-
-| # | Test | Harness call | Protects against |
-|---|------|--------------|------------------|
-| 1 | `test_entry_point_is_declared` | `assert_entry_point_declared(dist)` | Misconfigured packaging, missing/unresolvable entry point, a plugin that can never be discovered. |
-| 2 | `test_import_has_no_side_effects` | `assert_import_has_no_side_effects(pkg)` | The #1 security-model violation: registering at import time bypasses the consent gate. Enforces classify-before-load. |
-| 3 | `test_setup_registers_hooks` | `assert_setup_registers(setup, value_hooks=...)` | A broken `setup()` (wrong signature, swallowed exception, forgot to register) that installs but does nothing. |
-| 4 | `test_hook_signature_compliance` | `assert_hook_signatures(setup)` | Runtime `TypeError` when core calls a hook with the documented arguments; caught at build time instead of migration time. |
-| 5 | `test_core_imports_resolve` | `assert_core_imports_resolve(pkg)` | A plugin importing a DBWarden module the installed core does not have, which would otherwise fail on a user's machine instead of in CI. |
-| 6 | `test_object_handler_conformance` (object plugins) | `assert_object_handler_conformance(handler, config=...)` | Handlers that crash the diff pipeline or emit malformed statements: `extract`/`canonicalize`/`diff`/`emit` must return the right types. |
-| 7 | `test_ordering_constraint_satisfiable` (object plugins) | `assert_ordering_constraint_satisfiable(handler)` | Ordering constraints that can never be satisfied (impossible anchor pair, unknown/cyclic object references) and crash generation. |
-| 8 | `test_idempotent_setup` (recommended) | `assert_idempotent_setup(setup)` | Double-loading in reloads/tests/interactive sessions: calling `setup()` twice must not raise or add new registrations. |
-
-Tests 1 to 5 apply to every plugin. Tests 6–7 apply to object plugins; value-only plugins mark them not applicable and say so. Test 8 is recommended and may become required.
-
-### What the harness checks for test 5
-
-**Plugins may import anything from DBWarden core.** There is no allowlist. A plugin that needs `dbwarden.output` for consistent CLI rendering, or `dbwarden.repositories.*` to read tracking tables, should just import them.
-
-What test 5 verifies is that every `dbwarden` module you import actually exists in the core you are built against. That catches the failure that actually bites users: a plugin pinned to `dbwarden>=0.15` importing a module that moved in 0.16, discovered at load time on their machine rather than in your CI.
-
-Three surfaces are documented as stable and change only on a major version:
-
-- `dbwarden.plugin` (`PluginRegistrar`, the registries, hook errors)
-- `dbwarden.exceptions`
-- `dbwarden.engine.core`, including `dbwarden.engine.core.plugin_api`
-
-Building on those means less to revisit when core releases. Anything deeper is fair game, but pin your `dbwarden` dependency accordingly and keep CI running against the versions you claim to support. `plugin_conformance.core_imports_outside_stable_api(pkg)` lists your deeper imports so you know what to re-check on an upgrade; it reports, it does not fail.
-
-## What This Does Not Cover
-
-- **Business logic**: whether the emitted SQL does what the user wants (their own tests).
-- **Performance**: no benchmark required.
-- **Security audit**: no static analysis for malicious code beyond the import restriction.
-- **Inter-plugin interaction**: the resolver's job.
-
-## Submit For Approval
-
-Open an issue in the DBWarden repository using the **Plugin Approval** template with:
-
-```markdown
-### Plugin repository
-https://github.com/<you>/dbwarden-<name>
-
-### Package name & requested approved version
-dbwarden-<name>, minimum 0.2.0
-
-### What it provides
-Value hooks: ...
-Object handlers: ...
-
-### Checklist evidence
-Link to a green CI run of tests/test_conformance.py (all required tests passing).
-
-### Compatibility
-Tested against dbwarden>=0.15.0
-```
-
-## CI Enforcement
-
-To be Verified, the plugin must run the conformance suite in public CI (GitHub Actions or similar) on every push, with a visible status badge. The template's `.github/workflows/test.yml` does this. The reviewer confirms CI is green and that `tests/test_conformance.py` matches the standard, then does a quick sanity pass for obviously unsafe behavior (malware, core monkey-patching, network exfiltration). On approval, the distribution name and minimum version are added to `dbwarden/_approved.py` and ship in the next DBWarden release.
-
-## Version Re-Approval
-
-The approved minimum is a **floor**: patch and minor releases above it load automatically. A **new major version** (or any release that changes hooks, signatures, or object semantics) must request re-approval, and the floor in `dbwarden/_approved.py` is updated accordingly. Until then, a version below the recorded floor is treated as **Community** and requires consent.
 
 ========================================================================
 PAGE: https://dbwarden.emiliano-go.com/plugins/developing/object-plugins/
@@ -22632,6 +22563,37 @@ def setup(registrar) -> None:
     registrar.register_object_handler(PgExtensionHandler())
 ```
 
+### 8. Declare your config keys
+
+If your handler is driven by `database_config(...)` keys, register them too. A plugin owns its config keys, not just its handlers.
+
+```python
+CONFIG_KEYS = ("pg_extensions",)
+
+
+def setup(registrar) -> None:
+    from dbwarden_example.handler import PgExtensionHandler
+
+    registrar.register_object_handler(PgExtensionHandler())
+    registrar.register_config_key(*CONFIG_KEYS)
+```
+
+Core validates every keyword argument passed to `database_config(...)` against the registered keys. A key no plugin owns is rejected as an unknown argument, and a key belonging to a plugin that is not installed raises `DBWardenConfigError` naming the plugin to install. Both fire when `dbwarden.py` loads, so a missing plugin surfaces immediately rather than as a migration that silently produces nothing.
+
+Read the config values off the `config` object your handler already receives, using the key name directly:
+
+```python
+extensions = getattr(config, "pg_extensions", []) or []
+```
+
+To stay loadable against cores that predate the config-key registry, guard the call:
+
+```python
+    register_config_key = getattr(registrar, "register_config_key", None)
+    if register_config_key is not None:
+        register_config_key(*CONFIG_KEYS)
+```
+
 ## Ordering And The DAG
 
 DBWarden orders all object handlers into a single directed acyclic graph, then emits their statements in that order.
@@ -22658,15 +22620,25 @@ Emitting SQL that matches core's byte-for-byte matters: a plugin that quotes ide
 | `emit_with_cluster`, `ClusterableStatement` | Wrap ClickHouse DDL so it honours the configured `ON CLUSTER`. |
 | `strip_secret_values`, `has_visible_secrets`, `REDACTED` | Redact secret values before they reach a snapshot. |
 
-The module sits under `dbwarden.engine.core`, so importing from it satisfies the public-API check in the [Approved standard](approved-standard.md).
+The module sits under `dbwarden.engine.core`, so importing from it satisfies the public-API check in the [Verified standard](verified-standard.md).
 
 ## Conflicts And Overrides
 
 `object_type` is the registration key. Two *different* plugins registering the same `object_type` raises `ObjectHandlerConflictError`. A plugin handler and a core handler with the same type is allowed: the plugin handler overrides core, which is how official plugins replace built-in fallbacks (e.g. the core `CREATE EXTENSION` preamble).
 
+Overriding is a real transfer of responsibility, so DBWarden announces it rather than swapping silently:
+
+```
+WARNING  dbwarden.registry - Plugin 'dbwarden-pgsql-rbac' overrides the built-in
+handler for object type 'role'. Migration SQL for 'role' now comes from the
+plugin, not DBWarden core.
+```
+
+The warning is emitted once per plugin and object type per run. If you see one you did not expect, a plugin has taken over DDL generation for that object type, and the SQL in your migrations for it is the plugin's, not core's. Plugins requesting the Verified tier must declare their overrides in the verification issue.
+
 ## Tests
 
-Object plugins run the value-plugin conformance checks plus two handler-specific ones from the shared harness (`dbwarden.plugin_conformance`); see the [Approved standard](approved-standard.md).
+Object plugins run the value-plugin conformance checks plus two handler-specific ones from the shared harness (`dbwarden.plugin_conformance`); see the [Verified standard](verified-standard.md).
 
 - `test_object_handler_conformance`: `assert_object_handler_conformance(handler, config=...)` exercises `extract`, `canonicalize`, `diff`, and `emit` against a minimal fixture and validates the returned types and SQL shape.
 - `test_ordering_constraint_satisfiable`: `assert_ordering_constraint_satisfiable(handler)` confirms the constraint is not statically impossible (no impossible anchor pair; no unknown/cyclic object references).
@@ -22732,7 +22704,7 @@ All plugins are distributed as `dbwarden-<name>`. The import package and entry-p
 | Import package | `dbwarden_<slug>` | `dbwarden_audit` |
 | Entry-point key | `<slug>` | `audit` |
 
-The `dbwarden-` prefix is shared by every plugin; a plugin's trust tier comes from the curated Official/Approved lists in core, not from its name. See [publishing](publishing.md#naming) for the full rule.
+The `dbwarden-` prefix is shared by every plugin; a plugin's trust tier comes from the curated Official/Verified lists in core, not from its name. See [publishing](publishing.md#naming) for the full rule.
 
 ## Project Structure
 
@@ -22814,7 +22786,7 @@ entry key   = slug
 | Import package | `dbwarden_<slug>` | `dbwarden_audit` |
 | Entry-point key | `<slug>` | `audit` |
 
-The `dbwarden-` prefix is shared by every plugin. A plugin's trust tier is **not** inferred from its name; it comes from the curated Official and Approved lists in core (`dbwarden/_official.py`, `dbwarden/_approved.py`), and everything else is Community. Use DBWarden-owned names such as `dbwarden-fastapi` only for packages published by the DBWarden organization.
+The `dbwarden-` prefix is shared by every plugin. A plugin's trust tier is **not** inferred from its name; it comes from the curated Official and Verified lists in core (`dbwarden/_official.py`, `dbwarden/_verified.py`), and everything else is Community. Use DBWarden-owned names such as `dbwarden-fastapi` only for packages published by the DBWarden organization.
 
 ## PyPI Metadata
 
@@ -22874,7 +22846,7 @@ jobs:
       - run: pytest -q
 ```
 
-Link a green run of this workflow when you [submit for approval](approved-standard.md#submit-for-approval).
+Link a green run of this workflow when you [submit for verification](verified-standard.md#submit-for-verification).
 
 ## Trusted Publishing
 
@@ -22904,7 +22876,7 @@ Define the hook function at module top level and register it in `setup()`:
 ```python
 # src/dbwarden_example/__init__.py
 def session_factory(database: str | None = None, *, dev: bool = False):
-    from dbwarden.extensions.fastapi.engines import _async_session_factory  # deferred
+    from dbwarden_fastapi.engines import _async_session_factory  # deferred
 
     async def _dependency():
         async with _async_session_factory(database, dev=dev)() as session:
@@ -22934,7 +22906,7 @@ def setup(registrar) -> None:
     registrar.register("migration_routes", migration_routes) # multi hook
 ```
 
-Each registered function imports what it needs from DBWarden (and FastAPI) **inside its body**, so importing the package registers the hooks without pulling in FastAPI. Core then resolves them where needed: `dbwarden.extensions.fastapi.get_session("primary")` calls the registered `session_factory`; if no plugin registered it, core uses its built-in fallback.
+Each registered function imports what it needs from DBWarden (and FastAPI) **inside its body**, so importing the package registers the hooks without pulling in FastAPI. Core then resolves them where needed: `dbwarden_fastapi.get_session("primary")` calls the registered `session_factory`; if no plugin registered it, core uses its built-in fallback.
 
 ## The Import-Deferred Pattern
 
@@ -22965,7 +22937,7 @@ Importing `dbwarden_example` must not import FastAPI or register anything until 
 
 ## Tests
 
-Use the shared conformance harness (`dbwarden.plugin_conformance`) so your suite matches the [Approved standard](approved-standard.md) and earns the Verified badge; the [template](publishing.md#starting-from-the-template) wires it up for you. At minimum, value plugins should include:
+Use the shared conformance harness (`dbwarden.plugin_conformance`) so your suite matches the [Verified standard](verified-standard.md) and earns the Verified badge; the [template](publishing.md#starting-from-the-template) wires it up for you. At minimum, value plugins should include:
 
 - `test_setup_registers_hooks`: `setup(PluginRegistrar("dist"))` registers the declared hooks.
 - `test_import_has_no_side_effects`: importing the package/module registers nothing and mutates no plugin global state.
@@ -22994,6 +22966,100 @@ def test_setup_registers_hooks() -> None:
 ```
 
 ========================================================================
+PAGE: https://dbwarden.emiliano-go.com/plugins/developing/verified-standard/
+========================================================================
+
+# Verified Plugin Standard
+
+The **Verified** tier earns a plugin the **Verified** badge: it loads without per-user consent once its installed version meets the verified minimum. To qualify, the plugin must pass a focused, automatable conformance suite that proves it respects the DBWarden contract, does not compromise the user's environment, and (for object plugins) integrates correctly with the diff pipeline.
+
+The suite is deliberately minimal. It does **not** review business logic, performance, or security; it ensures the plugin is a well-behaved citizen.
+
+!!! warning "Verification is not a security audit"
+    The Verified badge is a statement of contract adherence, not fitness for purpose. It says the plugin respects DBWarden's rules, will not break core, and will not execute code before you consent. It does **not** certify the plugin is free of vulnerabilities or malicious behavior, and it grants no sandboxing. A loaded plugin runs with full process privileges. Vet the source yourself for anything sensitive.
+
+## The Conformance Harness
+
+DBWarden ships the checks as `dbwarden.plugin_conformance`, so verification is reproducible rather than a one-time manual event. Each function raises `ConformanceError` with an explanation on failure. The [plugin template](publishing.md#starting-from-the-template) already wires them into `tests/test_conformance.py`; copy that file and adjust the distribution/package names.
+
+## Required Tests
+
+| # | Test | Harness call | Protects against |
+|---|------|--------------|------------------|
+| 1 | `test_entry_point_is_declared` | `assert_entry_point_declared(dist)` | Misconfigured packaging, missing/unresolvable entry point, a plugin that can never be discovered. |
+| 2 | `test_import_has_no_side_effects` | `assert_import_has_no_side_effects(pkg)` | The #1 security-model violation: registering at import time bypasses the consent gate. Enforces classify-before-load. |
+| 3 | `test_setup_registers_hooks` | `assert_setup_registers(setup, value_hooks=...)` | A broken `setup()` (wrong signature, swallowed exception, forgot to register) that installs but does nothing. |
+| 4 | `test_hook_signature_compliance` | `assert_hook_signatures(setup)` | Runtime `TypeError` when core calls a hook with the documented arguments; caught at build time instead of migration time. |
+| 5 | `test_core_imports_resolve` | `assert_core_imports_resolve(pkg)` | A plugin importing a DBWarden module the installed core does not have, which would otherwise fail on a user's machine instead of in CI. |
+| 6 | `test_api_version_is_declared` | `assert_api_version_declared(pkg)` | A plugin with no declared contract version, which silently keeps loading after the contract changes under it. |
+| 7 | `test_object_handler_conformance` (object plugins) | `assert_object_handler_conformance(handler, config=...)` | Handlers that crash the diff pipeline or emit malformed statements: `extract`/`canonicalize`/`diff`/`emit` must return the right types. |
+| 8 | `test_ordering_constraint_satisfiable` (object plugins) | `assert_ordering_constraint_satisfiable(handler)` | Ordering constraints that can never be satisfied (impossible anchor pair, unknown/cyclic object references) and crash generation. |
+| 9 | `test_idempotent_setup` (recommended) | `assert_idempotent_setup(setup)` | Double-loading in reloads/tests/interactive sessions: calling `setup()` twice must not raise or add new registrations. |
+
+Tests 1 to 6 apply to every plugin. Tests 7 and 8 apply to object plugins; value-only plugins mark them not applicable and say so. Test 9 is recommended and may become required.
+
+### What the harness checks for test 5
+
+**Plugins may import anything from DBWarden core.** There is no allowlist. A plugin that needs `dbwarden.output` for consistent CLI rendering, or `dbwarden.repositories.*` to read tracking tables, should just import them.
+
+What test 5 verifies is that every `dbwarden` module you import actually exists in the core you are built against. That catches the failure that actually bites users: a plugin pinned to `dbwarden>=0.15` importing a module that moved in 0.16, discovered at load time on their machine rather than in your CI.
+
+Three surfaces are documented as stable and change only on a major version:
+
+- `dbwarden.plugin` (`PluginRegistrar`, the registries, hook errors)
+- `dbwarden.exceptions`
+- `dbwarden.engine.core`, including `dbwarden.engine.core.plugin_api`
+
+Building on those means less to revisit when core releases. Anything deeper is fair game, but pin your `dbwarden` dependency accordingly and keep CI running against the versions you claim to support. `plugin_conformance.core_imports_outside_stable_api(pkg)` lists your deeper imports so you know what to re-check on an upgrade; it reports, it does not fail.
+
+## What This Does Not Cover
+
+- **Business logic**: whether the emitted SQL does what the user wants (their own tests).
+- **Performance**: no benchmark required.
+- **Security audit**: no static analysis for malicious code beyond the import restriction.
+- **Inter-plugin interaction**: the resolver's job.
+
+## Submit For Verification
+
+Open an issue in the DBWarden repository using the **Plugin Verification** template. It asks for the repository, the distribution name and requested minimum version, what the plugin provides, the core versions you test against, a link to a green conformance run, and two things worth explaining here.
+
+### The plugin API version
+
+The plugin contract is versioned separately from DBWarden's release version, as `dbwarden.plugin.PLUGIN_API_VERSION`. Declare the one you target on your package:
+
+```python
+DBWARDEN_PLUGIN_API = 1
+```
+
+Core refuses to load a plugin declaring a version it does not provide, reporting it as `incompatible` with both versions named, rather than letting it register and generate migrations under assumptions that no longer hold. Declaring nothing means "version 1", so plugins written before the contract was versioned keep working; the conformance suite still requires the declaration, because a plugin that never declares gets no protection when the contract moves.
+
+The version changes only when a plugin could otherwise be *wrong* rather than loudly broken: a hook signature change, different semantics for a registered handler, a rename on the stable surface. Adding a hook or a new `plugin_api` helper does not change it.
+
+### Declaring deep imports
+
+The template asks you to paste the output of:
+
+```bash
+python -c "from dbwarden.plugin_conformance import core_imports_outside_stable_api as f; print('\n'.join(f('your_package')) or 'none')"
+```
+
+and justify each line. This is a review conversation, not a test: no automated check can tell a good reason from a bad one, which is why it belongs to a reviewer.
+
+It also runs in your favour. A justification that generalises is an argument that the stable surface is missing something, and the outcome is usually that the helper becomes public in `dbwarden.engine.core.plugin_api` rather than that you are told to stop. That is exactly how `plugin_api` acquired `quote_pg`, `qualified_name`, the grant and policy builders, and `emit_with_cluster`: official plugins needed them, so they stopped being internal. If you would switch to a public equivalent, say so.
+
+### Declaring object type overrides
+
+A plugin handler that claims an `object_type` core already handles **replaces** core for that type: migration DDL for those objects comes from the plugin. DBWarden logs a warning when this happens, but a reviewer needs to know up front. Declare any overrides and explain why replacing core is right rather than adding a new type. Overriding is legitimate (it is how official plugins supersede built-in fallbacks) and it raises the review bar.
+
+## CI Enforcement
+
+To be Verified, the plugin must run the conformance suite in public CI (GitHub Actions or similar) on every push, with a visible status badge. The template's `.github/workflows/test.yml` does this. The reviewer confirms CI is green and that `tests/test_conformance.py` matches the standard, then does a quick sanity pass for obviously unsafe behavior (malware, core monkey-patching, network exfiltration). On verification, the distribution name and minimum version are added to `dbwarden/_verified.py` and ship in the next DBWarden release.
+
+## Version Re-Verification
+
+The verified minimum is a **floor**: patch and minor releases above it load automatically. A **new major version** (or any release that changes hooks, signatures, or object semantics) must request re-verification, and the floor in `dbwarden/_verified.py` is updated accordingly. Until then, a version below the recorded floor is treated as **Community** and requires consent.
+
+========================================================================
 PAGE: https://dbwarden.emiliano-go.com/plugins/faq/
 ========================================================================
 
@@ -23009,7 +23075,7 @@ Installation aborts and nothing is installed. Official plugin install is fail-cl
 
 ## How Do I Know A Community Plugin Is Safe?
 
-There is no automatic guarantee. Review the source, prefer Approved plugins, and only consent to plugins you have vetted yourself. Trust gates whether a plugin loads, not what it can do once loaded.
+There is no automatic guarantee. Review the source, prefer Verified plugins, and only consent to plugins you have vetted yourself. Trust gates whether a plugin loads, not what it can do once loaded.
 
 ## Can Two Plugins Provide The Same Hook?
 
@@ -23023,9 +23089,9 @@ Yes. Use normal Python package dependencies. Object handlers from different plug
 
 Yes. Install them as project dependencies. Use `--format json` on `plugin list` and `plugin info` for machine-readable output; Rich tables degrade gracefully when output is captured. Note that non-interactive runs never auto-consent, so trust community plugins ahead of time (commit `.dbwarden/consent.toml`).
 
-## How Do I Get My Plugin Approved?
+## How Do I Get My Plugin Verified?
 
-Follow the [Approved Plugin Standard](developing/approved-standard.md): pass the seven mandatory tests and open a review issue in the DBWarden repository.
+Follow the [Verified Plugin Standard](developing/verified-standard.md): pass the seven mandatory tests and open a review issue in the DBWarden repository.
 
 ## What Happens When I Upgrade A Community Plugin?
 
@@ -23051,10 +23117,10 @@ Before plugin code is imported, DBWarden classifies the package by distribution 
 | Tier | Meaning | Trust guarantee |
 |------|---------|-----------------|
 | Official | Built and maintained by the DBWarden organization. Published under organization-owned package names with provenance verified at install time. | Cryptographic and organizational. |
-| Approved | Community-maintained, but passed the DBWarden plugin test standard and manual review. | Community review and technical compliance. |
-| Community | Any `dbwarden.plugins` entry point not listed as Official or Approved. | Explicit consent only. |
+| Verified | Community-maintained, but passed the DBWarden plugin test standard and manual review. | Community review and technical compliance. |
+| Community | Any `dbwarden.plugins` entry point not listed as Official or Verified. | Explicit consent only. |
 
-Approval is not a security audit. Once loaded, a plugin runs with normal Python process privileges (it is not sandboxed). See [consent and trust](using-plugins/consent-and-trust.md).
+Verification is not a security audit. Once loaded, a plugin runs with normal Python process privileges (it is not sandboxed). See [consent and trust](using-plugins/consent-and-trust.md).
 
 ## Philosophy
 
@@ -23128,7 +23194,7 @@ dbwarden plugin add dbwarden-fastapi --dry-run
 
 ## 2. Consent For Community Plugins
 
-Official and Approved plugins load automatically. A **Community** plugin, any distribution not listed in core, is discovered but not imported until you consent to the exact installed version. When you run a DBWarden command in an interactive terminal, you are prompted:
+Official and Verified plugins load automatically. A **Community** plugin, any distribution not listed in core, is discovered but not imported until you consent to the exact installed version. When you run a DBWarden command in an interactive terminal, you are prompted:
 
 ```text
 Enable community plugin 'dbwarden-example' version 0.1.0? [y/N]:
@@ -23170,7 +23236,7 @@ The FastAPI integration exposes session dependencies through DBWarden's FastAPI 
 from fastapi import Depends, FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from dbwarden.extensions.fastapi import get_session
+from dbwarden_fastapi import get_session
 
 app = FastAPI()
 
@@ -23396,7 +23462,7 @@ dbwarden plugin info dbwarden-fastapi
 dbwarden plugin info dbwarden-fastapi --format json
 ```
 
-Shows entry point, tier, trust/load state, registered hooks and object handlers, official repository, approved minimum version, and lockfile provenance fields when present. Exits `1` if the plugin is not found.
+Shows entry point, tier, trust/load state, registered hooks and object handlers, official repository, verified minimum version, and lockfile provenance fields when present. Exits `1` if the plugin is not found.
 
 ## add
 
@@ -23469,16 +23535,16 @@ DBWarden classifies every plugin entry point **before importing any plugin code*
 | Tier | Loads automatically? | Basis of trust |
 |------|----------------------|----------------|
 | Official | Yes | Organization-owned name + provenance verified at install. |
-| Approved | Yes, when version ≥ approved minimum | Community review against the test standard. |
+| Verified | Yes, when version ≥ verified minimum | Community review against the test standard. |
 | Community | No, consent required | Your explicit, version-specific consent. |
 
 ### Official
 
 Official plugins are DBWarden-maintained. `plugin add` verifies provenance and **fails closed** when verification is unavailable or invalid. They load without consent.
 
-### Approved
+### Verified
 
-Approved plugins are community-maintained but reviewed against the DBWarden plugin standard. They load **without consent** only when the installed version is at or above the approved minimum recorded in `dbwarden/_approved.py`. If the installed version is below the floor, DBWarden logs a warning and treats the plugin as **Community** (consent required).
+Verified plugins are community-maintained but reviewed against the DBWarden plugin standard. They load **without consent** only when the installed version is at or above the verified minimum recorded in `dbwarden/_verified.py`. If the installed version is below the floor, DBWarden logs a warning and treats the plugin as **Community** (consent required).
 
 ### Community
 
@@ -23521,7 +23587,7 @@ Classify-before-load ensures untrusted community plugin code is **not imported**
 !!! warning "Not a sandbox"
     Trust gates *whether* a plugin loads, not *what it can do*. Once a plugin is loaded it runs with **full Python process privileges**: it can read files, open network connections, and call any API your process can. Consent is a statement that you have reviewed and trust the code, not a containment mechanism. Approval is likewise a review, **not a security audit**.
 
-Approved and Official tiers exist to reduce how often you must make that trust decision manually, not to make loading arbitrary code safe.
+Verified and Official tiers exist to reduce how often you must make that trust decision manually, not to make loading arbitrary code safe.
 
 ========================================================================
 PAGE: https://dbwarden.emiliano-go.com/plugins/using-plugins/finding-plugins/
@@ -23529,7 +23595,7 @@ PAGE: https://dbwarden.emiliano-go.com/plugins/using-plugins/finding-plugins/
 
 # Finding Plugins
 
-DBWarden plugins are standard Python packages that expose a `dbwarden.plugins` entry point. DBWarden classifies each discovered distribution into a [trust tier](consent-and-trust.md) before importing it, by matching its distribution name against the curated Official and Approved lists in core.
+DBWarden plugins are standard Python packages that expose a `dbwarden.plugins` entry point. DBWarden classifies each discovered distribution into a [trust tier](consent-and-trust.md) before importing it, by matching its distribution name against the curated Official and Verified lists in core.
 
 ## Search PyPI
 
@@ -23539,7 +23605,7 @@ All plugins are distributed as:
 dbwarden-<name>
 ```
 
-Search PyPI for `dbwarden-` to find them. The name alone does not confer trust: Official plugins are the DBWarden-owned packages listed in `dbwarden/_official.py` (for example `dbwarden-fastapi`, `dbwarden-pgsql-extensions`); every other `dbwarden-*` package is Community until it reaches the Approved list.
+Search PyPI for `dbwarden-` to find them. The name alone does not confer trust: Official plugins are the DBWarden-owned packages listed in `dbwarden/_official.py` (for example `dbwarden-fastapi`, `dbwarden-pgsql-extensions`); every other `dbwarden-*` package is Community until it reaches the Verified list.
 
 ## Official Plugins
 
@@ -23557,15 +23623,15 @@ Official plugins are built and maintained by the DBWarden organization under the
 
 The authoritative list is always `OFFICIAL_PLUGINS` in `dbwarden/_official.py`.
 
-## Approved Plugins
+## Verified Plugins
 
-Approved plugins are community-maintained packages that passed DBWarden's [plugin test standard](../developing/approved-standard.md) and manual review. They load without consent once the installed version meets the approved minimum.
+Verified plugins are community-maintained packages that passed DBWarden's [plugin test standard](../developing/verified-standard.md) and manual review. They load without consent once the installed version meets the verified minimum.
 
-| Package | Minimum approved version | Description |
+| Package | Minimum verified version | Description |
 |---------|--------------------------|-------------|
-| _None yet_ | – | Approved entries are listed in `dbwarden/_approved.py` and this table as the ecosystem grows. |
+| _None yet_ – feel free to [be the first](../developing/verified-standard.md#submit-for-verification)! | – | Verified entries are listed in `dbwarden/_verified.py` and this table as the ecosystem grows. |
 
-Approval is not a security audit. See [consent and trust](consent-and-trust.md).
+Verification is not a security audit. See [consent and trust](consent-and-trust.md).
 
 ## Community Plugins
 
@@ -23586,7 +23652,7 @@ dbwarden plugin add <distribution-name>
 What `plugin add` does depends on the [trust tier](consent-and-trust.md) of the distribution:
 
 - **Official**: DBWarden verifies provenance first. On success it installs the package and writes an entry to `.dbwarden/plugins.lock` recording the version, filename, SHA-256, and verifying identity. If provenance cannot be verified, installation aborts and nothing is installed (fail-closed).
-- **Approved**: installed like any package; it will load automatically once the installed version meets the approved minimum.
+- **Verified**: installed like any package; it will load automatically once the installed version meets the verified minimum.
 - **Community**: the package is installed but **not** trusted. You must run `dbwarden plugin trust <name>` (or accept the interactive consent prompt) before DBWarden loads it.
 
 ```text
@@ -23691,8 +23757,10 @@ The Rich table shows every discovered distribution with its version, tier, trust
 
 Column meanings:
 
-- **Trusted**: `yes` if the plugin is allowed to load (official, approved-and-current, or consented community).
-- **State**: `loaded`, `skipped` (untrusted community), `failed` (raised during `setup`), or `discovered`.
+- **Trusted**: `yes` if the plugin is allowed to load (official, verified-and-current, or consented community).
+- **State**: `loaded`, `skipped` (untrusted community), `failed` (raised during `setup`), `incompatible` (built against a different plugin API version), or `discovered`.
+
+An `incompatible` plugin is not broken: it targets a different version of the plugin contract than this DBWarden provides, so it was refused rather than allowed to register and produce migrations under the wrong assumptions. The **Error** row names both versions. Upgrade the plugin, or pin DBWarden to a release that provides the version it wants.
 - **Hooks / Objects**: the value hooks and object handler types the plugin registered. A discovered-but-skipped plugin registers nothing, so these stay empty.
 - **Lock**: the lockfile `verified` value (e.g. `provenance`) for provenance-locked installs.
 
@@ -23738,14 +23806,14 @@ Plugin Info
   Object handlers    -
   Error
   Repository         https://github.com/dbwarden-org/dbwarden-fastapi
-  Approved minimum
+  Verified minimum
   Lock verified      provenance
   Lock identity      https://github.com/dbwarden-org/dbwarden-fastapi
 ```
 
 - For **Official** plugins, details include the repository and lockfile provenance fields.
-- For **Approved** plugins, the **Approved minimum** row shows the version floor.
-- For **Community** plugins, trust reflects consent state; `Repository` and `Approved minimum` are empty.
+- For **Verified** plugins, the **Verified minimum** row shows the version floor.
+- For **Community** plugins, trust reflects consent state; `Repository` and `Verified minimum` are empty.
 
 `plugin info` also supports `--format json`.
 
@@ -23785,9 +23853,32 @@ def database_config(
     dev_database_url: str | None = None,
     overlap_models: bool = False,
     secure_values: bool = False,
+    pg_schema: str | None = None,
+    pg_migration_lock_timeout: int | None = None,
+    **plugin_config: Any,
 ) -> DatabaseHandle:
     """Register a database in DBWarden and return a handle with session dependencies."""
 ```
+
+## Plugin-contributed arguments
+
+Backend object keys such as `pg_roles`, `pg_functions`, and `ch_grants` are **not** part of core. Each is owned by the plugin that also supplies its object handler, and arrives through `**plugin_config`.
+
+Core validates every extra keyword against the plugins actually installed:
+
+- A key owned by a plugin that is **not installed** raises `DBWardenConfigError` naming the plugin to install.
+- A key **no plugin owns** raises `DBWardenConfigError` as an unexpected keyword argument, so typos fail immediately.
+
+Both fire when your `dbwarden.py` is loaded, not at migration time.
+
+| Config keys | Plugin |
+|---|---|
+| `pg_roles`, `pg_default_privileges` | `dbwarden-pgsql-rbac` |
+| `pg_domains`, `pg_sequences`, `pg_composite_types` | `dbwarden-pgsql-types` |
+| `pg_extensions`, `pg_functions`, `pg_triggers`, `pg_event_triggers`, `pg_extended_statistics` | `dbwarden-pgsql-extensions` |
+| `ch_named_collections`, `ch_roles`, `ch_users`, `ch_row_policies`, `ch_quotas`, `ch_settings_profiles`, `ch_grants` | `dbwarden-ch-rbac` |
+
+Install with `dbwarden plugin add <name>`. `pg_schema` and `pg_migration_lock_timeout` are core and need no plugin.
 
 ## Required arguments
 
@@ -24554,7 +24645,9 @@ PAGE: https://dbwarden.emiliano-go.com/seeds/
 
 # Seed Management
 
-DBWarden provides built-in seed data management for populating databases with initial or reference data. Seeds complement migrations by handling data that belongs in version control.
+**Requires the `dbwarden-seeds` plugin:** `dbwarden plugin add dbwarden-seeds`. Seed management was previously built into core and now ships as an official plugin. The `dbwarden seed` commands still exist in core, but without the plugin installed each one exits with a message telling you to install it.
+
+DBWarden provides seed data management for populating databases with initial or reference data. Seeds complement migrations by handling data that belongs in version control.
 
 ## Overview
 
@@ -24971,7 +25064,7 @@ The `DBWardenRouter` includes seed status in its `GET /status` response:
 }
 ```
 
-See [FastAPI Reference](fastapi/reference.md) for details.
+FastAPI integration ships separately as the `dbwarden-fastapi` plugin, so its reference lives with the plugin: [dbwarden-fastapi](https://github.com/dbwarden-org/dbwarden-fastapi).
 
 See also: [Cookbook: Seeds](../cookbook/07-seeds.md)
 
