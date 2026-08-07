@@ -154,6 +154,9 @@ Plugins = [
 ]
 
 [[project.nav]]
+Changelog = "changelog.md"
+
+[[project.nav]]
 Reference = [
   {Overview = "cli-reference.md"},
   {"Commands" = [
