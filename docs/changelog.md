@@ -9,7 +9,11 @@ All notable changes to DBWarden, newest first. Versions follow semantic versioni
 
 ## [Unreleased]
 
-No current unreleased changes.
+### Fixed
+
+- **ClickHouse DDL generation for fresh migrations.** `make-migrations` now emits ClickHouse DDL that applies cleanly to a fresh ClickHouse 24.x database: column comments are emitted before `CODEC(...)`, `Nullable` is nested inside `LowCardinality(...)` rather than the invalid reverse, and columns used in `ORDER BY` / `PRIMARY KEY` / `PARTITION BY` / `SAMPLE BY` are rendered as non-nullable.
+- **Plugin list table rendering.** The `plugin list` table no longer wraps or truncates plugin distribution names in narrow terminals.
+- **Rollback warning test stability.** The irreversible-rollback warning test now asserts against the log record instead of Rich console wrapping.
 
 ## [0.16.5] - 2026-08-05
 
