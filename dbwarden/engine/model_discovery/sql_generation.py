@@ -10,7 +10,9 @@ from dbwarden.engine.backends.postgresql.render import (
     generate_create_view_sql,
 )
 from dbwarden.engine.backends.clickhouse.render import (
+    _ch_key_columns,
     _generate_clickhouse_materialized_view_sql,
+    _make_clickhouse_key_type,
     _render_clickhouse_projections,
     _render_clickhouse_table_suffix,
     generate_create_dictionary_sql,
@@ -139,14 +141,14 @@ def generate_add_column_sql(
             val = ch_meta.get(key)
             if val:
                 sql += f" {keyword} {val}"
+        if column.comment:
+            sql += f" COMMENT '{column.comment.replace(chr(39), chr(39) + chr(39))}'"
         ch_codec = column.codec or ch_meta.get("ch_codec")
         if ch_codec:
             sql += f" CODEC({ch_codec})"
         ch_ttl = ch_meta.get("ch_ttl")
         if ch_ttl:
             sql += f" TTL {ch_ttl}"
-        if column.comment:
-            sql += f" COMMENT '{column.comment.replace(chr(39), chr(39) + chr(39))}'"
     if backend in ("mysql", "mariadb"):
         sql = _append_mysql_column_attrs(sql, column.my_meta)
     if fk_sql:
@@ -165,9 +167,16 @@ def generate_create_table_sql(table: ModelTable, db_name: str | None = None) -> 
     primary_key_columns = [col.name for col in table.columns if col.primary_key]
     composite_primary_key = backend != "clickhouse" and len(primary_key_columns) > 1
 
+    ch_key_columns: set[str] = set()
+    if backend == "clickhouse":
+        ch_key_columns = _ch_key_columns(table.clickhouse_options)
+
     for col in table.columns:
+        is_ch_key_column = backend == "clickhouse" and col.name in ch_key_columns
         if backend == "clickhouse":
             col_type = col.ch_meta.get("ch_type", col.type)
+            if is_ch_key_column:
+                col_type = _make_clickhouse_key_type(col_type)
         elif backend in ("mysql", "mariadb"):
             col_type = _render_mysql_column_type(col.type, col.my_meta)
         elif backend == "postgresql":
@@ -205,6 +214,8 @@ def generate_create_table_sql(table: ModelTable, db_name: str | None = None) -> 
                 val = col.ch_meta.get(key)
                 if val:
                     col_def += f" {keyword} {val}"
+            if is_ch_key_column:
+                col_def += " NOT NULL"
         if backend in ("mysql", "mariadb"):
             col_def = _append_mysql_column_attrs(col_def, col.my_meta)
         if col.foreign_key and backend != "postgresql":
@@ -214,13 +225,13 @@ def generate_create_table_sql(table: ModelTable, db_name: str | None = None) -> 
             if col.fk_on_update and col.fk_on_update != "NO ACTION":
                 col_def += f" ON UPDATE {col.fk_on_update}"
         if backend == "clickhouse":
+            if col.comment:
+                col_def += f" COMMENT '{col.comment.replace(chr(39), chr(39) + chr(39))}'"
             if col.codec:
                 col_def += f" CODEC({col.codec})"
             ch_ttl = col.ch_meta.get("ch_ttl")
             if ch_ttl:
                 col_def += f" TTL {ch_ttl}"
-            if col.comment:
-                col_def += f" COMMENT '{col.comment.replace(chr(39), chr(39) + chr(39))}'"
         column_defs.append(col_def)
 
     if backend == "clickhouse":

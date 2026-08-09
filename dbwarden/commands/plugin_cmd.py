@@ -3,10 +3,12 @@ from __future__ import annotations
 import json
 from importlib.metadata import PackageNotFoundError, version
 
+from rich.table import Table
+
 from dbwarden._verified import VERIFIED_PLUGINS
 from dbwarden._official import OFFICIAL_PLUGINS, classify
 from dbwarden.output import (
-    data_table,
+    _format_value,
     empty_state,
     error_panel,
     info,
@@ -70,23 +72,27 @@ def plugin_list_cmd(output_format: str = "table") -> None:
     if not reports:
         empty_state("No DBWarden plugins discovered.")
         return
-    render(data_table(
-        "DBWarden Plugins",
-        ("Distribution", "Version", "Tier", "Trusted", "State", "Hooks", "Objects", "Lock"),
-        (
-            (
-                report.distribution,
-                report.version or "unknown",
-                report.tier,
-                report.trusted,
-                report.state,
-                report.hooks,
-                report.object_handlers,
-                report.lock.verified if report.lock else "-",
-            )
-            for report in reports
-        ),
-    ))
+
+    table = Table(title="DBWarden Plugins")
+    min_dist_width = max(
+        len("Distribution"),
+        max(len(report.distribution) for report in reports),
+    ) + 2
+    table.add_column("Distribution", no_wrap=True, min_width=min_dist_width)
+    for column in ("Version", "Tier", "Trusted", "State", "Hooks", "Objects", "Lock"):
+        table.add_column(column, no_wrap=True)
+    for report in reports:
+        table.add_row(
+            report.distribution,
+            report.version or "unknown",
+            report.tier,
+            _format_value(report.trusted),
+            report.state,
+            _format_value(report.hooks),
+            _format_value(report.object_handlers),
+            report.lock.verified if report.lock else "-",
+        )
+    render(table)
 
 
 def plugin_info_cmd(dist_name: str, output_format: str = "table") -> None:

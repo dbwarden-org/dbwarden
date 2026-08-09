@@ -9,6 +9,11 @@ from dbwarden.engine.backends.mysql.extract import (
 from dbwarden.engine.core.models import ModelTable
 from dbwarden.engine.core.statement_order import MigrationStatement, StatementOrder
 
+from dbwarden.engine.backends.clickhouse.render import (
+    _apply_ch_nullable_low_cardinality,
+    _parse_ch_type_wrappers,
+)
+
 from .index_utils import _build_index_name, _index_op_from_info
 from .utils import _missing_def_placeholder, _quote_default_for_sql
 
@@ -80,12 +85,10 @@ def _build_alter_nullable_sql(
         upgrade = f"-- SQLite: ALTER TABLE {table} ALTER COLUMN {column} {'DROP' if nullable else 'SET'} NOT NULL (not supported)"
         rollback = f"-- SQLite: ALTER TABLE {table} ALTER COLUMN {column} {'SET' if nullable else 'DROP'} NOT NULL (not supported)"
     elif backend == "clickhouse":
-        stripped = col_type
-        if col_type and col_type.startswith("Nullable(") and col_type.endswith(")"):
-            stripped = col_type[len("Nullable("):-1]
-        if stripped:
-            mod_type = f"Nullable({stripped})" if nullable else stripped
-            rev_type = stripped if nullable else f"Nullable({stripped})"
+        base, _, low_cardinality = _parse_ch_type_wrappers(col_type or "")
+        if base:
+            mod_type = _apply_ch_nullable_low_cardinality(base, nullable, low_cardinality)
+            rev_type = _apply_ch_nullable_low_cardinality(base, not nullable, low_cardinality)
             upgrade = f"ALTER TABLE {table} MODIFY COLUMN {column} {mod_type}"
             rollback = f"ALTER TABLE {table} MODIFY COLUMN {column} {rev_type}"
         else:

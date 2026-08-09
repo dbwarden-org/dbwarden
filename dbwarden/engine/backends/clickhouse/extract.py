@@ -8,6 +8,7 @@ from dbwarden.databases.clickhouse import (
 )
 from dbwarden.databases.clickhouse.engine import ChEngineSpec
 from dbwarden.databases.clickhouse.projection import ProjectionSpec
+from dbwarden.engine.backends.clickhouse.render import _apply_ch_nullable_low_cardinality
 from dbwarden.exceptions import DBWardenConfigError
 from dbwarden.schema._base import read_meta
 
@@ -359,9 +360,8 @@ def _map_sa_type_to_clickhouse(column) -> str:
     ch_type = _render_ch_type_from_sa(column.type, raw_type_str)
 
     ch_meta_attrs = getattr(column, "info", {})
-    if ch_meta_attrs.get("ch_low_cardinality"):
-        ch_type = f"LowCardinality({ch_type})"
-    if ch_meta_attrs.get("ch_nullable"):
-        ch_type = f"Nullable({ch_type})"
-
-    return ch_type
+    return _apply_ch_nullable_low_cardinality(
+        ch_type,
+        bool(ch_meta_attrs.get("ch_nullable")),
+        bool(ch_meta_attrs.get("ch_low_cardinality")),
+    )

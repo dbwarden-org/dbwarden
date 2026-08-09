@@ -1,6 +1,108 @@
 from __future__ import annotations
 
+import re
 from typing import Any
+
+
+def _apply_ch_nullable_low_cardinality(
+    base_type: str,
+    nullable: bool,
+    low_cardinality: bool,
+) -> str:
+    """Wrap a base ClickHouse type with Nullable/LowCardinality in CH order.
+
+    ClickHouse forbids ``Nullable(LowCardinality(...))``; the valid form is
+    ``LowCardinality(Nullable(...))``.  This helper applies ``Nullable`` first
+    and ``LowCardinality`` second so the two flags can be combined safely.
+    """
+    result = base_type
+    if nullable:
+        result = f"Nullable({result})"
+    if low_cardinality:
+        result = f"LowCardinality({result})"
+    return result
+
+
+def _strip_ch_nullable(type_str: str) -> str:
+    """Remove an outer ``Nullable(...)`` wrapper if present."""
+    s = type_str.strip()
+    if s.startswith("Nullable(") and s.endswith(")"):
+        return s[len("Nullable("):-1].strip()
+    return s
+
+
+def _make_clickhouse_key_type(type_str: str) -> str:
+    """Return a non-nullable version of ``type_str`` while preserving LowCardinality.
+
+    ClickHouse key columns (ORDER BY / PRIMARY KEY / PARTITION BY / SAMPLE BY)
+    must not be nullable.  This strips any ``Nullable(...)`` wrappers and keeps
+    an outer ``LowCardinality(...)`` if it was present.
+    """
+    s = type_str.strip()
+
+    # Unwrap an outer Nullable first, then re-evaluate the inner type.
+    if s.startswith("Nullable(") and s.endswith(")"):
+        inner = s[len("Nullable("):-1].strip()
+        return _make_clickhouse_key_type(inner)
+
+    # Preserve LowCardinality, but ensure its inner argument is not nullable.
+    if s.startswith("LowCardinality(") and s.endswith(")"):
+        inner = s[len("LowCardinality("):-1].strip()
+        return f"LowCardinality({_make_clickhouse_key_type(inner)})"
+
+    return s
+
+
+def _parse_ch_type_wrappers(type_str: str) -> tuple[str, bool, bool]:
+    """Return ``(base_type, is_nullable, is_low_cardinality)`` for a CH type.
+
+    Handles nested wrappers such as ``Nullable(LowCardinality(String))``.
+    """
+    s = type_str.strip()
+    nullable = False
+    low_cardinality = False
+    while s.startswith(("Nullable(", "LowCardinality(")) and s.endswith(")"):
+        if s.startswith("Nullable("):
+            nullable = True
+            s = s[len("Nullable("):-1].strip()
+        elif s.startswith("LowCardinality("):
+            low_cardinality = True
+            s = s[len("LowCardinality("):-1].strip()
+    return s, nullable, low_cardinality
+
+
+def _extract_clickhouse_identifiers(expr: str) -> set[str]:
+    """Return the bare identifier-like tokens in a CH expression.
+
+    Used to discover which columns are referenced by expressions such as
+    ``toYYYYMM(event_date)`` or ``intHash64(region)``.
+    """
+    # Drop string literals so identifiers inside quotes are not picked up.
+    cleaned = re.sub(r"'[^']*'", "", expr)
+    cleaned = re.sub(r'"[^"]*"', "", cleaned)
+    return set(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", cleaned))
+
+
+def _ch_key_columns(options: dict[str, Any] | None) -> set[str]:
+    """Return the set of column names used in CH key clauses."""
+    columns: set[str] = set()
+    if not options:
+        return columns
+
+    for key in ("ch_order_by", "ch_primary_key"):
+        value = options.get(key)
+        if isinstance(value, str):
+            columns.update(_extract_clickhouse_identifiers(value))
+        elif isinstance(value, (list, tuple)):
+            for part in value:
+                columns.update(_extract_clickhouse_identifiers(str(part)))
+
+    for key in ("ch_partition_by", "ch_sample_by"):
+        value = options.get(key)
+        if value:
+            columns.update(_extract_clickhouse_identifiers(str(value)))
+
+    return columns
 
 
 def _render_clickhouse_projection(projection: dict | Any) -> str:

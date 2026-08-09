@@ -587,6 +587,57 @@ class TestSQLGeneration:
         assert "CODEC(ZSTD(3))" in sql
         assert "TTL event_time + INTERVAL 90 DAY" in sql
 
+    def test_generate_clickhouse_create_table_sql_comment_before_codec(self, monkeypatch):
+        monkeypatch.setattr(model_discovery.type_mapping, "_get_backend_name", lambda db_name=None: "clickhouse")
+
+        columns = [
+            ModelColumn("url", "String", False, False, False, None, None,
+                        codec="ZSTD(3)", comment="Visited URL"),
+        ]
+
+        table = ModelTable(name="page_views", columns=columns)
+        sql = generate_create_table_sql(table)
+
+        assert "url String COMMENT 'Visited URL' CODEC(ZSTD(3))" in sql
+
+    def test_generate_clickhouse_create_table_sql_key_columns_are_not_null(self, monkeypatch):
+        monkeypatch.setattr(model_discovery.type_mapping, "_get_backend_name", lambda db_name=None: "clickhouse")
+
+        columns = [
+            ModelColumn("event_date", "Date", False, False, False, None, None,
+                        ch_meta={"ch_type": "Nullable(Date)"}),
+            ModelColumn("id", "Int64", False, False, False, None, None,
+                        ch_meta={"ch_type": "Nullable(Int64)"}),
+            ModelColumn("payload", "String", False, False, False, None, None,
+                        ch_meta={"ch_type": "Nullable(String)"}),
+        ]
+
+        table = ModelTable(
+            name="events",
+            columns=columns,
+            clickhouse_options={
+                "ch_order_by": ["event_date", "id"],
+                "ch_partition_by": "toYYYYMM(event_date)",
+            },
+        )
+        sql = generate_create_table_sql(table)
+
+        assert "event_date Date NOT NULL" in sql
+        assert "id Int64 NOT NULL" in sql
+        assert "payload Nullable(String)" in sql
+        assert "Nullable(event_date)" not in sql
+        assert "Nullable(id)" not in sql
+
+    def test_generate_clickhouse_add_column_sql_comment_before_codec(self, monkeypatch):
+        monkeypatch.setattr(model_discovery.type_mapping, "_get_backend_name", lambda db_name=None: "clickhouse")
+
+        column = ModelColumn("url", "String", False, False, False, None, None,
+                             codec="ZSTD(3)", comment="Visited URL")
+
+        sql = model_discovery.generate_add_column_sql("page_views", column, db_name="primary")
+
+        assert "url String COMMENT 'Visited URL' CODEC(ZSTD(3))" in sql
+
     def test_generate_clickhouse_add_column_sql_with_default_expression(self, monkeypatch):
         monkeypatch.setattr(model_discovery.type_mapping, "_get_backend_name", lambda db_name=None: "clickhouse")
 
@@ -1158,8 +1209,8 @@ class TestChTypeMapperWithInfo:
         monkeypatch.setattr("dbwarden.engine.model_discovery.type_mapping._get_backend_name", lambda db_name=None: "clickhouse")
         col = Column("name", String(255), info={"ch_low_cardinality": True, "ch_nullable": True})
         result = _map_sa_type_to_clickhouse(col)
-        # LowCardinality wraps first, then Nullable wraps outside
-        assert result == "Nullable(LowCardinality(String))"
+        # Nullable must be applied before LowCardinality: LowCardinality(Nullable(...))
+        assert result == "LowCardinality(Nullable(String))"
 class TestPGViewMetaExtraction:
     def test_extract_table_from_model_with_pg_view_meta(self, monkeypatch):
         from sqlalchemy import Column, Integer, MetaData, String, Table

@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, List, Optional, Tuple
 
 from dbwarden.engine.backends.clickhouse.cluster import emit_with_cluster
+from dbwarden.engine.backends.clickhouse.render import _apply_ch_nullable_low_cardinality
 from dbwarden.engine.core.protocol import ObjectHandler, Op, RunPhase
 from dbwarden.engine.snapshot import MigrationStatement, StatementOrder
 
@@ -190,18 +191,18 @@ class ChColumnHandler(ObjectHandler):
             ch_null_diff = to_ch.get("ch_nullable") != from_ch.get("ch_nullable")
             if ch_lc_diff or ch_null_diff:
                 _base = _strip_ch_type_wrappers(to_ch.get("ch_type") or from_ch.get("ch_type") or "")
-                target = _base
-                if to_ch.get("ch_low_cardinality"):
-                    target = f"LowCardinality({target})"
-                if to_ch.get("ch_nullable"):
-                    target = f"Nullable({target})"
+                target = _apply_ch_nullable_low_cardinality(
+                    _base,
+                    bool(to_ch.get("ch_nullable")),
+                    bool(to_ch.get("ch_low_cardinality")),
+                )
                 up_parts.append(f"ALTER TABLE {table} MODIFY COLUMN {column} {target}")
                 _base_rb = _strip_ch_type_wrappers(from_ch.get("ch_type") or to_ch.get("ch_type") or "")
-                rb_target = _base_rb
-                if from_ch.get("ch_low_cardinality"):
-                    rb_target = f"LowCardinality({rb_target})"
-                if from_ch.get("ch_nullable"):
-                    rb_target = f"Nullable({rb_target})"
+                rb_target = _apply_ch_nullable_low_cardinality(
+                    _base_rb,
+                    bool(from_ch.get("ch_nullable")),
+                    bool(from_ch.get("ch_low_cardinality")),
+                )
                 rb_parts.append(f"ALTER TABLE {table} MODIFY COLUMN {column} {rb_target}")
 
         if up_parts:

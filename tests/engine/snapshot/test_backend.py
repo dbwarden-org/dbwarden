@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import tempfile
 from pathlib import Path
@@ -43,37 +44,38 @@ def _mc(name: str, typ: str, pk: bool = False, nullable: bool = True) -> ModelCo
     return ModelColumn(name, typ, nullable, pk, False, None, None)
 
 
-def test_irreversible_rollback_warns_in_normal_mode(capsys):
+def test_irreversible_rollback_warns_in_normal_mode(caplog):
     reset_logger()
     get_logger(verbose=False)
     try:
-        snapshot_diff_to_sql(
-            [
-                {
-                    "type": "refresh_matview",
-                    "table": "my_view",
-                    "schema": "public",
-                    "__irreversible": True,
-                }
-            ],
-            [],
-            db_name=None,
-        )
+        with caplog.at_level(logging.WARNING):
+            snapshot_diff_to_sql(
+                [
+                    {
+                        "type": "refresh_matview",
+                        "table": "my_view",
+                        "schema": "public",
+                        "__irreversible": True,
+                    }
+                ],
+                [],
+                db_name=None,
+            )
 
-        captured = capsys.readouterr()
-        assert "Irreversible rollback for refresh_matview" in captured.out
+        assert "Irreversible rollback for refresh_matview" in caplog.text
     finally:
         reset_logger()
 
+    caplog.clear()
     get_logger(verbose=True)
     try:
-        snapshot_diff_to_sql(
-            [{"type": "refresh_matview", "table": "my_view", "schema": "public"}],
-            [],
-            db_name=None,
-        )
-        captured = capsys.readouterr()
-        assert "Irreversible rollback for refresh_matview" in captured.out
+        with caplog.at_level(logging.WARNING):
+            snapshot_diff_to_sql(
+                [{"type": "refresh_matview", "table": "my_view", "schema": "public"}],
+                [],
+                db_name=None,
+            )
+        assert "Irreversible rollback for refresh_matview" in caplog.text
     finally:
         reset_logger()
 

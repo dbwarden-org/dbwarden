@@ -10,7 +10,7 @@ from rich.syntax import Syntax
 from rich.table import Table
 
 
-console = Console(force_terminal=True, no_color=False, width=160)
+console = Console(force_terminal=False, no_color=False, width=160, color_system="standard")
 
 
 def info(message: str) -> None:
