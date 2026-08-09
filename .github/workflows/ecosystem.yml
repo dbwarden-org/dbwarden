@@ -50,7 +50,7 @@ jobs:
       - name: Run plugin suites against this core
         run: |
           if [ "${{ github.event.inputs.include_verified }}" = "false" ]; then
-            python scripts/ecosystem-check.py
+            uv run python scripts/ecosystem-check.py
           else
-            python scripts/ecosystem-check.py --all
+            uv run python scripts/ecosystem-check.py --all
           fi
