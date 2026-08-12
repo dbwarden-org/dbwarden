@@ -19,6 +19,15 @@ class CheckSpec:
     name: str | None = None
     no_inherit: bool = False
 
+    def as_dict(self) -> dict[str, Any]:
+        """Return a plain dict in the same shape as :func:`check`."""
+        d: dict[str, Any] = {"expression": self.expression}
+        if self.name is not None:
+            d["name"] = self.name
+        if self.no_inherit:
+            d["no_inherit"] = True
+        return d
+
 
 def check(
     name: str,
@@ -54,6 +63,21 @@ class UniqueSpec:
     initially_deferred: bool = False
     include: list[str] | None = None
 
+    def as_dict(self) -> dict[str, Any]:
+        """Return a plain dict in the same shape as :func:`unique`."""
+        d: dict[str, Any] = {"columns": list(self.columns)}
+        if self.name is not None:
+            d["name"] = self.name
+        if self.nulls_not_distinct:
+            d["nulls_not_distinct"] = True
+        if self.deferrable:
+            d["deferrable"] = True
+        if self.initially_deferred:
+            d["initially_deferred"] = True
+        if self.include is not None:
+            d["include"] = list(self.include)
+        return d
+
 
 def unique(
     name: str,
@@ -78,3 +102,19 @@ def unique(
     if include is not None:
         d["include"] = list(include)
     return d
+
+
+def normalize_unique_spec(spec: Any) -> Any:
+    """Return a plain dict for a ``UniqueSpec``, passing dicts through unchanged.
+
+    Model discovery and snapshot code always work with plain constraint dicts,
+    so typed specs declared in ``class Meta`` are normalized as early as
+    possible to avoid ``AttributeError: 'UniqueSpec' object has no attribute
+    'get'`` downstream.
+    """
+    return spec.as_dict() if isinstance(spec, UniqueSpec) else spec
+
+
+def normalize_check_spec(spec: Any) -> Any:
+    """Return a plain dict for a ``CheckSpec``, passing dicts through unchanged."""
+    return spec.as_dict() if isinstance(spec, CheckSpec) else spec

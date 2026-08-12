@@ -1,14 +1,11 @@
 import time
+import uuid
 from contextlib import contextmanager
 
 from dbwarden.config import get_config
 from dbwarden.exceptions import LockError
 from dbwarden.logging import get_logger
-from dbwarden.repositories.lock_repo import (
-    acquire_lock,
-    check_lock,
-    release_lock,
-)
+from dbwarden.repositories.lock_repo import acquire_lock, check_lock, release_lock
 
 
 @contextmanager
@@ -26,21 +23,16 @@ def migration_lock(timeout: int = 300):
     """
     logger = get_logger()
     config = get_config()
-
-    if check_lock():
-        raise LockError(
-            "Migration lock is already held. Another migration process may be running. "
-            "Use 'dbwarden unlock' to release the lock if necessary."
-        )
+    owner_token = uuid.uuid4().hex
 
     wait_time = 0
     while wait_time < timeout:
-        if acquire_lock():
+        if acquire_lock(owner_token=owner_token):
             logger.info("Migration lock acquired")
             try:
                 yield
             finally:
-                release_lock()
+                release_lock(owner_token=owner_token)
                 logger.info("Migration lock released")
             return
         else:

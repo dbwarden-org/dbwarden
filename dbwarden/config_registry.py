@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 from dbwarden.config_schema import DatabaseEntry, DatabaseType, structure_database_entry
 
@@ -51,6 +51,7 @@ def database_config(
     database_url_sync: str | None = None,
     database_url_async: str | None = None,
     secure_values: bool = False,
+    skip_if_missing: bool = False,
     default: bool = False,
     migrations_dir: str | None = None,
     migration_table: str | None = None,
@@ -83,6 +84,7 @@ def database_config(
             database_url_sync=database_url_sync,
             database_url_async=database_url_async,
             secure_values=secure_values,
+            skip_if_missing=skip_if_missing,
             default=default,
             migrations_dir=migrations_dir,
             migration_table=migration_table,
@@ -100,6 +102,48 @@ def database_config(
     )
     _REGISTRY.add(entry)
     return _DH(entry.database_name, entry.database_type)
+
+
+class _DbwardenDatabaseMeta(type):
+    """Register concrete declarative database definitions at import time."""
+
+    def __new__(mcls, name: str, bases: tuple[type, ...], namespace: dict[str, Any]):
+        cls = super().__new__(mcls, name, bases, namespace)
+        if namespace.get("__abstract__", False):
+            return cls
+        if not any(isinstance(base, _DbwardenDatabaseMeta) for base in bases):
+            return cls
+
+        values: dict[str, Any] = {}
+        for base in reversed(cls.__mro__[1:]):
+            for key in _DECLARATIVE_FIELDS:
+                if key in base.__dict__:
+                    value = base.__dict__[key]
+                    values[key] = list(value) if key in _MUTABLE_FIELDS and value is not None else value
+        values.update({key: value for key, value in namespace.items() if key in _DECLARATIVE_FIELDS})
+        missing = [key for key in ("database_name", "database_url_sync", "database_url_async") if not values.get(key)]
+        if not values.get("database_name") or (not values.get("database_url_sync") and not values.get("database_url_async")):
+            raise ValueError(
+                f"Concrete {name} must define database_name and at least one database URL"
+            )
+        handle = database_config(**values)
+        cls.handle = handle
+        return cls
+
+
+_DECLARATIVE_FIELDS = {
+    "database_name", "database_type", "database_url_sync", "database_url_async",
+    "secure_values", "skip_if_missing", "default", "migrations_dir", "migration_table",
+    "model_paths", "model_tables", "dev_database_type", "dev_database_url", "overlap_models",
+    "auto_apply_seeds", "seed_table", "pg_schema", "pg_migration_lock_timeout",
+}
+_MUTABLE_FIELDS = {"model_paths", "model_tables"}
+
+
+class DbwardenDatabase(metaclass=_DbwardenDatabaseMeta):
+    """Base class for automatically registered database configuration."""
+
+    __abstract__ = True
 
 
 def _validate_plugin_config(plugin_config: dict[str, Any]) -> None:

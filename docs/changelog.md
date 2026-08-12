@@ -9,6 +9,15 @@ All notable changes to DBWarden, newest first. Versions follow semantic versioni
 
 ## [Unreleased]
 
+### Added
+
+- **Global `--json` flag.** `dbwarden --json <command>` switches display commands (`status`, `history`, `database list`, `settings show`, `config`, `version`, `lock-status`) to structured JSON output and also routes the command's log output through JSON formatting (the same effect as `DBWARDEN_LOG_JSON=true`). Commands that already support JSON output (`check`, `check-db`, `check-impact`, `diff`, `plugin list`, `plugin info`) honor the global flag too.
+- **TRACE log level.** A `trace` level (numeric `5`) is available via `--debug-level trace` and logs per-statement SQL during `migrate`, `rollback`, and `downgrade`.
+- **`--perf` flag for migration commands.** `migrate`, `rollback`, `downgrade`, and `make-migrations` accept `--perf` to add per-SQL-statement timing breakdowns on top of the always-on phase timings (lock acquisition, snapshot write, model state write, and SQL statement durations).
+- **Optional database availability handling.** Database entries support `skip_if_missing=True` for optional databases in multi-database operations. Use the global `--disable-skip` flag to force configured optional databases to fail normally.
+- **Declarative database configuration.** Concrete subclasses of `DbwardenDatabase` are automatically registered and support inherited configuration, while the existing `database_config(...)` API remains supported.
+- **Partial-success results.** Multi-database migration, status, and seed commands report skipped databases and use exit code `3` when the operation completes with optional databases unavailable.
+
 ### Fixed
 
 - **ClickHouse DDL generation for fresh migrations.** `make-migrations` now emits ClickHouse DDL that applies cleanly to a fresh ClickHouse 24.x database: column comments are emitted before `CODEC(...)`, `Nullable` is nested inside `LowCardinality(...)` rather than the invalid reverse, and columns used in `ORDER BY` / `PRIMARY KEY` / `PARTITION BY` / `SAMPLE BY` are rendered as non-nullable.

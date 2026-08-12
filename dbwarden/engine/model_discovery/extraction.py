@@ -46,6 +46,11 @@ from dbwarden.schema._meta_reader import (
     _type_check_field_attrs,
     _write_column_info,
 )
+from dbwarden.databases.pgsql.constraint import normalize_exclude_spec
+from dbwarden.schema.constraint import (
+    normalize_check_spec,
+    normalize_unique_spec,
+)
 
 
 def _apply_meta_fast(cls: type) -> None:
@@ -154,6 +159,10 @@ def extract_table_from_model(
         if dw_meta:
             checks = list(getattr(dw_meta, "pg_checks", []) or getattr(dw_meta, "checks", []) or getattr(dw_meta, "my_checks", []))
             uniques = list(getattr(dw_meta, "pg_uniques", []) or getattr(dw_meta, "uniques", []) or getattr(dw_meta, "my_uniques", []))
+            excludes = list(getattr(dw_meta, "pg_excludes", []) or [])
+            checks = [normalize_check_spec(c) for c in checks]
+            uniques = [normalize_unique_spec(u) for u in uniques]
+            excludes = [normalize_exclude_spec(ex) for ex in excludes]
             for column in model_class.__table__.columns:
                 if getattr(column, "unique", False):
                     col_name = column.name
@@ -163,7 +172,6 @@ def extract_table_from_model(
                             "deferrable": False,
                             "initially_deferred": False,
                         })
-            excludes = list(getattr(dw_meta, "pg_excludes", []))
             indexes_meta = getattr(dw_meta, "indexes", []) or []
             pg_indexes_meta = getattr(dw_meta, "pg_indexes", []) or []
             ch_indexes_meta = getattr(dw_meta, "ch_indexes", []) or []

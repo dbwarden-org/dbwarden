@@ -6,7 +6,19 @@ from dbwarden.config import get_database, get_multi_db_config
 from dbwarden.engine.migration_name import Change
 from dbwarden.engine.version import get_migrations_directory
 from dbwarden.logging import get_logger
-from dbwarden.output import data_table, error, info, plain, render, section, sql, success, warning
+from dbwarden.output import (
+    data_table,
+    emit_json,
+    error,
+    info,
+    json_mode,
+    plain,
+    render,
+    section,
+    sql,
+    success,
+    warning,
+)
 
 
 def diff_cmd(
@@ -196,6 +208,10 @@ def lock_status_cmd(database: str | None = None) -> None:
     from dbwarden.repositories import check_lock
 
     is_locked = check_lock(database)
+    db_name = database or "default"
+    if json_mode():
+        emit_json({"database": db_name, "locked": is_locked})
+        return
     if is_locked:
         warning("Migration lock: ACTIVE")
         info("Another migration process may be running.")
@@ -205,13 +221,13 @@ def lock_status_cmd(database: str | None = None) -> None:
 
 def unlock_cmd(database: str | None = None) -> None:
     """Release the migration lock."""
-    from dbwarden.repositories import release_lock, check_lock
+    from dbwarden.repositories import check_lock, force_release_lock
 
     if not check_lock(database):
         warning("Migration lock is not currently held.")
         return
 
-    if release_lock(database):
+    if force_release_lock(database):
         success("Migration lock released successfully.")
     else:
         error("Failed to release migration lock.")

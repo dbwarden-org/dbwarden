@@ -31,6 +31,7 @@ from dbwarden.commands.seeds import (
 from dbwarden.commands.settings import handle_settings_show
 from dbwarden.commands.status import status_cmd
 from dbwarden.commands.utils import config_cmd, version_cmd
+from dbwarden.output import json_mode
 
 
 def handle_database_list() -> None:
@@ -58,6 +59,7 @@ def handle_make_migrations(
     clickhouse_engine_recreate: bool = False,
     drop_preserved_clickhouse_table: bool | None = None,
     postgres_auto_using: bool = False,
+    perf: bool = False,
 ) -> None:
     """Handle make-migrations command."""
     make_migrations_cmd(
@@ -75,6 +77,7 @@ def handle_make_migrations(
         clickhouse_engine_recreate=clickhouse_engine_recreate,
         drop_preserved_clickhouse_table=drop_preserved_clickhouse_table,
         postgres_auto_using=postgres_auto_using,
+        perf=perf,
     )
 
 
@@ -99,6 +102,7 @@ def handle_migrate(
     dry_run: bool = False,
     sandbox: bool = False,
     apply_seeds: bool = False,
+    perf: bool = False,
 ) -> None:
     """Handle migrate command."""
     migrate_cmd(
@@ -113,6 +117,7 @@ def handle_migrate(
         dry_run=dry_run,
         sandbox=sandbox,
         apply_seeds=apply_seeds,
+        perf=perf,
     )
 
 
@@ -121,9 +126,10 @@ def handle_rollback(
     to_version: str | None,
     verbose: bool,
     database: str | None = None,
+    perf: bool = False,
 ) -> None:
     """Handle rollback command."""
-    rollback_cmd(count=count, to_version=to_version, verbose=verbose, database=database)
+    rollback_cmd(count=count, to_version=to_version, verbose=verbose, database=database, perf=perf)
 
 
 def handle_history(database: str | None = None) -> None:
@@ -138,6 +144,8 @@ def handle_status(database: str | None = None, all_databases: bool = False) -> N
 
 def handle_check_db(output_format: str, database: str | None = None) -> None:
     """Handle check-db command."""
+    if json_mode() and output_format != "json":
+        output_format = "json"
     check_db_cmd(output_format=output_format, database=database)
 
 
@@ -147,6 +155,8 @@ def handle_check(
     force: bool = False,
 ) -> None:
     """Handle safety check command."""
+    if json_mode() and output_format != "json":
+        output_format = "json"
     check_cmd(output_format=output_format, database=database, force=force)
 
 
@@ -159,6 +169,8 @@ def handle_check_impact(
     database: str | None = None,
 ) -> None:
     """Handle check-impact command."""
+    if json_mode() and out != "json":
+        out = "json"
     check_impact_cmd(
         migration=migration, out=out, scan_path=scan_path,
         deep=deep, verbose=verbose, database=database,
@@ -172,6 +184,8 @@ def handle_diff(
     offline: bool = False,
 ) -> None:
     """Handle diff command."""
+    if json_mode() and output_format != "json":
+        output_format = "json"
     diff_cmd(output_format=output_format, verbose=verbose, database=database, offline=offline)
 
 
@@ -206,8 +220,9 @@ def handle_downgrade(
     to_version: str,
     verbose: bool = False,
     database: str | None = None,
+    perf: bool = False,
 ) -> None:
-    downgrade_cmd(to_version=to_version, verbose=verbose, database=database)
+    downgrade_cmd(to_version=to_version, verbose=verbose, database=database, perf=perf)
 
 
 def handle_make_rollback(
@@ -344,10 +359,14 @@ def handle_seed_export(
 
 
 def handle_plugin_list(output_format: str = "table") -> None:
+    if json_mode() and output_format == "table":
+        output_format = "json"
     plugin_list_cmd(output_format=output_format)
 
 
 def handle_plugin_info(dist_name: str, output_format: str = "table") -> None:
+    if json_mode() and output_format == "table":
+        output_format = "json"
     plugin_info_cmd(dist_name, output_format=output_format)
 
 

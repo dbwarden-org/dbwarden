@@ -19,8 +19,9 @@ class TestLockRepo:
 
     def test_acquire_lock_success(self):
         with self._mock_config(), patch("dbwarden.repositories.lock_repo.get_db_connection") as mock_conn:
+            mock_conn.return_value.__enter__.return_value.execute.return_value.rowcount = 1
             from dbwarden.repositories.lock_repo import acquire_lock
-            result = acquire_lock("test_db")
+            result = acquire_lock("test_db", "owner-1")
             assert result is True
             mock_conn.assert_called_once_with("test_db")
 
@@ -33,10 +34,32 @@ class TestLockRepo:
 
     def test_release_lock_success(self):
         with self._mock_config(), patch("dbwarden.repositories.lock_repo.get_db_connection") as mock_conn:
+            mock_conn.return_value.__enter__.return_value.execute.return_value.rowcount = 1
             from dbwarden.repositories.lock_repo import release_lock
-            result = release_lock("test_db")
+            result = release_lock("test_db", "owner-1")
             assert result is True
             mock_conn.assert_called_once_with("test_db")
+
+    def test_release_lock_requires_owner(self):
+        with patch("dbwarden.repositories.lock_repo.get_db_connection") as mock_conn:
+            from dbwarden.repositories.lock_repo import release_lock
+
+            assert release_lock("test_db") is False
+            mock_conn.assert_not_called()
+
+    def test_acquire_lock_returns_false_when_update_did_not_claim_row(self):
+        with patch("dbwarden.repositories.lock_repo.get_db_connection") as mock_conn:
+            mock_conn.return_value.__enter__.return_value.execute.return_value.rowcount = 0
+            from dbwarden.repositories.lock_repo import acquire_lock
+
+            assert acquire_lock("test_db", "owner-1") is False
+
+    def test_force_release_lock_success(self):
+        with self._mock_config(), patch("dbwarden.repositories.lock_repo.get_db_connection") as mock_conn:
+            mock_conn.return_value.__enter__.return_value.execute.return_value.rowcount = 1
+            from dbwarden.repositories.lock_repo import force_release_lock
+
+            assert force_release_lock("test_db") is True
 
     def test_release_lock_failure(self):
         with self._mock_config(), patch("dbwarden.repositories.lock_repo.get_db_connection") as mock_conn:
@@ -83,29 +106,27 @@ class TestMigrationLock:
     def test_migration_lock_acquire_and_release(self):
         with (
             patch("dbwarden.engine.lock.get_config"),
-            patch("dbwarden.engine.lock.check_lock", return_value=False) as mock_check,
             patch("dbwarden.engine.lock.acquire_lock", return_value=True) as mock_acquire,
             patch("dbwarden.engine.lock.release_lock") as mock_release,
         ):
             with migration_lock(timeout=5):
                 pass
-            mock_check.assert_called_once()
             mock_acquire.assert_called_once()
             mock_release.assert_called_once()
 
     def test_migration_lock_already_held(self):
         with (
             patch("dbwarden.engine.lock.get_config"),
-            patch("dbwarden.engine.lock.check_lock", return_value=True),
+            patch("dbwarden.engine.lock.acquire_lock", return_value=False),
+            patch("dbwarden.engine.lock.time.sleep"),
         ):
-            with pytest.raises(LockError, match="already held"):
+            with pytest.raises(LockError, match="Could not acquire migration lock"):
                 with migration_lock(timeout=5):
                     pass
 
     def test_migration_lock_timeout(self):
         with (
             patch("dbwarden.engine.lock.get_config"),
-            patch("dbwarden.engine.lock.check_lock", return_value=False),
             patch("dbwarden.engine.lock.acquire_lock", return_value=False),
             patch("dbwarden.engine.lock.time.sleep"),
         ):
@@ -116,7 +137,6 @@ class TestMigrationLock:
     def test_migration_lock_releases_on_exception(self):
         with (
             patch("dbwarden.engine.lock.get_config"),
-            patch("dbwarden.engine.lock.check_lock", return_value=False),
             patch("dbwarden.engine.lock.acquire_lock", return_value=True),
             patch("dbwarden.engine.lock.release_lock") as mock_release,
         ):

@@ -964,3 +964,300 @@ class TestScanLogging:
         assert records[0].getMessage() == (
             "Failed to load model file: /tmp/missing.py (file not found)"
         )
+
+
+class TestNonTTYColorStripping:
+    """ANSI helpers must emit plain text when the terminal is not a TTY."""
+
+    def test_colorize_strips_ansi_when_no_tty(self, monkeypatch):
+        from dbwarden import logging as logging_module
+
+        monkeypatch.setattr(logging_module, "supports_color", lambda: False)
+
+        assert logging_module.colorize("hello", logging_module.ANSI_COLORS["red"]) == "hello"
+
+    def test_colorize_status_strips_ansi_when_no_tty(self, monkeypatch):
+        from dbwarden import logging as logging_module
+
+        monkeypatch.setattr(logging_module, "supports_color", lambda: False)
+
+        assert logging_module.colorize_status("applied") == "[APPLIED]"
+
+    def test_colorize_sql_strips_ansi_when_no_tty(self, monkeypatch):
+        from dbwarden import logging as logging_module
+
+        monkeypatch.setattr(logging_module, "supports_color", lambda: False)
+
+        assert logging_module.colorize_sql("SELECT 1 -- note") == "SELECT 1 -- note"
+
+    def test_colored_formatter_emits_plain_text_when_no_tty(self, monkeypatch):
+        from dbwarden import logging as logging_module
+
+        monkeypatch.setattr(logging_module, "supports_color", lambda: False)
+
+        formatter = logging_module.ColoredFormatter("%(message)s")
+        record = logging.LogRecord(
+            name="dbwarden",
+            level=logging.ERROR,
+            pathname="test.py",
+            lineno=1,
+            msg="boom",
+            args=(),
+            exc_info=None,
+        )
+
+        output = formatter.format(record)
+
+        assert output == "boom"
+        assert "\033[" not in output
+
+
+class TestMultithreadedLogging:
+    """Logging through a shared DBWardenLogger must be safe across threads."""
+
+    @staticmethod
+    def _queue_logger(logger, queue):
+        class QueueHandler(logging.Handler):
+            def emit(self, record):
+                queue.put(record)
+
+        logger.logger.handlers = [QueueHandler()]
+        logger.logger.propagate = False
+
+    def test_concurrent_info_logging_captures_all_records(self):
+        import queue
+        import threading
+
+        records = queue.Queue()
+        logger = DBWardenLogger(debug_enabled=True)
+        self._queue_logger(logger, records)
+        errors = []
+
+        def worker(n):
+            try:
+                for i in range(50):
+                    logger.info(f"msg {n}-{i}")
+            except Exception as exc:  # pragma: no cover - failure surface
+                errors.append(exc)
+
+        threads = [threading.Thread(target=worker, args=(n,)) for n in range(8)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        assert not errors
+        assert records.qsize() == 8 * 50
+
+    def test_concurrent_json_logging_produces_valid_json(self, monkeypatch):
+        import queue
+        import threading
+
+        from dbwarden.logging import JSONFormatter, reset_logger
+
+        reset_logger()
+        monkeypatch.setenv("DBWARDEN_LOG_JSON", "true")
+        try:
+            records = queue.Queue()
+            logger = get_logger(debug_enabled=True)
+            self._queue_logger(logger, records)
+            formatter = JSONFormatter()
+            for handler in logger.logger.handlers:
+                handler.setFormatter(formatter)
+            errors = []
+
+            def worker(n):
+                try:
+                    for i in range(20):
+                        logger.info(f"json {n}-{i}")
+                except Exception as exc:  # pragma: no cover - failure surface
+                    errors.append(exc)
+
+            threads = [threading.Thread(target=worker, args=(n,)) for n in range(6)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+
+            assert not errors
+            captured = [records.get() for _ in range(6 * 20)]
+            for record in captured:
+                parsed = json.loads(formatter.format(record))
+                assert parsed["level"] == "INFO"
+                assert "message" in parsed
+        finally:
+            reset_logger()
+
+
+class TestGetLoggerThreadSafety:
+    """get_logger() must initialize exactly once under concurrency."""
+
+    def test_concurrent_initialization_returns_same_instance(self):
+        import threading
+
+        from dbwarden.logging import reset_logger
+
+        reset_logger()
+        try:
+            results = []
+
+            def worker():
+                results.append(
+                    get_logger(
+                        debug_level=logging.DEBUG,
+                        verbosity=Verbosity.VERBOSE,
+                        db_name="primary",
+                    )
+                )
+
+            threads = [threading.Thread(target=worker) for _ in range(20)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+
+            assert len({id(r) for r in results}) == 1
+            singleton = results[0]
+            assert len(singleton.logger.handlers) == 1
+            assert singleton.db_name == "primary"
+        finally:
+            reset_logger()
+
+    def test_concurrent_reset_and_get_does_not_crash(self):
+        import threading
+
+        from dbwarden.logging import reset_logger
+
+        reset_logger()
+        try:
+            errors = []
+
+            def getter():
+                try:
+                    for _ in range(25):
+                        get_logger()
+                except Exception as exc:  # pragma: no cover - failure surface
+                    errors.append(exc)
+
+            def reseter():
+                try:
+                    for _ in range(25):
+                        reset_logger()
+                except Exception as exc:  # pragma: no cover - failure surface
+                    errors.append(exc)
+
+            threads = [threading.Thread(target=getter) for _ in range(3)] + [
+                threading.Thread(target=reseter) for _ in range(3)
+            ]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+
+            assert not errors
+            assert get_logger() is not None
+        finally:
+            reset_logger()
+
+
+class TestTraceLevel:
+    """TRACE level plumbing: level registration, method, and formatter."""
+
+    def test_trace_level_registered_with_stdlib(self):
+        from dbwarden.logging import TRACE_LEVEL
+
+        assert TRACE_LEVEL == 5
+        assert logging.getLevelName(TRACE_LEVEL) == "TRACE"
+
+    def test_trace_method_emits_trace_record(self):
+        from dbwarden.logging import TRACE_LEVEL
+
+        logger = DBWardenLogger(debug_level=TRACE_LEVEL)
+        records = []
+
+        class CaptureHandler(logging.Handler):
+            def emit(self, record):
+                records.append(record)
+
+        logger.logger.handlers = [CaptureHandler()]
+        logger.logger.propagate = False
+
+        logger.trace("fine detail")
+
+        assert len(records) == 1
+        assert records[0].levelno == TRACE_LEVEL
+        assert records[0].getMessage() == "fine detail"
+
+    def test_trace_method_suppressed_above_trace_level(self):
+        logger = DBWardenLogger(debug_enabled=False)
+        records = []
+
+        class CaptureHandler(logging.Handler):
+            def emit(self, record):
+                records.append(record)
+
+        logger.logger.handlers = [CaptureHandler()]
+        logger.logger.propagate = False
+
+        logger.trace("hidden")
+
+        assert records == []
+
+    def test_log_sql_trace_emits_when_enabled(self):
+        from dbwarden.logging import TRACE_LEVEL
+
+        logger = DBWardenLogger(debug_level=TRACE_LEVEL)
+        records = []
+
+        class CaptureHandler(logging.Handler):
+            def emit(self, record):
+                records.append(record)
+
+        logger.logger.handlers = [CaptureHandler()]
+        logger.logger.propagate = False
+
+        logger.log_sql_trace("CREATE TABLE t (id int)")
+
+        assert len(records) == 1
+        assert records[0].levelno == TRACE_LEVEL
+        assert records[0].getMessage() == "CREATE TABLE t (id int)"
+
+    def test_log_sql_trace_suppressed_above_trace_level(self):
+        logger = DBWardenLogger(debug_enabled=False)
+        records = []
+
+        class CaptureHandler(logging.Handler):
+            def emit(self, record):
+                records.append(record)
+
+        logger.logger.handlers = [CaptureHandler()]
+        logger.logger.propagate = False
+
+        logger.log_sql_trace("SELECT 1")
+
+        assert records == []
+
+    def test_resolve_debug_level_accepts_trace(self):
+        from dbwarden.logging import TRACE_LEVEL, resolve_debug_level
+
+        assert resolve_debug_level("trace") == TRACE_LEVEL
+        assert resolve_debug_level("TRACE") == TRACE_LEVEL
+        assert resolve_debug_level("5") == TRACE_LEVEL
+
+    def test_json_formatter_renders_trace_level(self):
+        from dbwarden.logging import JSONFormatter, TRACE_LEVEL
+
+        fmt = JSONFormatter()
+        record = logging.LogRecord(
+            name="dbwarden",
+            level=TRACE_LEVEL,
+            pathname="t.py",
+            lineno=1,
+            msg="sql dump",
+            args=(),
+            exc_info=None,
+        )
+
+        parsed = json.loads(fmt.format(record))
+
+        assert parsed["level"] == "TRACE"

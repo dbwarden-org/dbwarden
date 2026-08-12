@@ -15,13 +15,23 @@ $ dbwarden [GLOBAL_OPTIONS] COMMAND [ARGS] [COMMAND_OPTIONS]
 | `--dev` | Use `dev_database_url` and `dev_database_type` for selected database |
 | `--strict-translation` | Fail on unsupported/lossy dev SQLite translation |
 | `--debug` | Enable DEBUG-level logging (shows per-file model scanning on `make-migrations`) |
-| `--debug-level <LEVEL>` | Set an exact log level: `debug`, `info`, `warning`, `error`, `critical`, or `10`/`20`/`30`/`40`/`50` |
+| `--debug-level <LEVEL>` | Set an exact log level: `trace`, `debug`, `info`, `warning`, `error`, `critical`, or `5`/`10`/`20`/`30`/`40`/`50` |
+| `--json`/`-j` | Emit structured JSON for display commands and JSON-formatted logs |
 | `--help` | Show help |
 
 `--debug`/`--debug-level` set the logging severity and compose with the
 per-command `--verbose`/`-v` flag, which controls INFO-level verbosity. Use both
 (`--debug` plus `-v`) for DEBUG diagnostics with verbose INFO output. If both
-`--debug` and `--debug-level` are given, `--debug-level` wins.
+`--debug` and `--debug-level` are given, `--debug-level` wins. `trace` (or `5`)
+is below `debug` and additionally logs per-statement SQL during migration
+commands.
+
+`--json` switches display commands (`status`, `history`, `database list`,
+`settings show`, `config`, `version`, `lock-status`) to machine-readable JSON
+and also formats the command's log output as newline-delimited JSON (the same
+effect as `DBWARDEN_LOG_JSON=true`). Commands with their own format option
+(`check`, `check-db`, `check-impact`, `diff`, `plugin list`, `plugin info`)
+honor the global flag when no explicit format is given.
 
 ## Configuration
 

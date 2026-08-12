@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import sys
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
@@ -11,6 +13,39 @@ from rich.table import Table
 
 
 console = Console(force_terminal=False, no_color=False, width=160, color_system="standard")
+error_console = Console(file=sys.stderr, force_terminal=False, no_color=False, width=160, color_system="standard")
+
+_OUTPUT_MODE = "text"
+
+
+def set_output_mode(mode: str) -> None:
+    """Set the global output mode: ``text`` (default) or ``json``."""
+    global _OUTPUT_MODE
+    _OUTPUT_MODE = mode
+
+
+def get_output_mode() -> str:
+    """Return the current output mode."""
+    return _OUTPUT_MODE
+
+
+def json_mode() -> bool:
+    """Whether the CLI should render structured JSON instead of tables/text."""
+    return _OUTPUT_MODE == "json"
+
+
+def emit_json(payload: Any) -> None:
+    """Render a structured payload as indented JSON."""
+    console.print(json.dumps(payload, indent=2, default=str), markup=False, highlight=False)
+
+
+def emit_error_json(code: str, message: str) -> None:
+    """Emit one machine-readable error document."""
+    console.print(
+        json.dumps({"ok": False, "error": {"code": code, "message": message}}, default=str),
+        markup=False,
+        highlight=False,
+    )
 
 
 def info(message: str) -> None:
@@ -26,7 +61,7 @@ def warning(message: str) -> None:
 
 
 def error(message: str) -> None:
-    console.print(message, style="bold red")
+    (error_console if json_mode() else console).print(message, style="bold red")
 
 
 def plain(message: str) -> None:

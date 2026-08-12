@@ -80,6 +80,8 @@ python_files = ["test_*.py"]
 markers = [
     "p0: Two-cycle convergence gate that must never regress",
     "integration: Tests requiring a live ClickHouse container (--ch-integration)",
+    "sql: Pure SQL generation and operation contract tests",
+    "sqlite: SQLite-backed migration lifecycle tests",
 ]
 
 [tool.coverage.run]

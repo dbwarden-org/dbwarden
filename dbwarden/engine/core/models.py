@@ -3,6 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, List, Optional
 
+from dbwarden.databases.pgsql.constraint import normalize_exclude_spec
+from dbwarden.schema.constraint import normalize_check_spec, normalize_unique_spec
+
 
 class ModelColumn:
     """Represents a column from a SQLAlchemy model."""
@@ -176,9 +179,9 @@ class ModelTable:
             for idx in (indexes or [])
         ]
         self.comment = comment
-        self.checks = checks or []
-        self.uniques = uniques or []
-        self.excludes = excludes or []
+        self.checks = [normalize_check_spec(c) for c in (checks or [])]
+        self.uniques = [normalize_unique_spec(u) for u in (uniques or [])]
+        self.excludes = [normalize_exclude_spec(ex) for ex in (excludes or [])]
         self.pg_table = pg_table or {}
         self.my_table = my_table or {}
         self.schema = schema

@@ -81,6 +81,34 @@ This switches from colored human-readable output to JSON:
 
 JSON logs are easier to ingest into ELK, Datadog, or other log aggregators.
 
+For CLI runs, the global `--json` flag produces the same JSON-formatted logs and
+also switches display commands to structured output:
+
+```bash
+dbwarden --json status --database primary
+dbwarden --json migrate --database primary
+```
+
+### TRACE logging
+
+`--debug-level trace` logs every SQL statement executed by `migrate`,
+`rollback`, and `downgrade`:
+
+```bash
+dbwarden --debug-level trace migrate --database primary
+```
+
+Each statement is logged as `SQL (2.1ms): CREATE TABLE ...`.
+
+### Migration phase timing
+
+Phase timings (lock acquisition, snapshot write, model state write) are logged
+at INFO by default. Add `--perf` for a per-SQL-statement breakdown:
+
+```bash
+dbwarden migrate --perf --database primary
+```
+
 ## Step 4: Query Tracing
 
 ```python
@@ -174,7 +202,9 @@ In Grafana, add Prometheus data source (`http://prometheus:9090`) and create das
 
 - Metrics are opt-in via `uv add "dbwarden[metrics]"`
 - Six metric families cover migration, schema, and error tracking
-- `DBWARDEN_LOG_JSON=1` switches to structured JSON logging
+- `DBWARDEN_LOG_JSON=1` (or the global `--json` flag) switches to structured JSON logging
+- `--debug-level trace` logs every SQL statement during migration commands
+- `--perf` adds per-statement timing breakdowns to migration commands
 - `QueryTracingMiddleware` logs every SQL query with duration
 - `PoolMetricsCollector` monitors connection pool health
 - Metrics are compatible with standard Prometheus + Grafana setup

@@ -57,8 +57,7 @@ def check_db_cmd(output_format: str = "txt", database: str | None = None) -> Non
                     ],
                 }
     except DBDisconnectedError:
-        warning("Database disconnected - cannot inspect live schema.")
-        return
+        raise
 
     section(f"Database Schema: {db_name}")
 

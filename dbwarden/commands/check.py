@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dbwarden.engine.safety import issues_to_json, load_issues
 from dbwarden.exceptions import DBDisconnectedError
-from dbwarden.output import data_table, render, success, warning
+from dbwarden.output import data_table, plain, render, success, warning
 
 
 def check_cmd(
@@ -20,7 +20,7 @@ def check_cmd(
         return
 
     if output_format == "json":
-        render(issues_to_json(issues))
+        plain(issues_to_json(issues))
     elif output_format == "txt":
         _print_issues_table(issues, database=database)
     else:

@@ -4,6 +4,8 @@ from enum import Enum
 class QueryMethod(Enum):
     CREATE_MIGRATIONS_TABLE = "create_migrations_table"
     CREATE_LOCK_TABLE = "create_lock_table"
+    ADD_LOCK_OWNER_COLUMN = "add_lock_owner_column"
+    INITIALIZE_LOCK = "initialize_lock"
     INSERT_VERSION = "insert_version"
     DELETE_VERSION = "delete_version"
     GET_ALL_MIGRATIONS = "get_all_migrations"
@@ -13,6 +15,7 @@ class QueryMethod(Enum):
     CHECK_IF_VERSION_EXISTS = "check_if_version_exists"
     ACQUIRE_LOCK = "acquire_lock"
     RELEASE_LOCK = "release_lock"
+    FORCE_RELEASE_LOCK = "force_release_lock"
     CHECK_LOCK = "check_lock"
     GET_TABLE_NAMES = "get_table_names"
     GET_TABLE_COLUMNS = "get_table_columns"
@@ -53,9 +56,16 @@ SQLITE_QUERIES = {
         CREATE TABLE IF NOT EXISTS dbwarden_lock (
             id INTEGER PRIMARY KEY CHECK (id = 1),
             locked BOOLEAN DEFAULT FALSE,
-            acquired_at TIMESTAMP
+            acquired_at TIMESTAMP,
+            owner_token VARCHAR(128)
         )
     """,
+    QueryMethod.INITIALIZE_LOCK: """
+        INSERT INTO dbwarden_lock (id, locked, acquired_at, owner_token)
+        VALUES (1, FALSE, NULL, NULL)
+        ON CONFLICT (id) DO NOTHING
+    """,
+    QueryMethod.ADD_LOCK_OWNER_COLUMN: "ALTER TABLE dbwarden_lock ADD COLUMN owner_token VARCHAR(128)",
     QueryMethod.INSERT_VERSION: """
         INSERT INTO {migration_table} (version, description, filename, migration_type, checksum)
         VALUES (:version, :description, :filename, :migration_type, :checksum)
@@ -82,12 +92,19 @@ SQLITE_QUERIES = {
         SELECT COUNT(*) FROM {migration_table} WHERE version = :version
     """,
     QueryMethod.ACQUIRE_LOCK: """
-        INSERT OR REPLACE INTO dbwarden_lock (id, locked, acquired_at)
-        VALUES (1, TRUE, CURRENT_TIMESTAMP)
+        UPDATE dbwarden_lock
+        SET locked = TRUE, acquired_at = CURRENT_TIMESTAMP, owner_token = :owner_token
+        WHERE id = 1 AND locked = FALSE
     """,
     QueryMethod.RELEASE_LOCK: """
-        INSERT OR REPLACE INTO dbwarden_lock (id, locked, acquired_at)
-        VALUES (1, FALSE, NULL)
+        UPDATE dbwarden_lock
+        SET locked = FALSE, acquired_at = NULL, owner_token = NULL
+        WHERE id = 1 AND owner_token = :owner_token
+    """,
+    QueryMethod.FORCE_RELEASE_LOCK: """
+        UPDATE dbwarden_lock
+        SET locked = FALSE, acquired_at = NULL, owner_token = NULL
+        WHERE id = 1
     """,
     QueryMethod.CHECK_LOCK: """
         SELECT locked FROM dbwarden_lock WHERE id = 1
@@ -186,9 +203,16 @@ POSTGRES_QUERIES = {
         CREATE TABLE IF NOT EXISTS {schema}.dbwarden_lock (
             id INTEGER PRIMARY KEY CHECK (id = 1),
             locked BOOLEAN DEFAULT FALSE,
-            acquired_at TIMESTAMP
+            acquired_at TIMESTAMP,
+            owner_token VARCHAR(128)
         )
     """,
+    QueryMethod.INITIALIZE_LOCK: """
+        INSERT INTO {schema}.dbwarden_lock (id, locked, acquired_at, owner_token)
+        VALUES (1, FALSE, NULL, NULL)
+        ON CONFLICT (id) DO NOTHING
+    """,
+    QueryMethod.ADD_LOCK_OWNER_COLUMN: "ALTER TABLE {schema}.dbwarden_lock ADD COLUMN IF NOT EXISTS owner_token VARCHAR(128)",
     QueryMethod.INSERT_VERSION: """
         INSERT INTO {schema}.{migration_table} (version, description, filename, migration_type, checksum)
         VALUES (:version, :description, :filename, :migration_type, :checksum)
@@ -222,16 +246,19 @@ POSTGRES_QUERIES = {
         SELECT COUNT(*) FROM {schema}.{migration_table} WHERE version = :version
     """,
     QueryMethod.ACQUIRE_LOCK: """
-        INSERT INTO {schema}.dbwarden_lock (id, locked, acquired_at)
-        VALUES (1, TRUE, CURRENT_TIMESTAMP)
-        ON CONFLICT (id)
-        DO UPDATE SET locked = EXCLUDED.locked, acquired_at = EXCLUDED.acquired_at
+        UPDATE {schema}.dbwarden_lock
+        SET locked = TRUE, acquired_at = CURRENT_TIMESTAMP, owner_token = :owner_token
+        WHERE id = 1 AND locked = FALSE
     """,
     QueryMethod.RELEASE_LOCK: """
-        INSERT INTO {schema}.dbwarden_lock (id, locked, acquired_at)
-        VALUES (1, FALSE, NULL)
-        ON CONFLICT (id)
-        DO UPDATE SET locked = EXCLUDED.locked, acquired_at = EXCLUDED.acquired_at
+        UPDATE {schema}.dbwarden_lock
+        SET locked = FALSE, acquired_at = NULL, owner_token = NULL
+        WHERE id = 1 AND owner_token = :owner_token
+    """,
+    QueryMethod.FORCE_RELEASE_LOCK: """
+        UPDATE {schema}.dbwarden_lock
+        SET locked = FALSE, acquired_at = NULL, owner_token = NULL
+        WHERE id = 1
     """,
     QueryMethod.CHECK_LOCK: """
         SELECT locked FROM {schema}.dbwarden_lock WHERE id = 1
@@ -348,9 +375,16 @@ MYSQL_QUERIES = {
         CREATE TABLE IF NOT EXISTS dbwarden_lock (
             id INT PRIMARY KEY,
             locked BOOLEAN DEFAULT FALSE,
-            acquired_at TIMESTAMP NULL
+            acquired_at TIMESTAMP NULL,
+            owner_token VARCHAR(128) NULL
         )
     """,
+    QueryMethod.INITIALIZE_LOCK: """
+        INSERT INTO dbwarden_lock (id, locked, acquired_at, owner_token)
+        VALUES (1, FALSE, NULL, NULL)
+        ON DUPLICATE KEY UPDATE id = id
+    """,
+    QueryMethod.ADD_LOCK_OWNER_COLUMN: "ALTER TABLE dbwarden_lock ADD COLUMN owner_token VARCHAR(128) NULL",
     QueryMethod.INSERT_VERSION: SQLITE_QUERIES[QueryMethod.INSERT_VERSION],
     QueryMethod.DELETE_VERSION: SQLITE_QUERIES[QueryMethod.DELETE_VERSION],
     QueryMethod.GET_ALL_MIGRATIONS: SQLITE_QUERIES[QueryMethod.GET_ALL_MIGRATIONS],
@@ -363,18 +397,17 @@ MYSQL_QUERIES = {
     """,
     QueryMethod.CHECK_IF_VERSION_EXISTS: SQLITE_QUERIES[QueryMethod.CHECK_IF_VERSION_EXISTS],
     QueryMethod.ACQUIRE_LOCK: """
-        INSERT INTO dbwarden_lock (id, locked, acquired_at)
-        VALUES (1, TRUE, CURRENT_TIMESTAMP)
-        ON DUPLICATE KEY UPDATE
-            locked = VALUES(locked),
-            acquired_at = VALUES(acquired_at)
+        UPDATE dbwarden_lock
+        SET locked = TRUE, acquired_at = CURRENT_TIMESTAMP, owner_token = :owner_token
+        WHERE id = 1 AND locked = FALSE
     """,
     QueryMethod.RELEASE_LOCK: """
-        INSERT INTO dbwarden_lock (id, locked, acquired_at)
-        VALUES (1, FALSE, NULL)
-        ON DUPLICATE KEY UPDATE
-            locked = VALUES(locked),
-            acquired_at = VALUES(acquired_at)
+        UPDATE dbwarden_lock
+        SET locked = FALSE, acquired_at = NULL, owner_token = NULL
+        WHERE id = 1 AND owner_token = :owner_token
+    """,
+    QueryMethod.FORCE_RELEASE_LOCK: """
+        ALTER TABLE dbwarden_lock UPDATE locked = 0, acquired_at = NULL, owner_token = NULL WHERE id = 1
     """,
     QueryMethod.CHECK_LOCK: SQLITE_QUERIES[QueryMethod.CHECK_LOCK],
     QueryMethod.GET_TABLE_NAMES: """
@@ -469,10 +502,16 @@ CLICKHOUSE_QUERIES = {
         CREATE TABLE IF NOT EXISTS dbwarden_lock (
             id Int32,
             locked UInt8 DEFAULT 0,
-            acquired_at Nullable(DateTime)
+            acquired_at Nullable(DateTime),
+            owner_token Nullable(String)
         ) ENGINE = MergeTree()
         ORDER BY id
     """,
+    QueryMethod.INITIALIZE_LOCK: """
+        INSERT INTO dbwarden_lock (id, locked, acquired_at, owner_token)
+        VALUES (1, 0, NULL, NULL)
+    """,
+    QueryMethod.ADD_LOCK_OWNER_COLUMN: "ALTER TABLE dbwarden_lock ADD COLUMN IF NOT EXISTS owner_token Nullable(String)",
     QueryMethod.INSERT_VERSION: """
         INSERT INTO {migration_table} (version, description, filename, migration_type, checksum)
         VALUES (:version, :description, :filename, :migration_type, :checksum)
@@ -514,10 +553,10 @@ CLICKHOUSE_QUERIES = {
         SELECT count() FROM {migration_table} WHERE version = :version
     """,
     QueryMethod.ACQUIRE_LOCK: """
-        ALTER TABLE dbwarden_lock UPDATE locked = 1, acquired_at = now() WHERE id = 1
+        ALTER TABLE dbwarden_lock UPDATE locked = 1, acquired_at = now(), owner_token = :owner_token WHERE id = 1 AND locked = 0
     """,
     QueryMethod.RELEASE_LOCK: """
-        ALTER TABLE dbwarden_lock UPDATE locked = 0, acquired_at = NULL WHERE id = 1
+        ALTER TABLE dbwarden_lock UPDATE locked = 0, acquired_at = NULL, owner_token = NULL WHERE id = 1 AND owner_token = :owner_token
     """,
     QueryMethod.CHECK_LOCK: """
         SELECT locked FROM dbwarden_lock WHERE id = 1

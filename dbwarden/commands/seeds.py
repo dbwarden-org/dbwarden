@@ -35,6 +35,21 @@ def seed_apply_cmd(
     from dbwarden.plugin import HookRegistry
 
     if HookRegistry.is_registered("seed_apply"):
+        if all_databases:
+            from dbwarden.database.availability import run_all_databases
+
+            result = run_all_databases(
+                lambda db_name: HookRegistry.execute_single(
+                    "seed_apply",
+                    version=version,
+                    dry_run=dry_run,
+                    database=db_name,
+                    all_databases=False,
+                    verbose=verbose,
+                )
+            )
+            _finish_multi_database_result(result, "Seed application")
+            return
         HookRegistry.execute_single(
             "seed_apply",
             version=version,
@@ -60,6 +75,20 @@ def seed_list_cmd(
     from dbwarden.plugin import HookRegistry
 
     if HookRegistry.is_registered("seed_list"):
+        if all_databases:
+            from dbwarden.database.availability import run_all_databases
+
+            result = run_all_databases(
+                lambda db_name: HookRegistry.execute_single(
+                    "seed_list",
+                    database=db_name,
+                    all_databases=False,
+                    verbose=verbose,
+                    prune=prune,
+                )
+            )
+            _finish_multi_database_result(result, "Seed listing")
+            return
         HookRegistry.execute_single(
             "seed_list",
             database=database,
@@ -85,6 +114,21 @@ def seed_rollback_cmd(
     from dbwarden.plugin import HookRegistry
 
     if HookRegistry.is_registered("seed_rollback"):
+        if all_databases:
+            from dbwarden.database.availability import run_all_databases
+
+            result = run_all_databases(
+                lambda db_name: HookRegistry.execute_single(
+                    "seed_rollback",
+                    count=count,
+                    to_version=to_version,
+                    database=db_name,
+                    all_databases=False,
+                    verbose=verbose,
+                )
+            )
+            _finish_multi_database_result(result, "Seed rollback")
+            return
         HookRegistry.execute_single(
             "seed_rollback",
             count=count,
@@ -99,3 +143,22 @@ def seed_rollback_cmd(
         "Seed rollback requires dbwarden-seeds plugin. "
         "Install it: `dbwarden plugin add dbwarden-seeds`"
     )
+
+
+def _finish_multi_database_result(result, operation: str) -> None:
+    from dbwarden.output import emit_json, error, json_mode, success, warning
+
+    if json_mode():
+        emit_json(result.as_dict())
+    else:
+        for item in result.skipped:
+            warning(f"{item.database}: skipped, connection failed after retries")
+        for item in result.failed:
+            error(f"{operation} failed for '{item.database}': {item.message}")
+        if result.skipped:
+            success(f"{operation} completed with partial success.")
+    if result.failed:
+        raise RuntimeError(f"{operation} failed for {len(result.failed)} database(s)")
+    if result.skipped:
+        import typer
+        raise typer.Exit(code=result.exit_code)

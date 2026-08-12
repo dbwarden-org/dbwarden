@@ -139,6 +139,7 @@ def sandbox_override(url: str, db_type: str):
     try:
         yield
     finally:
+        dispose_engine(url, db_type)
         _sandbox_url_var.reset(token_url)
         _sandbox_db_type_var.reset(token_type)
 

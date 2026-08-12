@@ -30,6 +30,8 @@ from dbwarden.commands.make_migrations.ch_ops import (
     _check_recreate_rename_conflict,
     _resolve_clickhouse_recreate_ops,
 )
+from dbwarden.commands.perf import PhaseTimer
+
 from dbwarden.commands.make_migrations.cli_parsing import (
     RenameIntent,
     _format_rename_warning,
@@ -80,6 +82,7 @@ def make_migrations_cmd(
     clickhouse_engine_recreate: bool = False,
     drop_preserved_clickhouse_table: bool | None = None,
     postgres_auto_using: bool = False,
+    perf: bool = False,
 ) -> None:
     logger = get_logger(verbose=verbose)
 
@@ -243,18 +246,19 @@ def make_migrations_cmd(
     migrations_dir = get_migrations_directory(database)
     next_number = get_next_migration_number(migrations_dir)
 
-    upgrade_sql, rollback_sql, changes = generate_migration_sql(
-        tables, migrations_dir, database, db_name,
-        confirmed_renames=confirmed_renames,
-        resolved_from_map=resolved_from_map,
-        safe_type_change=safe_type_change,
-        confirmed_table_intents=confirmed_table_intents,
-        table_resolved_from_map=table_resolved_from_map,
-        concurrent=concurrent,
-        clickhouse_engine_recreate=clickhouse_engine_recreate,
-        drop_preserved_clickhouse_table=drop_preserved_clickhouse_table,
-        postgres_auto_using=postgres_auto_using,
-    )
+    with PhaseTimer(logger, "SQL generation", perf=perf):
+        upgrade_sql, rollback_sql, changes = generate_migration_sql(
+            tables, migrations_dir, database, db_name,
+            confirmed_renames=confirmed_renames,
+            resolved_from_map=resolved_from_map,
+            safe_type_change=safe_type_change,
+            confirmed_table_intents=confirmed_table_intents,
+            table_resolved_from_map=table_resolved_from_map,
+            concurrent=concurrent,
+            clickhouse_engine_recreate=clickhouse_engine_recreate,
+            drop_preserved_clickhouse_table=drop_preserved_clickhouse_table,
+            postgres_auto_using=postgres_auto_using,
+        )
 
     safe_desc = _resolve_migration_description(description, changes)
     if migration_type in ("runs_always", "ra"):

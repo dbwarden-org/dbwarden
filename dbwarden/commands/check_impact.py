@@ -5,7 +5,7 @@ import os
 
 from dbwarden.engine.impact import analyze_impact
 from dbwarden.engine.version import get_migration_filepaths_by_version, get_migrations_directory
-from dbwarden.output import data_table, error, info, render, success, warning
+from dbwarden.output import data_table, error, info, plain, render, success, warning
 
 
 def check_impact_cmd(
@@ -28,7 +28,7 @@ def check_impact_cmd(
     )
 
     if out == "json":
-        render(json.dumps(result, indent=2, default=str))
+        plain(json.dumps(result, indent=2, default=str))
         return
 
     impact = result.get("impact", [])

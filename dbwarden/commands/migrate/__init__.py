@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import time
+import uuid
 from pathlib import Path
 
 from dbwarden.commands.backup import create_backup
@@ -11,7 +12,7 @@ from dbwarden.commands.migrate.state import (
 )
 from dbwarden.constants import RUNS_ALWAYS_FILE_PREFIX
 from dbwarden.engine.file_parser import parse_upgrade_statements
-from dbwarden.exceptions import LockError
+from dbwarden.exceptions import DBDisconnectedError, LockError
 from dbwarden.engine.version import (
     get_migrations_directory,
     get_runs_always_filepaths,
@@ -97,6 +98,7 @@ def migrate_single(
     dry_run: bool = False,
     sandbox: bool = False,
     apply_seeds: bool = False,
+    perf: bool = False,
 ) -> None:
     """
     Apply pending migrations to a single database.
@@ -111,7 +113,10 @@ def migrate_single(
         backup_dir: Directory for backup files.
         dry_run: Display pending migrations without executing them.
         sandbox: Apply migrations in a temporary sandbox database instead.
+        apply_seeds: Apply pending seeds after migrations (overrides config).
+        perf: Emit per-statement timing breakdowns for executed SQL.
     """
+    from dbwarden.commands.perf import PhaseTimer
     from dbwarden.config import get_database
 
     config = get_database(db_name)
@@ -150,6 +155,7 @@ def migrate_single(
         _sandbox_started = True
 
     lock_acquired = False
+    lock_owner = uuid.uuid4().hex
     try:
         if with_backup and not sandbox:
             backup_directory = backup_dir or os.path.join(os.getcwd(), "backups")
@@ -159,17 +165,13 @@ def migrate_single(
         migrations_dir = get_migrations_directory(db_name)
 
         if not dry_run:
-            create_migrations_table_if_not_exists(db_name)
-            create_lock_table_if_not_exists(db_name)
+            with PhaseTimer(logger, "Lock acquisition", perf=perf):
+                create_migrations_table_if_not_exists(db_name)
+                create_lock_table_if_not_exists(db_name)
 
-            if check_lock(db_name):
-                raise LockError(
-                    "Migration lock is already held. Another migration process may be running. "
-                    "Use 'dbwarden unlock' to release the lock if necessary."
-                )
-            if not acquire_lock(db_name):
-                raise LockError("Could not acquire migration lock.")
-            lock_acquired = True
+                if not acquire_lock(db_name, lock_owner):
+                    raise LockError("Could not acquire migration lock.")
+                lock_acquired = True
 
         applied_versions = set()
         applied_checksums = set()
@@ -201,7 +203,7 @@ def migrate_single(
 
         runs_always_filepaths = get_runs_always_filepaths(migrations_dir)
         runs_on_change_filepaths = get_runs_on_change_filepaths(
-            migrations_dir, changed_only=True, db_name=db_name
+            migrations_dir, changed_only=not dry_run, db_name=db_name
         )
 
         if (
@@ -239,6 +241,7 @@ def migrate_single(
 
             for sql in sql_statements:
                 logger.log_sql_statement(sql)
+                logger.log_sql_trace(sql)
 
             if dry_run:
                 warning(f"Would apply version {version}: {filename}")
@@ -255,12 +258,14 @@ def migrate_single(
                 migration_operation="upgrade",
                 filename=filename,
                 db_name=db_name,
+                perf=perf,
             )
 
-            _write_migration_snapshot(
-                db_name=db_name,
-                migration_id=Path(filename).stem,
-            )
+            with PhaseTimer(logger, "Snapshot write", perf=perf):
+                _write_migration_snapshot(
+                    db_name=db_name,
+                    migration_id=Path(filename).stem,
+                )
 
             duration = time.time() - start_time
             logger.log_migration_end(version, filename, duration)
@@ -295,6 +300,7 @@ def migrate_single(
                     filename=filename,
                     migration_type="runs_always",
                     db_name=db_name,
+                    perf=perf,
                 )
             else:
                 run_migration(
@@ -304,6 +310,7 @@ def migrate_single(
                     filename=filename,
                     migration_type="runs_always",
                     db_name=db_name,
+                    perf=perf,
                 )
 
             duration = time.time() - start_time
@@ -321,6 +328,7 @@ def migrate_single(
                 filename=filename,
                 migration_type="runs_on_change",
                 db_name=db_name,
+                perf=perf,
             )
 
             duration = time.time() - start_time
@@ -335,9 +343,11 @@ def migrate_single(
             if metrics_enabled():
                 set_schema_version(actual_db_name, latest_version)
                 set_pending_migrations(actual_db_name, 0)
-            _write_model_state(config=config, db_name=db_name)
+            with PhaseTimer(logger, "Model state write", perf=perf):
+                _write_model_state(config=config, db_name=db_name)
         elif runs_always_filepaths or runs_on_change_filepaths:
-            _write_model_state(config=config, db_name=db_name)
+            with PhaseTimer(logger, "Model state write", perf=perf):
+                _write_model_state(config=config, db_name=db_name)
 
     except Exception:
         if metrics_enabled():
@@ -345,7 +355,8 @@ def migrate_single(
         raise
     finally:
         if lock_acquired:
-            release_lock(db_name)
+            if not release_lock(db_name, lock_owner):
+                logger.error("Migration lock was not released by owner %s", lock_owner)
         if _sandbox_started:
             from dbwarden.plugin import HookRegistry
             if HookRegistry.is_registered("sandbox_provider_stop"):
@@ -380,6 +391,7 @@ def migrate_cmd(
     dry_run: bool = False,
     sandbox: bool = False,
     apply_seeds: bool = False,
+    perf: bool = False,
 ) -> None:
     """
     Apply pending migrations to the database.
@@ -396,6 +408,7 @@ def migrate_cmd(
         dry_run: Display pending migrations without executing them.
         sandbox: Apply migrations in a temporary sandbox database instead.
         apply_seeds: Apply pending seeds after migrations (overrides config).
+        perf: Emit per-statement timing breakdowns for executed SQL.
     """
     if count is not None and to_version is not None:
         raise ValueError("Cannot specify both 'count' and 'to-version'.")
@@ -405,11 +418,33 @@ def migrate_cmd(
 
     if all_databases:
         from dbwarden.config import get_multi_db_config
+        from dbwarden.database.availability import (
+            DatabaseAvailability,
+            MultiDatabaseResult,
+            probe_database,
+        )
 
         config = get_multi_db_config()
         databases = config.databases
 
+        result = MultiDatabaseResult()
         for db_name in databases:
+            configured = databases[db_name]
+            availability = (
+                probe_database(db_name, optional=True, config=configured)
+                if hasattr(configured, "sqlalchemy_url")
+                else None
+            )
+            if availability is None:
+                availability = DatabaseAvailability(database=db_name, available=True)
+            if availability.skipped:
+                result.skipped.append(availability)
+                warning(f"{db_name}: skipped, connection failed after retries")
+                continue
+            if not availability.available:
+                result.failed.append(availability)
+                error(f"Error migrating database '{db_name}': {availability.message}")
+                continue
             try:
                 migrate_single(
                     db_name=db_name,
@@ -422,10 +457,39 @@ def migrate_cmd(
                     dry_run=dry_run,
                     sandbox=sandbox,
                     apply_seeds=apply_seeds,
+                    perf=perf,
                 )
+                result.succeeded.append(db_name)
             except Exception as e:
                 error(f"Error migrating database '{db_name}': {e}")
-                continue
+                result.failed.append(
+                    DatabaseAvailability(
+                        database=db_name,
+                        available=False,
+                        error_code="migration_failed",
+                        message=str(e),
+                    )
+                )
+        if result.skipped:
+            from dbwarden.output import emit_json, json_mode
+            if json_mode():
+                emit_json(result.as_dict())
+            if result.failed:
+                details = "; ".join(
+                    f"{item.database}: {item.message}" for item in result.failed
+                )
+                raise RuntimeError(
+                    f"Migration failed for {len(result.failed)} database(s): {details}"
+                )
+            if result.succeeded:
+                success("Migration completed with partial success.")
+            import typer
+            raise typer.Exit(code=result.exit_code)
+        if result.failed:
+            details = "; ".join(
+                f"{item.database}: {item.message}" for item in result.failed
+            )
+            raise RuntimeError(f"Migration failed for {len(result.failed)} database(s): {details}")
     else:
         migrate_single(
             db_name=database,
@@ -438,6 +502,7 @@ def migrate_cmd(
             dry_run=dry_run,
             sandbox=sandbox,
             apply_seeds=apply_seeds,
+            perf=perf,
         )
 
 
@@ -449,14 +514,16 @@ def _get_filepaths_by_version(
     db_name: str | None = None,
 ) -> dict[str, str]:
     """Get pending migration file paths."""
-    from dbwarden.engine.version import get_migration_filepaths_by_version
+    from dbwarden.engine.version import resolve_migration_order
 
     if migrations_dir is None:
         migrations_dir = get_migrations_directory(db_name)
 
-    filepaths = get_migration_filepaths_by_version(
+    ordered = resolve_migration_order(
         directory=migrations_dir,
+        applied_versions=applied_versions or set(),
     )
+    filepaths = {version: filepath for version, filepath, _deps, _seed in ordered}
 
     if count:
         filepaths = dict(list(filepaths.items())[:count])

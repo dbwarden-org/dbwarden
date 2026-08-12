@@ -34,6 +34,29 @@ def _qualified_name(name: str, schema: str | None) -> str:
     return name
 
 
+def _quote_identifier(name: str, backend: str) -> str:
+    """Quote one generated SQL identifier for the selected backend."""
+    safe = re.fullmatch(r"[a-z_][a-z0-9_]*", name) is not None
+    reserved = {"order", "user", "select", "table", "where", "group", "from"}
+    if safe and name not in reserved:
+        return name
+    if backend == "postgresql":
+        return _quote_pg(name)
+    if backend in ("mysql", "mariadb"):
+        return f"`{name.replace('`', '``')}" + "`"
+    if backend == "sqlite":
+        return f'"{name.replace(chr(34), chr(34) + chr(34))}"'
+    if backend == "clickhouse":
+        return f"`{name.replace('`', '``')}" + "`"
+    return name
+
+
+def _qualified_generated_name(name: str, schema: str | None, backend: str) -> str:
+    if schema:
+        return f"{_quote_identifier(schema, backend)}.{_quote_identifier(name, backend)}"
+    return _quote_identifier(name, backend)
+
+
 def _append_postgresql_column_meta(col_def: str, column) -> tuple[str, bool, bool]:
     pg_meta = column.pg_meta or {}
     identity = pg_meta.get("identity") or pg_meta.get("pg_identity")
@@ -119,8 +142,8 @@ def generate_add_column_sql(
         qname = _qualified_name(qtable, qschema)
         col_name = _quote_pg(column.name)
     else:
-        qname = _qualified_name(table_name, schema)
-        col_name = column.name
+        qname = _qualified_generated_name(table_name, schema, backend)
+        col_name = _quote_identifier(column.name, backend)
     sql = f"ALTER TABLE {qname} ADD COLUMN {col_name} {col_type}"
     if backend == "postgresql":
         sql, has_identity, has_generated = _append_postgresql_column_meta(sql, column)
@@ -184,7 +207,7 @@ def generate_create_table_sql(table: ModelTable, db_name: str | None = None) -> 
             col_type = _postgres_serial_type(col, col_type, allow_composite=not composite_primary_key)
         else:
             col_type = col.type
-        col_name = _quote_pg(col.name) if backend == "postgresql" else col.name
+        col_name = _quote_identifier(col.name, backend)
         col_def = f"    {col_name} {col_type}"
         is_serial = (
             col.type.upper() in ("SERIAL", "BIGSERIAL")
@@ -238,7 +261,7 @@ def generate_create_table_sql(table: ModelTable, db_name: str | None = None) -> 
         column_defs.extend(f"    {projection_sql}" for projection_sql in _render_clickhouse_projections(table))
 
     if composite_primary_key:
-        pk_cols = ", ".join(_quote_pg(c) if backend == "postgresql" else c for c in primary_key_columns)
+        pk_cols = ", ".join(_quote_identifier(c, backend) for c in primary_key_columns)
         column_defs.append(f"    PRIMARY KEY ({pk_cols})")
 
     columns_sql = ",\n".join(column_defs)
@@ -246,8 +269,8 @@ def generate_create_table_sql(table: ModelTable, db_name: str | None = None) -> 
         qtable = _quote_pg(table.name)
         qschema = _quote_pg(table.schema) if table.schema else None
     else:
-        qtable = table.name
-        qschema = table.schema
+        qtable = _quote_identifier(table.name, backend)
+        qschema = _quote_identifier(table.schema, backend) if table.schema else None
     qname = _qualified_name(qtable, qschema)
     if backend == "clickhouse" and table.object_type == "materialized_view":
         sql = _generate_clickhouse_materialized_view_sql(table, columns_sql)
@@ -327,7 +350,8 @@ def generate_create_table_sql(table: ModelTable, db_name: str | None = None) -> 
 
 def generate_drop_table_sql(table_name: str, schema: str | None = None) -> str:
     _validate_identifier(table_name, "table_name")
-    qname = _qualified_name(table_name, schema)
+    backend = _get_backend_name(None)
+    qname = _qualified_generated_name(table_name, schema, backend)
     return f"DROP TABLE {qname}"
 
 
@@ -340,3 +364,4 @@ def generate_drop_object_sql(table: ModelTable) -> str:
     if table.object_type == "dictionary":
         return f"DROP DICTIONARY {qname}"
     return generate_drop_table_sql(table.name, table.schema)
+import re

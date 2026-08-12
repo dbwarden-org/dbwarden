@@ -1,5 +1,7 @@
 from typing import Optional
 
+import time
+
 from sqlalchemy import Result, Row, text
 from sqlalchemy.orm import Session
 
@@ -23,6 +25,30 @@ def _strip_autocommit_marker(statement: str) -> str:
     if len(lines) > 1:
         return lines[1].strip()
     return ""
+
+
+def _exec_statement(connection, statement: str, *, logger, perf: bool) -> None:
+    """Execute a statement, logging elapsed wall-clock time when ``perf`` is set."""
+    if not perf:
+        connection.execute(text(statement))
+        return
+    start = time.perf_counter()
+    connection.execute(text(statement))
+    elapsed_ms = (time.perf_counter() - start) * 1000.0
+    logger.info(f"SQL ({elapsed_ms:.1f}ms): {statement.strip()[:120]}")
+
+
+def _exec_autocommit_timed(
+    statement: str, db_name: str | None, *, logger, perf: bool
+) -> None:
+    """Run an autocommit statement, logging elapsed wall-clock time when ``perf`` is set."""
+    if not perf:
+        _execute_autocommit(statement, db_name)
+        return
+    start = time.perf_counter()
+    _execute_autocommit(statement, db_name)
+    elapsed_ms = (time.perf_counter() - start) * 1000.0
+    logger.info(f"SQL ({elapsed_ms:.1f}ms): {statement.strip()[:120]}")
 
 
 def _execute_autocommit(sql_text: str, db_name: str | None = None) -> None:
@@ -63,6 +89,41 @@ def _set_lock_timeout(connection, db_name: str | None = None) -> None:
         connection.execute(text(f"SET LOCAL lock_timeout = '{config.pg_migration_lock_timeout}ms'"))
 
 
+def _record_upgrade(
+    *,
+    version: str | None,
+    filename: str,
+    migration_type: str,
+    sql_statements: list[str],
+    db_name: str | None,
+) -> None:
+    from dbwarden.engine.checksum import calculate_checksum
+    from dbwarden.engine.file_parser import get_description_from_filename
+
+    with get_db_connection(db_name) as connection:
+        connection.execute(
+            text(get_query(QueryMethod.INSERT_VERSION, db_name)),
+            parameters={
+                "version": version,
+                "description": get_description_from_filename(filename),
+                "filename": filename,
+                "migration_type": migration_type,
+                "checksum": calculate_checksum(sql_statements),
+            },
+        )
+
+
+def _record_rollback(*, version: str | None, db_name: str | None) -> None:
+    with get_db_connection(db_name) as connection:
+        connection.execute(
+            text(get_query(QueryMethod.DELETE_VERSION, db_name)),
+            parameters={"version": version},
+        )
+        optimize_sql = get_query(QueryMethod.OPTIMIZE_MIGRATIONS_TABLE, db_name)
+        if optimize_sql:
+            connection.execute(text(optimize_sql))
+
+
 def run_migration(
     sql_statements: list[str],
     version: Optional[str],
@@ -70,6 +131,7 @@ def run_migration(
     filename: str,
     migration_type: str = "versioned",
     db_name: str | None = None,
+    perf: bool = False,
 ) -> None:
     """Execute SQL statements and record the migration.
 
@@ -84,9 +146,9 @@ def run_migration(
     active savepoints. For MySQL/MariaDB, savepoints are disabled
     and DDL statements are executed individually (they auto-commit).
     """
-    from dbwarden.engine.checksum import calculate_checksum
-    from dbwarden.engine.file_parser import get_description_from_filename
     from dbwarden.logging import get_logger
+
+    logger = get_logger(db_name=db_name)
 
     # Separate autocommit statements from transactional ones
     txn_statements: list[str] = []
@@ -104,36 +166,47 @@ def run_migration(
         if is_mysql:
             try:
                 for statement in txn_statements:
-                    connection.execute(text(statement))
+                    _exec_statement(connection, statement, logger=logger, perf=perf)
 
-                if migration_operation == "upgrade":
-                    description = get_description_from_filename(filename)
-                    checksum = calculate_checksum(sql_statements)
-
-                    connection.execute(
-                        text(get_query(QueryMethod.INSERT_VERSION, db_name)),
-                        parameters={
-                            "version": version,
-                            "description": description,
-                            "filename": filename,
-                            "migration_type": migration_type,
-                            "checksum": checksum,
-                        },
-                    )
-                elif migration_operation == "rollback":
-                    connection.execute(
-                        text(get_query(QueryMethod.DELETE_VERSION, db_name)),
-                        parameters={"version": version},
-                    )
-                    optimize_sql = get_query(QueryMethod.OPTIMIZE_MIGRATIONS_TABLE, db_name)
-                    if optimize_sql:
-                        connection.execute(text(optimize_sql))
             except Exception:
                 raise
 
-            # Run autocommit statements after transactional ones
+            # Complete autocommit work before recording migration state.
             for stmt in autocommit_statements:
-                _execute_autocommit(stmt, db_name)
+                _exec_autocommit_timed(stmt, db_name, logger=logger, perf=perf)
+            if not autocommit_statements and migration_operation == "upgrade":
+                from dbwarden.engine.checksum import calculate_checksum
+                from dbwarden.engine.file_parser import get_description_from_filename
+
+                connection.execute(
+                    text(get_query(QueryMethod.INSERT_VERSION, db_name)),
+                    parameters={
+                        "version": version,
+                        "description": get_description_from_filename(filename),
+                        "filename": filename,
+                        "migration_type": migration_type,
+                        "checksum": calculate_checksum(sql_statements),
+                    },
+                )
+            elif not autocommit_statements and migration_operation == "rollback":
+                connection.execute(
+                    text(get_query(QueryMethod.DELETE_VERSION, db_name)),
+                    parameters={"version": version},
+                )
+                optimize_sql = get_query(QueryMethod.OPTIMIZE_MIGRATIONS_TABLE, db_name)
+                if optimize_sql:
+                    connection.execute(text(optimize_sql))
+
+            if autocommit_statements and migration_operation == "upgrade":
+                _record_upgrade(
+                    version=version,
+                    filename=filename,
+                    migration_type=migration_type,
+                    sql_statements=sql_statements,
+                    db_name=db_name,
+                )
+            elif autocommit_statements and migration_operation == "rollback":
+                _record_rollback(version=version, db_name=db_name)
             return
 
         try:
@@ -148,23 +221,23 @@ def run_migration(
                 )
         try:
             for statement in txn_statements:
-                connection.execute(text(statement))
+                _exec_statement(connection, statement, logger=logger, perf=perf)
 
-            if migration_operation == "upgrade":
-                description = get_description_from_filename(filename)
-                checksum = calculate_checksum(sql_statements)
+            if not autocommit_statements and migration_operation == "upgrade":
+                from dbwarden.engine.checksum import calculate_checksum
+                from dbwarden.engine.file_parser import get_description_from_filename
 
                 connection.execute(
                     text(get_query(QueryMethod.INSERT_VERSION, db_name)),
                     parameters={
                         "version": version,
-                        "description": description,
+                        "description": get_description_from_filename(filename),
                         "filename": filename,
                         "migration_type": migration_type,
-                        "checksum": checksum,
+                        "checksum": calculate_checksum(sql_statements),
                     },
                 )
-            elif migration_operation == "rollback":
+            elif not autocommit_statements and migration_operation == "rollback":
                 connection.execute(
                     text(get_query(QueryMethod.DELETE_VERSION, db_name)),
                     parameters={"version": version},
@@ -182,7 +255,17 @@ def run_migration(
 
     # Run autocommit statements after the transactional block commits
     for stmt in autocommit_statements:
-        _execute_autocommit(stmt, db_name)
+        _exec_autocommit_timed(stmt, db_name, logger=logger, perf=perf)
+    if autocommit_statements and migration_operation == "upgrade":
+        _record_upgrade(
+            version=version,
+            filename=filename,
+            migration_type=migration_type,
+            sql_statements=sql_statements,
+            db_name=db_name,
+        )
+    elif autocommit_statements and migration_operation == "rollback":
+        _record_rollback(version=version, db_name=db_name)
 
 
 def fetch_latest_versioned_migration(
@@ -340,6 +423,7 @@ def run_repeatable_migration(
     filename: str,
     migration_type: str,
     db_name: str | None = None,
+    perf: bool = False,
 ) -> None:
     """
     Execute and update an existing repeatable migration record.
@@ -370,6 +454,10 @@ def run_repeatable_migration(
         else:
             txn_statements.append(stmt)
 
+    from dbwarden.logging import get_logger
+
+    logger = get_logger(db_name=db_name)
+
     with get_db_connection(db_name) as connection:
         is_mysql = connection.dialect.name in ("mysql", "mariadb")
         _set_lock_timeout(connection, db_name)
@@ -377,8 +465,42 @@ def run_repeatable_migration(
         if is_mysql:
             try:
                 for statement in txn_statements:
-                    connection.execute(text(statement))
+                    _exec_statement(connection, statement, logger=logger, perf=perf)
 
+                if not autocommit_statements:
+                    connection.execute(
+                        text(get_query(QueryMethod.UPSERT_REPEATABLE_MIGRATION, db_name)),
+                        parameters={
+                            "description": description,
+                            "filename": filename,
+                            "migration_type": migration_type,
+                            "checksum": checksum,
+                        },
+                    )
+            except Exception:
+                raise
+
+            for stmt in autocommit_statements:
+                _exec_autocommit_timed(stmt, db_name, logger=logger, perf=perf)
+            if autocommit_statements:
+                with get_db_connection(db_name) as record_connection:
+                    record_connection.execute(
+                        text(get_query(QueryMethod.UPSERT_REPEATABLE_MIGRATION, db_name)),
+                        parameters={
+                            "description": description,
+                            "filename": filename,
+                            "migration_type": migration_type,
+                            "checksum": checksum,
+                        },
+                    )
+            return
+
+        savepoint = connection.begin_nested()
+        try:
+            for statement in txn_statements:
+                _exec_statement(connection, statement, logger=logger, perf=perf)
+
+            if not autocommit_statements:
                 connection.execute(
                     text(get_query(QueryMethod.UPSERT_REPEATABLE_MIGRATION, db_name)),
                     parameters={
@@ -388,19 +510,17 @@ def run_repeatable_migration(
                         "checksum": checksum,
                     },
                 )
-            except Exception:
-                raise
 
-            for stmt in autocommit_statements:
-                _execute_autocommit(stmt, db_name)
-            return
+            savepoint.commit()
+        except Exception:
+            savepoint.rollback()
+            raise
 
-        savepoint = connection.begin_nested()
-        try:
-            for statement in txn_statements:
-                connection.execute(text(statement))
-
-            connection.execute(
+    for stmt in autocommit_statements:
+        _exec_autocommit_timed(stmt, db_name, logger=logger, perf=perf)
+    if autocommit_statements:
+        with get_db_connection(db_name) as record_connection:
+            record_connection.execute(
                 text(get_query(QueryMethod.UPSERT_REPEATABLE_MIGRATION, db_name)),
                 parameters={
                     "description": description,
@@ -409,11 +529,3 @@ def run_repeatable_migration(
                     "checksum": checksum,
                 },
             )
-
-            savepoint.commit()
-        except Exception:
-            savepoint.rollback()
-            raise
-
-    for stmt in autocommit_statements:
-        _execute_autocommit(stmt, db_name)

@@ -4,6 +4,7 @@ import pytest
 from sqlalchemy import Integer, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+import dbwarden.engine.model_discovery as model_discovery
 from dbwarden.databases.pgsql import (
     PGColumnMeta,
     PGTableMeta,
@@ -474,6 +475,42 @@ class TestPGConstraints:
         assert meta is not None
         assert len(meta.pg_excludes) == 1
         assert meta.pg_excludes[0]["name"] == "ex_clash"
+        assert meta.pg_excludes[0]["using"] == "gist"
+        assert meta.pg_excludes[0]["elements"] == [{"column": "period", "operator": "&&"}]
+
+    def test_typed_exclude_spec_in_meta(self, monkeypatch):
+        class Base(DeclarativeBase):
+            pass
+
+        tablename = _next_tn("excluded_typed")
+
+        class Reservation(Base):
+            __tablename__ = tablename
+            id: Mapped[int] = mapped_column(Integer, primary_key=True)
+            period: Mapped[str] = mapped_column(String(100))
+
+            class Meta(PGTableMeta):
+                pg_excludes = [
+                    ExcludeSpec(name="ex_clash", using="gist", elements=[{"column": "period", "operator": "&&"}]),
+                ]
+
+        apply_meta(Reservation)
+        meta = read_meta(Reservation)
+        assert meta is not None
+        assert len(meta.pg_excludes) == 1
+        assert isinstance(meta.pg_excludes[0], ExcludeSpec)
+        assert meta.pg_excludes[0].as_dict() == {
+            "name": "ex_clash",
+            "using": "gist",
+            "elements": [{"column": "period", "operator": "&&"}],
+        }
+
+        monkeypatch.setattr(model_discovery.type_mapping, "_get_backend_name", lambda db_name=None: "postgresql")
+        table = extract_table_from_model(Reservation)
+        assert table is not None
+        assert table.excludes == [
+            {"name": "ex_clash", "using": "gist", "elements": [{"column": "period", "operator": "&&"}]}
+        ]
 
 
 class TestPGPartitionAndRLS:

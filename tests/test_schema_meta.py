@@ -2106,6 +2106,62 @@ class TestUniqueSpecExtended:
         d = unique("uq_test", ["a"], include=["b"])
         assert d["include"] == ["b"]
 
+    def test_unique_spec_as_dict_matches_unique_factory(self):
+        spec = UniqueSpec(
+            columns=["a", "b"],
+            name="uq_test",
+            nulls_not_distinct=True,
+            deferrable=True,
+            initially_deferred=True,
+            include=["c"],
+        )
+        assert spec.as_dict() == {
+            "columns": ["a", "b"],
+            "name": "uq_test",
+            "nulls_not_distinct": True,
+            "deferrable": True,
+            "initially_deferred": True,
+            "include": ["c"],
+        }
+
+    def test_unique_spec_as_dict_omits_false_defaults(self):
+        assert UniqueSpec(columns=["a"]).as_dict() == {"columns": ["a"]}
+
+    def test_check_spec_as_dict_matches_check_factory(self):
+        assert CheckSpec(expression="age >= 0", name="ck_age", no_inherit=True).as_dict() == {
+            "name": "ck_age",
+            "expression": "age >= 0",
+            "no_inherit": True,
+        }
+
+    def test_typed_unique_and_check_specs_flow_through_model_discovery(self, monkeypatch):
+        class Post(Base):
+            __tablename__ = "typed_unique_check_posts"
+
+            id: Mapped[int] = mapped_column(Integer, primary_key=True)
+            email: Mapped[str] = mapped_column(String(255), unique=True)
+
+            class Meta(PGTableMeta):
+                uniques = [UniqueSpec(columns=["email"], name="uq_posts_email", nulls_not_distinct=True)]
+                checks = [CheckSpec(expression="char_length(email) > 3", name="ck_posts_email_len")]
+
+        monkeypatch.setattr(model_discovery.type_mapping, "_get_backend_name", lambda db_name=None: "postgresql")
+
+        table = extract_table_from_model(Post)
+        assert table is not None
+        assert table.uniques == [
+            {"columns": ["email"], "name": "uq_posts_email", "nulls_not_distinct": True}
+        ]
+        assert table.checks == [
+            {"expression": "char_length(email) > 3", "name": "ck_posts_email_len"}
+        ]
+
+        from dbwarden.engine.backends.postgresql.handlers.constraint_handler import ConstraintHandler
+
+        spec = ConstraintHandler().model_spec_from_tables([table])
+        assert spec["typed_unique_check_posts"]["uniques"]["uq_posts_email"]["columns"] == ["email"]
+        assert spec["typed_unique_check_posts"]["checks"]["ck_posts_email_len"]["expression"] == "char_length(email) > 3"
+
 
 class TestPGViewMeta:
     def test_defaults(self):

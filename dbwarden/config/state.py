@@ -32,6 +32,7 @@ class DatabaseConfig:
     sqlalchemy_url_sync: str | None = None
     sqlalchemy_url_async: str | None = None
     secure_values: bool = False
+    skip_if_missing: bool = False
     secure_display_values: dict[str, str] = field(default_factory=dict)
     model_paths: list[str] | None = None
     model_tables: list[str] | None = None

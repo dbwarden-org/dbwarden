@@ -93,6 +93,7 @@ class DatabaseEntry:
                 "At least one of database_url_sync or database_url_async must be provided."
             )
     secure_values: bool = False
+    skip_if_missing: bool = False
     default: bool = False
     migrations_dir: str | None = None
     migration_table: str | None = field(default=None, validator=_validate_migration_table)

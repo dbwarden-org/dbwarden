@@ -1,5 +1,6 @@
 import os
 import time
+import uuid
 
 from dbwarden.config import get_database
 from dbwarden.engine.file_parser import parse_rollback_statements
@@ -21,6 +22,7 @@ def rollback_cmd(
     to_version: str | None = None,
     verbose: bool = False,
     database: str | None = None,
+    perf: bool = False,
 ) -> None:
     """
     Rollback the last applied migration.
@@ -30,7 +32,10 @@ def rollback_cmd(
         to_version: Rollback to a specific version.
         verbose: Enable verbose logging.
         database: Target database name.
+        perf: Emit per-statement timing breakdowns for executed SQL.
     """
+    from dbwarden.commands.perf import PhaseTimer
+
     config = get_database(database)
     actual_db_name = database or config.sqlalchemy_url.split("/")[-1].split("?")[0]
     logger = get_logger(
@@ -46,31 +51,29 @@ def rollback_cmd(
     create_lock_table_if_not_exists(database)
 
     lock_acquired = False
+    lock_owner = uuid.uuid4().hex
     try:
-        if check_lock(database):
-            raise LockError(
-                "Migration lock is already held. Another migration process may be running. "
-                "Use 'dbwarden unlock' to release the lock if necessary."
-            )
-        if not acquire_lock(database):
-            raise LockError("Could not acquire migration lock.")
-        lock_acquired = True
+        with PhaseTimer(logger, "Lock acquisition", perf=perf):
+            if not acquire_lock(database, lock_owner):
+                raise LockError("Could not acquire migration lock.")
+            lock_acquired = True
 
         if count is None and to_version is None:
             count = 1
 
-        latest_versions = get_latest_versions(
-            database, limit=count, starting_version=to_version
-        )
+        with PhaseTimer(logger, "Rollback preparation", perf=perf):
+            latest_versions = get_latest_versions(
+                database, limit=count, starting_version=to_version
+            )
 
-        if not latest_versions:
-            info("Nothing to rollback.")
-            return
+            if not latest_versions:
+                info("Nothing to rollback.")
+                return
 
-        versions_to_rollback = _get_versions_to_rollback(
-            latest_versions=latest_versions,
-            migrations_dir=migrations_dir,
-        )
+            versions_to_rollback = _get_versions_to_rollback(
+                latest_versions=latest_versions,
+                migrations_dir=migrations_dir,
+            )
 
         reverted = 0
         missing = 0
@@ -84,6 +87,7 @@ def rollback_cmd(
 
             for sql in sql_statements:
                 logger.log_sql_statement(sql)
+                logger.log_sql_trace(sql)
 
             start_time = time.time()
             logger.info(f"Rolling back migration: {filename} (version: {version})")
@@ -94,6 +98,7 @@ def rollback_cmd(
                 migration_operation="rollback",
                 filename=filename,
                 db_name=database,
+                perf=perf,
             )
 
             duration = time.time() - start_time
@@ -106,7 +111,8 @@ def rollback_cmd(
             warning(f"Warning: {missing} migration file(s) not found. Skipped.")
     finally:
         if lock_acquired:
-            release_lock(database)
+            if not release_lock(database, lock_owner):
+                logger.error("Migration lock was not released by owner %s", lock_owner)
 
 
 def _get_versions_to_rollback(

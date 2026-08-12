@@ -26,7 +26,7 @@ class TestExtraCommands:
         lock_status_cmd("test")
         mock_print.assert_called()
 
-    @patch("dbwarden.repositories.release_lock")
+    @patch("dbwarden.repositories.force_release_lock")
     @patch("dbwarden.repositories.check_lock")
     @patch("dbwarden.output.console.print")
     def test_unlock_success(self, mock_print, mock_check, mock_release):
@@ -38,7 +38,7 @@ class TestExtraCommands:
         unlock_cmd("test")
         mock_print.assert_called_once()
 
-    @patch("dbwarden.repositories.release_lock")
+    @patch("dbwarden.repositories.force_release_lock")
     @patch("dbwarden.repositories.check_lock")
     @patch("dbwarden.output.console.print")
     def test_unlock_not_held(self, mock_print, mock_check, mock_release):
@@ -49,7 +49,7 @@ class TestExtraCommands:
         unlock_cmd("test")
         mock_print.assert_called_once()
 
-    @patch("dbwarden.repositories.release_lock")
+    @patch("dbwarden.repositories.force_release_lock")
     @patch("dbwarden.repositories.check_lock")
     @patch("dbwarden.output.console.print")
     def test_unlock_failure(self, mock_print, mock_check, mock_release):

@@ -20,6 +20,7 @@ from dbwarden.exceptions import ConfigurationError
 
 _USE_DEV_DATABASE = False
 _STRICT_TRANSLATION = False
+_DISABLE_SKIP = False
 _RESOLVED_SOURCE_CACHE: _ResolvedSource | None = None
 _RESOLVED_CWD: str | None = None
 _MULTI_DB_CONFIG_CACHE: "MultiDbConfig | None" = None
@@ -33,6 +34,15 @@ def set_dev_mode(enabled: bool) -> None:
 
 def is_dev_mode() -> bool:
     return _USE_DEV_DATABASE
+
+
+def set_disable_skip(enabled: bool) -> None:
+    global _DISABLE_SKIP
+    _DISABLE_SKIP = enabled
+
+
+def is_skip_disabled() -> bool:
+    return _DISABLE_SKIP
 
 
 def set_strict_translation(enabled: bool) -> None:
@@ -148,6 +158,10 @@ def _file_has_database_config_call(path: Path) -> bool:
         if isinstance(node, ast.Call):
             func = node.func
             if isinstance(func, ast.Name) and func.id == "database_config":
+                return True
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef):
+            if any((isinstance(base, ast.Name) and base.id == "DbwardenDatabase") for base in node.bases):
                 return True
     return False
 

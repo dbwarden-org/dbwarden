@@ -21,6 +21,7 @@ import logging
 import os
 import re
 import sys
+import threading
 from datetime import datetime, timezone
 from typing import Any, Optional
 from enum import IntEnum
@@ -31,6 +32,13 @@ from rich.logging import RichHandler
 
 from dbwarden.constants import LOG_FORMAT
 from dbwarden.output import console
+
+
+TRACE_LEVEL = 5
+
+if not hasattr(logging, "TRACE"):
+    logging.TRACE = TRACE_LEVEL
+logging.addLevelName(TRACE_LEVEL, "TRACE")
 
 
 class Verbosity(IntEnum):
@@ -449,6 +457,11 @@ class DBWardenLogger:
         logging_kwargs = self._apply_logging_defaults(kwargs)
         self.logger.debug(msg, *args, **logging_kwargs)
 
+    def trace(self, msg: str, *args, **kwargs) -> None:
+        """Log a trace message (finer-grained than DEBUG)."""
+        logging_kwargs = self._apply_logging_defaults(kwargs)
+        self.logger.log(TRACE_LEVEL, msg, *args, **logging_kwargs)
+
     def info(self, msg: str, *args, **kwargs) -> None:
         """Log an info message."""
         logging_kwargs = self._apply_logging_defaults(kwargs)
@@ -682,6 +695,11 @@ class DBWardenLogger:
             stacklevel=4,
         )
 
+    def log_sql_trace(self, sql: str) -> None:
+        """Log a raw SQL statement at TRACE level (finest-grained dumps)."""
+        if self.logger.isEnabledFor(TRACE_LEVEL):
+            self.trace(sql.strip(), stacklevel=3)
+
     def log_backup_created(self, backup_path: str) -> None:
         """Log backup creation."""
         self._log_best_candidate(
@@ -809,6 +827,7 @@ class DBWardenLogger:
 
 
 _global_logger: Optional[DBWardenLogger] = None
+_LOGGER_LOCK = threading.RLock()
 
 
 def get_logger(
@@ -842,42 +861,46 @@ def get_logger(
     """
     global _global_logger
     if _global_logger is None:
-        _global_logger = DBWardenLogger(
-            debug_enabled=debug_enabled,
-            debug_level=debug_level,
-            verbose=verbose if verbose is not None else False,
-            verbosity=verbosity,
-            db_name=db_name,
-            db_type=db_type,
-        )
+        with _LOGGER_LOCK:
+            if _global_logger is None:
+                _global_logger = DBWardenLogger(
+                    debug_enabled=debug_enabled,
+                    debug_level=debug_level,
+                    verbose=verbose if verbose is not None else False,
+                    verbosity=verbosity,
+                    db_name=db_name,
+                    db_type=db_type,
+                )
     else:
-        if debug_level is not None and _global_logger.debug_level != debug_level:
-            _global_logger.set_debug_level(debug_level)
-        elif debug_enabled and not _global_logger.debug_enabled:
-            _global_logger.set_debug_enabled(True)
-        if verbosity is not None and _global_logger.verbosity != verbosity:
-            _global_logger.set_verbosity(verbosity)
-        elif verbose is not None and _global_logger.verbose != verbose:
-            _global_logger.set_verbose(verbose)
-        if db_name is not None:
-            _global_logger.db_name = db_name
-        if db_type is not None:
-            _global_logger.db_type = db_type
+        with _LOGGER_LOCK:
+            if debug_level is not None and _global_logger.debug_level != debug_level:
+                _global_logger.set_debug_level(debug_level)
+            elif debug_enabled and not _global_logger.debug_enabled:
+                _global_logger.set_debug_enabled(True)
+            if verbosity is not None and _global_logger.verbosity != verbosity:
+                _global_logger.set_verbosity(verbosity)
+            elif verbose is not None and _global_logger.verbose != verbose:
+                _global_logger.set_verbose(verbose)
+            if db_name is not None:
+                _global_logger.db_name = db_name
+            if db_type is not None:
+                _global_logger.db_type = db_type
     return _global_logger
 
 
 def resolve_debug_level(value: str) -> int:
     """Resolve a CLI debug level name or numeric string to a stdlib logging level.
 
-    Accepts case-insensitive names ``debug``, ``info``, ``warning``/``warn``,
-    ``error``, ``critical``, or an integer string between 10 and 50 that is a
-    valid logging level.
+    Accepts case-insensitive names ``trace``, ``debug``, ``info``,
+    ``warning``/``warn``, ``error``, ``critical``, or an integer string between
+    5 and 50 that is a valid logging level.
 
     Raises:
         ValueError: If the value is not a recognized level.
     """
     normalized = str(value).strip().lower()
     named = {
+        "trace": TRACE_LEVEL,
         "debug": logging.DEBUG,
         "info": logging.INFO,
         "warning": logging.WARNING,
@@ -890,16 +913,29 @@ def resolve_debug_level(value: str) -> int:
 
     if normalized.isdigit():
         level = int(normalized)
-        if level in (10, 20, 30, 40, 50):
+        if level in (5, 10, 20, 30, 40, 50):
             return level
 
     raise ValueError(
         f"Invalid debug level {value!r}. Expected one of: "
-        "debug, info, warning, error, critical, or a numeric level (10, 20, 30, 40, 50)."
+        "trace, debug, info, warning, error, critical, or a numeric level (5, 10, 20, 30, 40, 50)."
     )
 
 
 def reset_logger() -> None:
     """Reset the global logger instance."""
     global _global_logger
-    _global_logger = None
+    with _LOGGER_LOCK:
+        _global_logger = None
+
+
+def enable_json_logging() -> None:
+    """Force JSON-formatted log output (same effect as ``DBWARDEN_LOG_JSON=true``).
+
+    Reconfigures the existing singleton so the change applies even when the
+    logger has already been initialized.
+    """
+    os.environ["DBWARDEN_LOG_JSON"] = "true"
+    with _LOGGER_LOCK:
+        if _global_logger is not None:
+            _global_logger._setup_logger()

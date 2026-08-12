@@ -1709,6 +1709,93 @@ class TestIndexDiff:
         upgrade, _ = diff_models_against_snapshot(model_tables, snapshot)
         assert any(op["type"] == "add_check_constraint" for op in upgrade)
 
+    def test_unique_constraint_diff_add_with_unique_spec(self):
+        from dbwarden.schema.constraint import UniqueSpec
+
+        snapshot = {"tables": {"users": {"columns": {"email": {"type": "varchar"}}}}, "constraints": {}, "indexes": {}}
+        model_tables = [
+            ModelTable(
+                name="users",
+                columns=[ModelColumn("email", "VARCHAR", False, False, False, None, None)],
+                uniques=[
+                    UniqueSpec(
+                        columns=["email"],
+                        name="uq_users_email",
+                        nulls_not_distinct=True,
+                        deferrable=True,
+                        initially_deferred=True,
+                        include=["id"],
+                    )
+                ],
+            )
+        ]
+        upgrade, _ = diff_models_against_snapshot(model_tables, snapshot)
+        add_ops = [op for op in upgrade if op["type"] == "add_unique_constraint"]
+        assert len(add_ops) == 1
+        assert add_ops[0]["name"] == "uq_users_email"
+        assert add_ops[0]["columns"] == ["email"]
+        assert add_ops[0]["nulls_not_distinct"] is True
+        assert add_ops[0]["deferrable"] is True
+        assert add_ops[0]["initially_deferred"] is True
+        assert add_ops[0]["include"] == ["id"]
+
+    def test_unique_constraint_diff_rename_with_unique_spec(self):
+        from dbwarden.schema.constraint import UniqueSpec
+
+        snapshot = {
+            "tables": {"users": {"columns": {"email": {"type": "varchar"}}}},
+            "constraints": {
+                "users_email_key": {
+                    "type": "unique",
+                    "table": "users",
+                    "columns": ["email"],
+                    "name": "users_email_key",
+                }
+            },
+            "indexes": {},
+        }
+        model_tables = [
+            ModelTable(
+                name="users",
+                columns=[ModelColumn("email", "VARCHAR", False, False, False, None, None)],
+                uniques=[UniqueSpec(columns=["email"], name="uq_users_email")],
+            )
+        ]
+        upgrade, _ = diff_models_against_snapshot(model_tables, snapshot)
+        assert any(op["type"] == "rename_unique_constraint" for op in upgrade)
+
+    def test_check_constraint_diff_add_with_check_spec(self):
+        from dbwarden.schema.constraint import CheckSpec
+
+        snapshot = {"tables": {"users": {"columns": {"age": {"type": "integer"}}}}, "constraints": {}, "indexes": {}}
+        model_tables = [
+            ModelTable(
+                name="users",
+                columns=[ModelColumn("age", "INTEGER", False, False, False, None, None)],
+                checks=[CheckSpec(expression="age >= 0", name="ck_users_age", no_inherit=True)],
+            )
+        ]
+        upgrade, _ = diff_models_against_snapshot(model_tables, snapshot)
+        add_ops = [op for op in upgrade if op["type"] == "add_check_constraint"]
+        assert len(add_ops) == 1
+        assert add_ops[0]["name"] == "ck_users_age"
+        assert add_ops[0]["expression"] == "age >= 0"
+        assert add_ops[0]["no_inherit"] is True
+
+    def test_model_table_normalizes_typed_constraint_specs(self):
+        from dbwarden.schema.constraint import CheckSpec, UniqueSpec
+
+        table = ModelTable(
+            name="users",
+            columns=[ModelColumn("email", "VARCHAR", False, False, False, None, None)],
+            uniques=[UniqueSpec(columns=["email"], name="uq_users_email")],
+            checks=[CheckSpec(expression="age >= 0")],
+        )
+        assert table.uniques == [{"columns": ["email"], "name": "uq_users_email"}]
+        assert table.checks == [{"expression": "age >= 0"}]
+        assert isinstance(table.uniques[0], dict)
+        assert isinstance(table.checks[0], dict)
+
     def test_comment_and_pg_meta_diff(self):
         snapshot = {
             "tables": {

@@ -411,3 +411,15 @@ class TestGenerateRepeatableFilename:
 
         result = generate_repeatable_filename("db", "Add  USER! data?", "RA__")
         assert result == "db__RA__add_user_data.sql"
+def test_migration_file_symlink_is_rejected(tmp_path):
+    from dbwarden.engine.version import get_migration_filepaths_by_version
+    from dbwarden.exceptions import DirectoryNotFoundError
+
+    migrations = tmp_path / "migrations"
+    migrations.mkdir()
+    outside = tmp_path / "outside.sql"
+    outside.write_text("-- upgrade\nSELECT 1;\n-- rollback\nSELECT 1;\n", encoding="utf-8")
+    (migrations / "primary__0001_outside.sql").symlink_to(outside)
+
+    with pytest.raises(DirectoryNotFoundError, match="outside the migrations directory"):
+        get_migration_filepaths_by_version(str(migrations))

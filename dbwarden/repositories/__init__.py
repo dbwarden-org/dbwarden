@@ -15,6 +15,7 @@ from dbwarden.repositories.lock_repo import (
     acquire_lock,
     check_lock,
     create_lock_table_if_not_exists,
+    force_release_lock,
     release_lock,
 )
 
@@ -32,5 +33,6 @@ __all__ = [
     "acquire_lock",
     "check_lock",
     "create_lock_table_if_not_exists",
+    "force_release_lock",
     "release_lock",
 ]

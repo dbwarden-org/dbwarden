@@ -1,7 +1,7 @@
 import typer
 
 from dbwarden.cli.validators import validate_directory
-from dbwarden.config import set_dev_mode, set_strict_translation
+from dbwarden.config import set_dev_mode, set_disable_skip, set_strict_translation
 from dbwarden.commands import (
     handle_check_db,
     handle_check,
@@ -38,7 +38,8 @@ from dbwarden.commands import (
     handle_version,
     handle_settings_show_command,
 )
-from dbwarden.logging import get_logger, resolve_debug_level
+from dbwarden.logging import enable_json_logging, get_logger, resolve_debug_level
+from dbwarden.output import set_output_mode
 from dbwarden.plugin import load_plugins
 
 app = typer.Typer(
@@ -72,6 +73,11 @@ def app_callback(
         "--strict-translation",
         help="Fail when a type/default cannot be translated for target backend",
     ),
+    disable_skip: bool = typer.Option(
+        False,
+        "--disable-skip",
+        help="Do not skip databases configured with skip_if_missing.",
+    ),
     debug: bool = typer.Option(
         False,
         "--debug",
@@ -81,12 +87,22 @@ def app_callback(
         None,
         "--debug-level",
         metavar="LEVEL",
-        help="Exact log level: debug, info, warning, error, critical, or 10/20/30/40/50",
+        help="Exact log level: trace, debug, info, warning, error, critical, or 5/10/20/30/40/50",
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        "-j",
+        help="Render command output (and logs) as structured JSON",
     ),
 ):
     """Global CLI options."""
     set_dev_mode(dev)
+    set_disable_skip(disable_skip)
     set_strict_translation(strict_translation)
+    if json_output:
+        set_output_mode("json")
+        enable_json_logging()
     _apply_cli_logging(debug=debug, debug_level=debug_level)
     if ctx.invoked_subcommand != "plugin":
         load_plugins(interactive=True)
@@ -338,6 +354,9 @@ def make_migrations(
         "versioned", "--type", "-t",
         help="Output prefix: versioned (default), runs_always/ra, runs_on_change/roc",
     ),
+    perf: bool = typer.Option(
+        False, "--perf", help="Log SQL-generation phase timing"
+    ),
 ):
     """Auto-generate SQL migration from SQLAlchemy models."""
     validate_directory()
@@ -356,6 +375,7 @@ def make_migrations(
         drop_preserved_clickhouse_table=drop_preserved_clickhouse_table,
         postgres_auto_using=postgres_auto_using,
         migration_type=migration_type,
+        perf=perf,
     )
 
 
@@ -416,6 +436,9 @@ def migrate(
     apply_seeds: bool = typer.Option(
         False, "--apply-seeds", help="Apply pending seeds after migrations (overrides config)"
     ),
+    perf: bool = typer.Option(
+        False, "--perf", help="Log per-SQL-statement timing breakdowns"
+    ),
 ):
     """Apply pending migrations to the database."""
     validate_directory()
@@ -431,6 +454,7 @@ def migrate(
         dry_run=dry_run,
         sandbox=sandbox,
         apply_seeds=apply_seeds,
+        perf=perf,
     )
 
 
@@ -448,11 +472,14 @@ def rollback(
     database: str | None = typer.Option(
         None, "--database", "-d", help="Target database name"
     ),
+    perf: bool = typer.Option(
+        False, "--perf", help="Log per-SQL-statement timing breakdowns"
+    ),
 ):
     """Rollback the last applied migration."""
     validate_directory()
     handle_rollback(
-        count=count, to_version=to_version, verbose=verbose, database=database
+        count=count, to_version=to_version, verbose=verbose, database=database, perf=perf
     )
 
 
@@ -467,10 +494,13 @@ def downgrade(
     database: str | None = typer.Option(
         None, "--database", "-d", help="Target database name"
     ),
+    perf: bool = typer.Option(
+        False, "--perf", help="Log per-SQL-statement timing breakdowns"
+    ),
 ):
     """Downgrade to a specific migration version by reverting applied migrations."""
     validate_directory()
-    handle_downgrade(to_version=to_version, verbose=verbose, database=database)
+    handle_downgrade(to_version=to_version, verbose=verbose, database=database, perf=perf)
 
 
 @app.command()
@@ -769,9 +799,41 @@ def seed_rollback(
 def main() -> None:
     """Main entry point for DBWarden CLI."""
     from dbwarden.database import reset_connection_logging
+    from dbwarden.exceptions import DBWardenError
+    from dbwarden.output import emit_error_json, error, json_mode
 
     reset_connection_logging()
-    app()
+    try:
+        app()
+    except typer.Exit:
+        raise
+    except DBWardenError as exc:
+        if json_mode():
+            emit_error_json(_error_code(exc), str(exc))
+        else:
+            error(str(exc))
+        raise typer.Exit(code=2) from exc
+    except Exception as exc:
+        if json_mode():
+            emit_error_json("internal_error", str(exc))
+        else:
+            error(str(exc))
+        raise typer.Exit(code=1) from exc
+
+
+def _error_code(exc: Exception) -> str:
+    """Return a stable automation-facing code for a domain exception."""
+    name = exc.__class__.__name__
+    mapping = {
+        "ConfigurationError": "configuration_error",
+        "DBWardenConfigError": "configuration_error",
+        "DBDisconnectedError": "connection_error",
+        "DatabaseError": "database_error",
+        "LockError": "lock_error",
+        "DirectoryNotFoundError": "directory_error",
+        "PluginError": "plugin_error",
+    }
+    return mapping.get(name, "dbwarden_error")
 
 
 if __name__ == "__main__":

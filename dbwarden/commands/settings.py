@@ -11,7 +11,7 @@ from dbwarden.config import (
     get_settings_source_file,
 )
 from dbwarden.config_schema import DatabaseEntry
-from dbwarden.output import kv_table, render, section
+from dbwarden.output import emit_json, json_mode, kv_table, render, section
 
 
 def _display_db_type(value: str) -> str:
@@ -29,6 +29,24 @@ def _print_field(label: str, value: Any) -> None:
     render(kv_table(None, ((label, value),)))
 
 
+def _database_payload(name: str, default_name: str) -> dict:
+    db_config = get_database(name)
+    return {
+        "default": name == default_name,
+        "type": _display_db_type(db_config.database_type),
+        "url": display_value(db_config, "database_url_sync", db_config.sqlalchemy_url),
+        "migrations_dir": db_config.migrations_dir,
+        "migration_table": db_config.migration_table,
+        "seed_table": db_config.seed_table,
+        "model_paths": db_config.model_paths,
+        "dev_database_type": db_config.dev_database_type,
+        "dev_database_url": display_value(
+            db_config, "dev_database_url", db_config.dev_database_url
+        ),
+        "overlap_models": db_config.overlap_models,
+    }
+
+
 def handle_settings_show(database: str | None = None, all_databases: bool = False) -> None:
     """Show current settings configuration."""
     config = get_multi_db_config()
@@ -42,6 +60,15 @@ def handle_settings_show(database: str | None = None, all_databases: bool = Fals
     else:
         name = database or config.default
         entries = [(name, config.databases[name])] if name else []
+
+    if json_mode():
+        emit_json(
+            {
+                name: _database_payload(name, config.default)
+                for name, _entry in entries
+            }
+        )
+        return
 
     for name, _entry in entries:
         is_default = name == config.default

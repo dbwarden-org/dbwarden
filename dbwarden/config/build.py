@@ -146,6 +146,7 @@ def _finalize_entries(
             sqlalchemy_url_async=entry.database_url_async,
             database_type=entry.database_type,
             secure_values=entry.secure_values,
+            skip_if_missing=entry.skip_if_missing,
             secure_display_values=secure_display_values,
             model_paths=entry.model_paths,
             model_tables=entry.model_tables,

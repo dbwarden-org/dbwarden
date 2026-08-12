@@ -35,6 +35,18 @@ class TestCliDebugFlag:
         assert result.exit_code == 0
         assert get_logger().debug_level == 30
 
+    def test_trace_level_option_sets_trace_level(self):
+        runner = CliRunner()
+        result = runner.invoke(app, ["--debug-level", "trace", "version"])
+        assert result.exit_code == 0
+        assert get_logger().debug_level == 5
+
+    def test_trace_numeric_level_option(self):
+        runner = CliRunner()
+        result = runner.invoke(app, ["--debug-level", "5", "version"])
+        assert result.exit_code == 0
+        assert get_logger().debug_level == 5
+
     def test_debug_level_option_accepts_numeric(self):
         runner = CliRunner()
         result = runner.invoke(app, ["--debug-level", "10", "version"])

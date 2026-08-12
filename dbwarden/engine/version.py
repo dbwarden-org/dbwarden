@@ -14,7 +14,7 @@ def _validate_path_within_project(path: Path, base_dir: Path, config_value: str)
     resolved = path.resolve()
     base = base_dir.resolve()
     
-    if not str(resolved).startswith(str(base) + os.sep):
+    if not resolved.is_relative_to(base):
         raise DirectoryNotFoundError(
             f"Migration directory '{config_value}' resolves outside project. "
             f"Please use a path within the project."
@@ -86,6 +86,7 @@ def get_migration_filepaths_by_version(
         if match:
             version = match.group(1)
             filepath = os.path.join(directory, filename)
+            _validate_migration_file(Path(filepath), Path(directory))
             migrations[version] = filepath
 
     if version_to_start_from:
@@ -125,6 +126,7 @@ def get_runs_always_filepaths(directory: str) -> list[str]:
         match = RUNS_ALWAYS_PATTERN.match(filename)
         if match:
             filepath = os.path.join(directory, filename)
+            _validate_migration_file(Path(filepath), Path(directory))
             filepaths.append(filepath)
 
     return filepaths
@@ -154,17 +156,18 @@ def get_runs_on_change_filepaths(
     if not os.path.exists(directory):
         return []
 
+    existing_checksums = (
+        get_existing_runs_on_change_filenames_to_checksums(db_name)
+        if changed_only
+        else {}
+    )
     for filename in sorted(os.listdir(directory)):
         match = RUNS_ON_CHANGE_PATTERN.match(filename)
         if match:
             filepath = os.path.join(directory, filename)
+            _validate_migration_file(Path(filepath), Path(directory))
             if changed_only:
-                existing_checksums = get_existing_runs_on_change_filenames_to_checksums(
-                    db_name
-                )
                 if filename in existing_checksums:
-                    with open(filepath, "r") as f:
-                        content = f.read()
                     from dbwarden.engine.file_parser import parse_upgrade_statements
 
                     statements = parse_upgrade_statements(filepath)
@@ -178,6 +181,22 @@ def get_runs_on_change_filepaths(
                 filepaths.append(filepath)
 
     return filepaths
+
+
+def _validate_migration_file(path: Path, directory: Path) -> None:
+    """Reject migration files that escape or symlink outside the directory."""
+    resolved_directory = directory.resolve()
+    resolved_path = path.resolve()
+    if not resolved_path.is_relative_to(resolved_directory):
+        raise DirectoryNotFoundError(
+            f"Migration file '{path}' resolves outside the migrations directory."
+        )
+    if path.is_symlink():
+        raise DirectoryNotFoundError(
+            f"Migration file '{path}' must not be a symbolic link."
+        )
+    if not path.is_file():
+        raise DirectoryNotFoundError(f"Migration file '{path}' is not a regular file.")
 
 
 def get_all_repeatable_filepaths(

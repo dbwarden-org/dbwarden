@@ -87,6 +87,13 @@ Set the `DBWARDEN_LOG_JSON` environment variable to `true`:
 export DBWARDEN_LOG_JSON=true
 ```
 
+For one-off CLI runs, the global `--json` flag has the same effect on the
+command's log output (and also switches display commands to JSON):
+
+```bash
+dbwarden --json migrate --database primary
+```
+
 When enabled, all DBWarden log output uses newline-delimited JSON format:
 
 ```json
@@ -105,6 +112,33 @@ When enabled, all DBWarden log output uses newline-delimited JSON format:
 | `db_name` | Database name (when applicable) |
 | `db_type` | Database type (when applicable) |
 | `exception` | Exception traceback (when applicable) |
+
+## TRACE logging
+
+The `trace` level (numeric `5`, below `debug`) is enabled with
+`--debug-level trace` and logs every SQL statement as it executes during
+`migrate`, `rollback`, and `downgrade`:
+
+```bash
+dbwarden --debug-level trace migrate --database primary
+```
+
+Each statement is logged as `SQL (2.1ms): CREATE TABLE ...` and respects the
+current log format (plain text or JSON).
+
+## Migration phase timing
+
+Migration commands always log phase timings at INFO level: lock acquisition,
+schema snapshot write, and model state write. Add `--perf` to also log each
+individual SQL statement with its duration:
+
+```bash
+dbwarden migrate --perf --database primary
+```
+
+```bash
+dbwarden make-migrations "add column" --perf
+```
 
 ## Environment variables reference
 

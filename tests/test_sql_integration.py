@@ -148,6 +148,28 @@ class TestDatabaseOperations:
         records = get_migration_records()
         assert len(records) == 0
 
+    def test_autocommit_failure_does_not_record_migration(self, setup_env, monkeypatch):
+        from dbwarden.repositories import migrations_repo
+
+        create_migrations_table_if_not_exists()
+
+        def fail_autocommit(*_args, **_kwargs):
+            raise RuntimeError("autocommit failed")
+
+        monkeypatch.setattr(migrations_repo, "_execute_autocommit", fail_autocommit)
+        with pytest.raises(RuntimeError, match="autocommit failed"):
+            run_migration(
+                sql_statements=[
+                    "CREATE TABLE transactional_part (id INTEGER PRIMARY KEY)",
+                    "-- @dbwarden:autocommit\nCREATE TABLE autocommit_part (id INTEGER PRIMARY KEY)",
+                ],
+                version="1",
+                migration_operation="upgrade",
+                filename="V1__autocommit.sql",
+            )
+
+        assert get_migration_records() == []
+
 
 class TestMigrationExecution:
     """Tests for migration execution with SQL."""

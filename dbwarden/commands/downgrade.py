@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import uuid
 
 from dbwarden.config import get_database
 from dbwarden.engine.file_parser import parse_rollback_statements
@@ -21,7 +22,10 @@ def downgrade_cmd(
     to_version: str,
     verbose: bool = False,
     database: str | None = None,
+    perf: bool = False,
 ) -> None:
+    from dbwarden.commands.perf import PhaseTimer
+
     config = get_database(database)
     actual_db_name = database or config.sqlalchemy_url.split("/")[-1].split("?")[0]
     logger = get_logger(
@@ -34,35 +38,33 @@ def downgrade_cmd(
     create_lock_table_if_not_exists(database)
 
     lock_acquired = False
+    lock_owner = uuid.uuid4().hex
     try:
-        if check_lock(database):
-            raise LockError(
-                "Migration lock is already held. Another migration process may be running. "
-                "Use 'dbwarden unlock' to release the lock if necessary."
+        with PhaseTimer(logger, "Lock acquisition", perf=perf):
+            if not acquire_lock(database, lock_owner):
+                raise LockError("Could not acquire migration lock.")
+            lock_acquired = True
+
+        with PhaseTimer(logger, "Rollback preparation", perf=perf):
+            applied_versions = get_migrated_versions(database)
+            if not applied_versions:
+                info("Nothing to downgrade.")
+                return
+
+            if to_version not in applied_versions:
+                error(f"Target version {to_version} has not been applied. Cannot downgrade.")
+                raise SystemExit(1)
+
+            versions_to_revert = [v for v in applied_versions if v > to_version]
+            if not versions_to_revert:
+                info(f"Already at version {to_version}. Nothing to downgrade.")
+                return
+
+            filepaths = get_migration_filepaths_by_version(
+                directory=migrations_dir,
+                version_to_start_from=to_version,
+                end_version=versions_to_revert[-1],
             )
-        if not acquire_lock(database):
-            raise LockError("Could not acquire migration lock.")
-        lock_acquired = True
-
-        applied_versions = get_migrated_versions(database)
-        if not applied_versions:
-            info("Nothing to downgrade.")
-            return
-
-        if to_version not in applied_versions:
-            error(f"Target version {to_version} has not been applied. Cannot downgrade.")
-            raise SystemExit(1)
-
-        versions_to_revert = [v for v in applied_versions if v > to_version]
-        if not versions_to_revert:
-            info(f"Already at version {to_version}. Nothing to downgrade.")
-            return
-
-        filepaths = get_migration_filepaths_by_version(
-            directory=migrations_dir,
-            version_to_start_from=to_version,
-            end_version=versions_to_revert[-1],
-        )
 
         reverted = []
         for version in reversed(versions_to_revert):
@@ -80,6 +82,7 @@ def downgrade_cmd(
 
             for sql in sql_statements:
                 logger.log_sql_statement(sql)
+                logger.log_sql_trace(sql)
 
             start_time = time.time()
             logger.info(f"Downgrading migration: {filename} (version: {version})")
@@ -90,6 +93,7 @@ def downgrade_cmd(
                 migration_operation="rollback",
                 filename=filename,
                 db_name=database,
+                perf=perf,
             )
 
             duration = time.time() - start_time
@@ -102,4 +106,5 @@ def downgrade_cmd(
             warning("No migrations were downgraded.")
     finally:
         if lock_acquired:
-            release_lock(database)
+            if not release_lock(database, lock_owner):
+                logger.error("Migration lock was not released by owner %s", lock_owner)
