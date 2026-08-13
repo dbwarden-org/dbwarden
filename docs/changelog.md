@@ -7,7 +7,7 @@ description: Release notes for DBWarden, newest first. Tracks features, fixes, a
 
 All notable changes to DBWarden, newest first. Versions follow semantic versioning and are tagged in the repository.
 
-## [Unreleased]
+## [0.17.0] - 2026-08-13
 
 ### Added
 
