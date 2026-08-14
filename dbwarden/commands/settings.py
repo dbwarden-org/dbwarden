@@ -44,6 +44,7 @@ def _database_payload(name: str, default_name: str) -> dict:
             db_config, "dev_database_url", db_config.dev_database_url
         ),
         "overlap_models": db_config.overlap_models,
+        "skip_if_missing": db_config.skip_if_missing,
     }
 
 
@@ -97,3 +98,4 @@ def handle_settings_show(database: str | None = None, all_databases: bool = Fals
             display_value(db_config, "dev_database_url", db_config.dev_database_url),
         )
         _print_field("Overlap Models", str(db_config.overlap_models))
+        _print_field("Skip If Missing", str(db_config.skip_if_missing))

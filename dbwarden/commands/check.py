@@ -13,11 +13,7 @@ def check_cmd(
     try:
         issues = load_issues(database=database)
     except DBDisconnectedError:
-        warning(
-            "Database disconnected - cannot compare against live schema. "
-            "Run with models only (no live compatibility checks)."
-        )
-        return
+        raise
 
     if output_format == "json":
         plain(issues_to_json(issues))

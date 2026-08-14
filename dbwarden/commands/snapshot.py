@@ -20,7 +20,7 @@ def snapshot_cmd(
             else:
                 _snapshot_generic(connection, table_name)
     except DBDisconnectedError:
-        warning("Database disconnected - cannot inspect table schema.")
+        raise
 
 
 def _snapshot_generic(connection, table_name: str) -> None:

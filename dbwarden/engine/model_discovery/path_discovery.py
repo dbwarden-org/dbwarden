@@ -49,6 +49,9 @@ def discover_models_in_directory(directory: str) -> List[str]:
     for filepath in directory_path.rglob("*.py"):
         if filepath.name.startswith("_"):
             continue
+        if filepath.is_symlink() or not filepath.is_file():
+            logger.log_model_file_load_failed(str(filepath), "symlink or non-regular file")
+            continue
         model_files.append(str(filepath))
         logger.log_model_file_scanned(str(filepath))
 
@@ -64,6 +67,9 @@ def _collect_model_files(model_paths: list[str]) -> list[str]:
         if os.path.isdir(model_path):
             model_files.extend(discover_models_in_directory(model_path))
         else:
+            if Path(model_path).is_symlink() or not Path(model_path).is_file():
+                logger.log_model_file_load_failed(model_path, "symlink or non-regular file")
+                continue
             model_files.append(model_path)
             logger.log_model_file_scanned(model_path)
     return model_files

@@ -80,6 +80,19 @@ def _validate_seed_table(_self, _attribute, value: str | None) -> None:
     _validate_identifier_field("seed_table", value)
 
 
+def _validate_pg_schema(_self, _attribute, value: str | None) -> None:
+    if value is None:
+        return
+    _validate_identifier_field("pg_schema", value)
+
+
+def _validate_lock_timeout(_self, _attribute, value: int | None) -> None:
+    if value is None:
+        return
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError("pg_migration_lock_timeout must be a non-negative integer")
+
+
 @define(slots=False)
 class DatabaseEntry:
     database_name: str = field(validator=_validate_database_name)
@@ -104,8 +117,8 @@ class DatabaseEntry:
     overlap_models: bool = False
     auto_apply_seeds: bool = False
     seed_table: str | None = field(default=None, validator=_validate_seed_table)
-    pg_schema: str | None = None
-    pg_migration_lock_timeout: int | None = None
+    pg_schema: str | None = field(default=None, validator=_validate_pg_schema)
+    pg_migration_lock_timeout: int | None = field(default=None, validator=_validate_lock_timeout)
     # Backend object keys contributed by plugins (pg_roles, ch_grants, and so on).
     # Kept as a dict so core does not have to know each plugin's key list.
     plugin_config: dict[str, Any] = field(factory=dict)
@@ -139,6 +152,18 @@ def structure_database_entry(kwargs: dict) -> DatabaseEntry:
     if model_paths is not None:
         _validate_model_paths_for_list(model_paths)
     model_tables = kwargs.get("model_tables")
+    pg_schema = kwargs.get("pg_schema")
+    if pg_schema is not None:
+        try:
+            _validate_identifier_field("pg_schema", pg_schema)
+        except ValueError as exc:
+            raise ConfigurationError(str(exc)) from exc
+    lock_timeout = kwargs.get("pg_migration_lock_timeout")
+    if lock_timeout is not None:
+        try:
+            _validate_lock_timeout(None, None, lock_timeout)
+        except ValueError as exc:
+            raise ConfigurationError(str(exc)) from exc
     if model_tables is not None:
         if not isinstance(model_tables, list):
             raise ConfigurationError("model_tables must be a list of strings or None")

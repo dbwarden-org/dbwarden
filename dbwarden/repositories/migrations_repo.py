@@ -63,21 +63,24 @@ def _execute_autocommit(sql_text: str, db_name: str | None = None) -> None:
     sandbox_url = _sandbox_url_var.get()
     if sandbox_url is not None:
         engine = create_engine(sandbox_url, isolation_level="AUTOCOMMIT")
-        with engine.connect() as conn:
-            try:
+        try:
+            with engine.connect() as conn:
                 conn.execute(text(sql_text))
-            except Exception:
-                pass
+        finally:
+            engine.dispose()
         return
 
     from dbwarden.config import get_database
 
     config = get_database(db_name)
     engine = create_engine(config.sqlalchemy_url, isolation_level="AUTOCOMMIT")
-    with engine.connect() as conn:
-        if config.database_type == "postgresql" and config.pg_migration_lock_timeout is not None:
-            conn.execute(text(f"SET SESSION lock_timeout = '{config.pg_migration_lock_timeout}ms'"))
-        conn.execute(text(sql_text))
+    try:
+        with engine.connect() as conn:
+            if config.database_type == "postgresql" and config.pg_migration_lock_timeout is not None:
+                conn.execute(text(f"SET SESSION lock_timeout = '{config.pg_migration_lock_timeout}ms'"))
+            conn.execute(text(sql_text))
+    finally:
+        engine.dispose()
 
 
 def _set_lock_timeout(connection, db_name: str | None = None) -> None:

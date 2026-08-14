@@ -16,13 +16,28 @@ from pathlib import Path
 from typing import Any, Callable
 
 from packaging.version import parse as parse_version
+from packaging.requirements import InvalidRequirement, Requirement
 
 from dbwarden._verified import VERIFIED_PLUGINS
 from dbwarden._official import OFFICIAL_PLUGINS, OfficialSpec, classify
+from dbwarden.files import atomic_write_text
 
 logger = logging.getLogger("dbwarden.plugin")
 
 PYPI_BASE_URL = "https://pypi.org"
+
+
+def _toml_string(value: object) -> str:
+    """Render a TOML basic string without allowing structural injection."""
+    text = str(value)
+    escaped = (
+        text.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\r", "\\r")
+        .replace("\n", "\\n")
+        .replace("\t", "\\t")
+    )
+    return f'"{escaped}"'
 # The OIDC issuer PyPI records for GitHub Actions Trusted Publishing.
 GITHUB_OIDC_ISSUER = "https://token.actions.githubusercontent.com"
 
@@ -383,11 +398,11 @@ def record_consent(dist_name: str, version: str | None, *, path: Path | None = N
     lines = []
     for name in sorted(consent):
         entry = consent[name]
-        lines.append(f'[consent."{name}"]')
-        lines.append(f'version = "{entry.get("version", "")}"')
-        lines.append(f'consented_at = "{entry.get("consented_at", "")}"')
+        lines.append(f'[consent.{_toml_string(name)}]')
+        lines.append(f"version = {_toml_string(entry.get('version', ''))}")
+        lines.append(f"consented_at = {_toml_string(entry.get('consented_at', ''))}")
         lines.append("")
-    path.write_text("\n".join(lines), encoding="utf-8")
+    atomic_write_text(path, "\n".join(lines))
 
 
 def revoke_consent(dist_name: str, *, path: Path | None = None) -> bool:
@@ -400,11 +415,11 @@ def revoke_consent(dist_name: str, *, path: Path | None = None) -> bool:
     lines = []
     for name in sorted(consent):
         entry = consent[name]
-        lines.append(f'[consent."{name}"]')
-        lines.append(f'version = "{entry.get("version", "")}"')
-        lines.append(f'consented_at = "{entry.get("consented_at", "")}"')
+        lines.append(f'[consent.{_toml_string(name)}]')
+        lines.append(f"version = {_toml_string(entry.get('version', ''))}")
+        lines.append(f"consented_at = {_toml_string(entry.get('consented_at', ''))}")
         lines.append("")
-    path.write_text("\n".join(lines), encoding="utf-8")
+    atomic_write_text(path, "\n".join(lines))
     return True
 
 
@@ -505,23 +520,38 @@ def _write_plugin_lock(lock: dict[str, PluginLockEntry], path: Path) -> None:
     lines = []
     for key in sorted(lock):
         entry = lock[key]
+        if not key or any(char not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-" for char in key):
+            raise ValueError(f"Invalid plugin lock key: {key!r}")
         lines.append(f"[{key}]")
-        lines.append(f'distribution = "{entry.distribution}"')
-        lines.append(f'version = "{entry.version}"')
-        lines.append(f'filename = "{entry.filename}"')
-        lines.append(f'sha256 = "{entry.sha256}"')
-        lines.append(f'tier = "{entry.tier}"')
-        lines.append(f'verified = "{entry.verified}"')
-        lines.append(f'identity = "{entry.identity}"')
-        lines.append(f'installed_at = "{entry.installed_at}"')
+        lines.append(f"distribution = {_toml_string(entry.distribution)}")
+        lines.append(f"version = {_toml_string(entry.version)}")
+        lines.append(f"filename = {_toml_string(entry.filename)}")
+        lines.append(f"sha256 = {_toml_string(entry.sha256)}")
+        lines.append(f"tier = {_toml_string(entry.tier)}")
+        lines.append(f"verified = {_toml_string(entry.verified)}")
+        lines.append(f"identity = {_toml_string(entry.identity)}")
+        lines.append(f"installed_at = {_toml_string(entry.installed_at)}")
         lines.append("")
-    path.write_text("\n".join(lines), encoding="utf-8")
+    atomic_write_text(path, "\n".join(lines))
 
 
-def _fetch_url(url: str, *, timeout: float = 30.0) -> bytes:
+def _fetch_url(url: str, *, timeout: float = 30.0, max_bytes: int = 10 * 1024 * 1024) -> bytes:
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    if parsed.scheme != "https":
+        raise ValueError("Plugin provenance URLs must use HTTPS")
+    if timeout <= 0 or max_bytes <= 0:
+        raise ValueError("timeout and max_bytes must be positive")
     request = urllib.request.Request(url, headers={"User-Agent": "dbwarden-plugin-provenance"})
     with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - https only
-        return response.read()
+        content_length = response.headers.get("Content-Length")
+        if content_length is not None and int(content_length) > max_bytes:
+            raise ValueError("Plugin provenance response exceeds the maximum allowed size")
+        data = response.read(max_bytes + 1)
+        if len(data) > max_bytes:
+            raise ValueError("Plugin provenance response exceeds the maximum allowed size")
+        return data
 
 
 def _fetch_json(url: str) -> Any:
@@ -592,8 +622,10 @@ def _attestation_covers_digest(attestation: dict[str, Any], sha256: str) -> bool
     statement_raw = envelope.get("statement")
     if not isinstance(statement_raw, str):
         return False
+    if len(statement_raw) > 10 * 1024 * 1024:
+        return False
     try:
-        statement = json.loads(base64.b64decode(statement_raw))
+        statement = json.loads(base64.b64decode(statement_raw, validate=True))
     except Exception:
         return False
     for subject in statement.get("subject", []) or []:
@@ -715,6 +747,17 @@ def installer_command(
     action: str = "install",
 ) -> list[str]:
     """Build the package-manager command line for installing/uninstalling a plugin."""
+    try:
+        requirement_object = Requirement(dist_name)
+    except InvalidRequirement as exc:
+        raise ValueError(f"Invalid plugin distribution name: {dist_name!r}") from exc
+    if requirement_object.name != dist_name or dist_name.startswith("-"):
+        raise ValueError(f"Invalid plugin distribution name: {dist_name!r}")
+    if version is not None:
+        try:
+            Requirement(f"{dist_name}=={version}")
+        except InvalidRequirement as exc:
+            raise ValueError(f"Invalid plugin version: {version!r}") from exc
     requirement = f"{dist_name}=={version}" if version else dist_name
     if use_uv:
         if action == "install":

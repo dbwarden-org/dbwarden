@@ -44,10 +44,12 @@ def _get_py_files(scan_path: str) -> list[str]:
     if scan_path in _FILE_CACHE:
         return _FILE_CACHE[scan_path]
     files: list[str] = []
-    for root, _dirs, fnames in os.walk(scan_path):
+    for root, dirs, fnames in os.walk(scan_path, followlinks=False):
+        dirs[:] = [name for name in dirs if not os.path.islink(os.path.join(root, name))]
         for fn in fnames:
-            if fn.endswith(".py") and not fn.startswith("."):
-                files.append(os.path.join(root, fn))
+            filepath = os.path.join(root, fn)
+            if fn.endswith(".py") and not fn.startswith(".") and not os.path.islink(filepath):
+                files.append(filepath)
     files.sort()
     _FILE_CACHE[scan_path] = files
     return files
@@ -136,6 +138,8 @@ def scan_file_ast(filepath: str, targets: list[str]) -> list[dict]:
 def scan_deep(targets: list[str]) -> list[dict]:
     results: list[dict] = []
     for target in targets:
+        if not re.fullmatch(r"[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*", target):
+            continue
         try:
             import importlib
             mod = importlib.import_module(target)

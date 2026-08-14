@@ -19,6 +19,7 @@ def config_cmd() -> None:
             "migrations_dir": display_value(db, "migrations_dir", db.migrations_dir),
             "migration_table": display_value(db, "migration_table", db.migration_table),
             "seed_table": display_value(db, "seed_table", db.seed_table),
+            "skip_if_missing": db.skip_if_missing,
         }
         if db.model_paths:
             rows["model_paths"] = display_value(db, "model_paths", db.model_paths)
@@ -51,6 +52,7 @@ def config_cmd() -> None:
             "migrations_dir": display_value(db, "migrations_dir", db.migrations_dir),
             "migration_table": display_value(db, "migration_table", db.migration_table),
             "seed_table": display_value(db, "seed_table", db.seed_table),
+            "skip_if_missing": db.skip_if_missing,
         }
         if db.model_paths:
             rows["model_paths"] = display_value(db, "model_paths", db.model_paths)

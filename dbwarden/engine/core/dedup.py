@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from dbwarden.sql import split_sql_statements
+
 
 def _normalize_sql(s: str) -> str:
     s = re.sub(r"\s+", " ", s).strip().lower()
@@ -11,7 +13,7 @@ def _normalize_sql(s: str) -> str:
 
 
 def _sql_into_statements(sql: str) -> list[str]:
-    parts = [s.strip() for s in sql.split(";") if s.strip()]
+    parts = split_sql_statements(sql)
     return [p + ";" for p in parts]
 
 

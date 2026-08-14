@@ -50,8 +50,8 @@ def extract_tables_from_database(sqlalchemy_url: str) -> dict[str, set[str]]:
 
     tables: dict[str, set[str]] = {}
 
+    engine = create_engine(sqlalchemy_url)
     try:
-        engine = create_engine(sqlalchemy_url)
         inspector = inspect(engine)
 
         for table_name in inspector.get_table_names():
@@ -59,9 +59,10 @@ def extract_tables_from_database(sqlalchemy_url: str) -> dict[str, set[str]]:
             column_names = {col["name"].lower() for col in columns}
             tables[table_name] = column_names
 
-        engine.dispose()
     except Exception:
         pass
+    finally:
+        engine.dispose()
 
     return tables
 

@@ -1,4 +1,5 @@
 import logging
+import re
 import time
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -36,6 +37,15 @@ def _convert_url_to_clickhouse_dialect(url: str) -> str:
 
 
 _engine_cache: dict[tuple[str, str], Engine] = {}
+
+
+def sanitize_connection_error(message: str) -> str:
+    """Remove passwords from driver errors before they cross the API boundary."""
+    return re.sub(
+        r"([A-Za-z][\w+.-]*://[^\s/@:]+:)[^\s/@]+(@)",
+        r"\1***\2",
+        message,
+    )
 
 
 def dispose_engine(url: str, db_type: str = "postgresql") -> None:
@@ -102,7 +112,7 @@ def _probe_connection(
                     f"Disconnected: could not connect to database "
                     f"after {max_retries} attempts"
                 )
-                raise DBDisconnectedError(str(e)) from e
+                raise DBDisconnectedError(sanitize_connection_error(str(e))) from e
 
 
 def reset_connection_logging() -> None:
