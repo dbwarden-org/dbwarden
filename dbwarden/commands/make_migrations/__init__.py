@@ -31,6 +31,7 @@ from dbwarden.commands.make_migrations.ch_ops import (
     _resolve_clickhouse_recreate_ops,
 )
 from dbwarden.commands.perf import PhaseTimer
+from dbwarden.files import atomic_write_text
 
 from dbwarden.commands.make_migrations.cli_parsing import (
     RenameIntent,
@@ -305,12 +306,11 @@ def make_migrations_cmd(
 {rollback_sql}
 """
 
-    with open(filepath, "w") as f:
-        f.write(content)
-
-    with open(plan_filepath, "w", encoding="utf-8") as f:
-        json.dump(plan, f, indent=2)
-        f.write("\n")
+    atomic_write_text(Path(filepath), content)
+    atomic_write_text(
+        Path(plan_filepath),
+        json.dumps(plan, indent=2) + "\n",
+    )
 
     logger.info(f"Created migration file: {filename}")
     success(f"Created migration file: {filepath}")
@@ -323,9 +323,9 @@ def make_migrations_cmd(
     legacy_path = get_model_state_path(db_name, legacy=True)
     if legacy_path != state_path:
         legacy_path.parent.mkdir(parents=True, exist_ok=True)
-        legacy_path.write_text(state_payload)
+        atomic_write_text(legacy_path, state_payload)
     state_path.parent.mkdir(parents=True, exist_ok=True)
-    state_path.write_text(state_payload)
+    atomic_write_text(state_path, state_payload)
     logger.info(f"Model state written: {state_path}")
 
     try:

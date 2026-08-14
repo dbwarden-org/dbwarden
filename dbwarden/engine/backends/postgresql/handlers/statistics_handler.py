@@ -103,20 +103,27 @@ class StatisticsHandler(ObjectHandler):
         self, op: Op, db_name: Optional[str] = None
     , **kwargs: Any) -> List[MigrationStatement]:
         from dbwarden.engine.model_discovery import _qualified_name
+        from dbwarden.engine.backends.postgresql.render import _quote_pg
 
         stmts: list[MigrationStatement] = []
         table = op.upgrade_attrs["table"]
         column = op.upgrade_attrs["column"]
         statistics = op.upgrade_attrs.get("statistics")
-        qtable = _qualified_name(table, op.upgrade_attrs.get("schema"))
+        schema = op.upgrade_attrs.get("schema")
+        qtable = _qualified_name(_quote_pg(table), _quote_pg(schema) if schema else None)
+
+        def _validated_statistics(value: Any) -> int:
+            if isinstance(value, bool) or not isinstance(value, int) or value < -1:
+                raise ValueError("PostgreSQL statistics target must be an integer >= -1")
+            return value
 
         if statistics is not None:
-            up = f"ALTER TABLE {qtable} ALTER COLUMN {column} SET STATISTICS {statistics};"
+            up = f"ALTER TABLE {qtable} ALTER COLUMN {column} SET STATISTICS {_validated_statistics(statistics)};"
         else:
             up = f"ALTER TABLE {qtable} ALTER COLUMN {column} SET STATISTICS -1;"
         rollback_statistics = op.rollback_attrs.get("statistics")
         if rollback_statistics is not None:
-            rb = f"ALTER TABLE {qtable} ALTER COLUMN {column} SET STATISTICS {rollback_statistics};"
+            rb = f"ALTER TABLE {qtable} ALTER COLUMN {column} SET STATISTICS {_validated_statistics(rollback_statistics)};"
         else:
             rb = f"ALTER TABLE {qtable} ALTER COLUMN {column} SET STATISTICS -1;"
 

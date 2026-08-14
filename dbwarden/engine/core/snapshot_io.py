@@ -26,6 +26,16 @@ def write_snapshot(
     database: str | None = None,
     migration_id: str = "",
 ) -> str:
+    if not migration_id or migration_id in {".", ".."}:
+        raise ValueError("migration_id must be a non-empty filename-safe value")
+    if (
+        os.path.basename(migration_id) != migration_id
+        or "/" in migration_id
+        or "\\" in migration_id
+        or any(ord(char) < 32 for char in migration_id)
+    ):
+        raise ValueError("migration_id must not contain path separators")
+
     from dbwarden.config import get_database
     from sqlalchemy.engine import make_url
 
@@ -68,7 +78,7 @@ def read_snapshot(filepath: str) -> dict[str, Any] | None:
     try:
         with open(filepath, "r", encoding="utf-8") as f:
             snapshot = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
+    except (OSError, json.JSONDecodeError):
         return None
 
     stored_checksum = snapshot.pop("checksum", None)

@@ -3,6 +3,7 @@ import re
 from typing import Optional
 
 from dbwarden.constants import RUNS_ALWAYS_FILE_PREFIX, RUNS_ON_CHANGE_FILE_PREFIX
+from dbwarden.sql import split_sql_statements
 
 
 class MigrationMetadata:
@@ -29,7 +30,11 @@ def get_description_from_filename(filename: str) -> str:
     Returns:
         str: Description extracted from filename.
     """
-    name = filename.replace(".sql", "")
+    name = os.path.basename(filename)
+    if name.lower().endswith(".sql"):
+        name = name[:-4]
+    if not name:
+        return ""
     if "__" in name:
         parts = name.split("__", 1)
         desc = parts[1]
@@ -194,7 +199,6 @@ def _extract_section_statements(content: str, section_marker: str) -> list[str]:
 
     statements: list[str] = []
     for raw in raw_statements:
-        parts = [s.strip() for s in raw.split(";") if s.strip()]
-        statements.extend(parts)
+        statements.extend(split_sql_statements(raw))
 
     return statements

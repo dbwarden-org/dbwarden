@@ -9,6 +9,8 @@ from dbwarden.commands.generate_models.imports import (
     _resolve_postgresql_imports,
 )
 from dbwarden.commands.generate_models.renderers import _generate_table_code
+from dbwarden.files import atomic_write_text
+import re
 
 
 def _write_models(
@@ -115,7 +117,7 @@ def _write_models(
             content += "from dbwarden.databases.clickhouse import " + imports + "\n"
             content += "\n"
         content += "\n\n".join(all_classes)
-        (out_path / "models.py").write_text(content, encoding="utf-8")
+        atomic_write_text(out_path / "models.py", content)
         return
 
     for table in tables:
@@ -178,5 +180,5 @@ def _write_models(
                 base_class_name=base_class_name,
             )
         )
-        safe_name = table["name"].lower().replace("-", "_")
-        (out_path / f"{safe_name}.py").write_text("".join(content_lines), encoding="utf-8")
+        safe_name = re.sub(r"[^a-zA-Z0-9_]", "_", table["name"].lower()).strip("_") or "model"
+        atomic_write_text(out_path / f"{safe_name}.py", "".join(content_lines))

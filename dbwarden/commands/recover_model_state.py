@@ -271,8 +271,10 @@ def recover_model_state_cmd(database: str | None = None) -> None:
     payload = model_state_json_dumps(file_state)
     if legacy_path != state_path:
         legacy_path.parent.mkdir(parents=True, exist_ok=True)
-        legacy_path.write_text(payload)
-    state_path.write_text(payload)
+        from dbwarden.files import atomic_write_text
+        atomic_write_text(legacy_path, payload)
+    from dbwarden.files import atomic_write_text
+    atomic_write_text(state_path, payload)
 
     table_count = len(state.get("tables", {}))
     success(f"Model state recovered to {state_path} ({table_count} table(s)).")

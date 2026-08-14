@@ -10,6 +10,7 @@ from dbwarden.config import get_database, get_multi_db_config
 from dbwarden.constants import RUNS_ALWAYS_FILE_PREFIX, RUNS_ON_CHANGE_FILE_PREFIX
 from dbwarden.engine.file_parser import parse_upgrade_statements
 from dbwarden.engine.backends.postgresql.render import _quote_pg
+from dbwarden.files import atomic_write_text
 from dbwarden.engine.discovery import (
     get_all_model_tables,
     auto_discover_model_paths,
@@ -284,8 +285,7 @@ def _run_offline_migrations(
     migration_id = Path(filename).stem
     plan = build_migration_plan(migration_id, changes, "\n\n".join(filtered_statements))
     plan_path = filepath.replace(".sql", ".plan.json")
-    with open(plan_path, "w") as f:
-        json.dump(plan, f, indent=2, default=str)
+    atomic_write_text(Path(plan_path), json.dumps(plan, indent=2, default=str) + "\n")
 
     success(f"Created migration file: {filepath}")
     success(f"Created migration plan: {plan_path}")
@@ -296,10 +296,10 @@ def _run_offline_migrations(
     file_state["database"] = db_name or "default"
     state_payload = model_state_json_dumps(file_state)
     state_path.parent.mkdir(parents=True, exist_ok=True)
-    state_path.write_text(state_payload)
+    atomic_write_text(state_path, state_payload)
     if legacy_state_path != state_path:
         legacy_state_path.parent.mkdir(parents=True, exist_ok=True)
-        legacy_state_path.write_text(state_payload)
+        atomic_write_text(legacy_state_path, state_payload)
     logger.info(f"Updated model state: {state_path}")
 
 

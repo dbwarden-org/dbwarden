@@ -4,6 +4,7 @@ import json
 
 from dbwarden import __version__
 from dbwarden.logging import get_logger
+from dbwarden.files import atomic_write_text
 
 
 def _write_migration_snapshot(
@@ -63,8 +64,8 @@ def _write_model_state(
         payload = model_state_json_dumps(file_state)
         if legacy_path != state_path:
             legacy_path.parent.mkdir(parents=True, exist_ok=True)
-            legacy_path.write_text(payload)
-        state_path.write_text(payload)
+            atomic_write_text(legacy_path, payload)
+        atomic_write_text(state_path, payload)
         logger = get_logger(db_name=db_name)
         logger.info(f"Model state written: {state_path}")
     except Exception:

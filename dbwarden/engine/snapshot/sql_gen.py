@@ -101,7 +101,7 @@ def snapshot_diff_to_sql(
             schemas.add(op["schema"])
     if schemas:
         ext_statements = "\n".join(
-            f'CREATE SCHEMA IF NOT EXISTS "{s}";'
+            f'CREATE SCHEMA IF NOT EXISTS "{s.replace(chr(34), chr(34) + chr(34))}";'
             for s in sorted(schemas)
         )
         upgrade_ops = [{"type": "create_schema", "schema": s, "sql": None} for s in sorted(schemas)] + upgrade_ops

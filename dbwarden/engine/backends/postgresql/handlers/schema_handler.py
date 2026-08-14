@@ -39,15 +39,16 @@ class SchemaHandler(ObjectHandler):
         self, op: Op, db_name: Optional[str] = None
     , **kwargs: Any) -> List[MigrationStatement]:
         s = op.upgrade_attrs.get("schema", "")
+        quoted_schema = str(s).replace('"', '""')
         if op.object_type == "create_schema":
             return [MigrationStatement(
                 order=StatementOrder.CREATE_SCHEMA,
-                upgrade_sql=f'CREATE SCHEMA IF NOT EXISTS "{s}";',
-                rollback_sql=f'DROP SCHEMA IF EXISTS "{s}";',
+                upgrade_sql=f'CREATE SCHEMA IF NOT EXISTS "{quoted_schema}";',
+                rollback_sql=f'DROP SCHEMA IF EXISTS "{quoted_schema}";',
             )]
         else:  # drop_schema
             return [MigrationStatement(
                 order=StatementOrder.CREATE_SCHEMA,
-                upgrade_sql=f'DROP SCHEMA IF EXISTS "{s}";',
-                rollback_sql=f'CREATE SCHEMA IF NOT EXISTS "{s}";',
+                upgrade_sql=f'DROP SCHEMA IF EXISTS "{quoted_schema}";',
+                rollback_sql=f'CREATE SCHEMA IF NOT EXISTS "{quoted_schema}";',
             )]

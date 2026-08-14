@@ -5,6 +5,8 @@ from pathlib import Path
 
 from dbwarden.engine.snapshot import IRREVERSIBLE_ANNOTATION
 from dbwarden.output import error, success, warning
+from dbwarden.sql import split_sql_statements
+from dbwarden.files import atomic_write_text
 
 
 def _reverse_sql(sql: str) -> str:
@@ -79,9 +81,7 @@ def make_rollback_cmd(migration_file: str) -> None:
         warning("No upgrade SQL found in migration file.")
         return
 
-    statements = [
-        s.strip() for s in upgrade_section.split(";") if s.strip() and not s.strip().startswith("--")
-    ]
+    statements = [s for s in split_sql_statements(upgrade_section) if not s.lstrip().startswith("--")]
     rollback_statements = [_reverse_sql(s) for s in statements]
     has_placeholder = any(stmt.lstrip().startswith("-- No automatic rollback generated") for stmt in rollback_statements)
     if has_placeholder and IRREVERSIBLE_ANNOTATION not in content:
@@ -92,9 +92,9 @@ def make_rollback_cmd(migration_file: str) -> None:
         return
 
     out_path = path.with_suffix(".rollback.sql")
-    out_path.write_text(
+    atomic_write_text(
+        out_path,
         "-- rollback\n\n" + "\n\n".join(rollback_statements) + "\n",
-        encoding="utf-8",
     )
 
     success(f"Created rollback file: {out_path}")
