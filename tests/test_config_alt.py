@@ -101,8 +101,8 @@ class TestConfigAlt:
             try:
                 init_cmd()
                 settings = Path("dbwarden.py").read_text(encoding="utf-8")
-                assert "from dbwarden import database_config" in settings
-                assert "database_config(" in settings
+                assert "from dbwarden import DbwardenDatabase" in settings
+                assert "class Primary(DbwardenDatabase):" in settings
             finally:
                 os.chdir(old_cwd)
 
