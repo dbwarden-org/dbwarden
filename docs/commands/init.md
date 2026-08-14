@@ -12,7 +12,7 @@ $ dbwarden init --database primary
 ## What it does
 
 - creates `migrations/` and `migrations/<database>/` if missing
-- creates/updates config scaffold (`dbwarden.py`) if needed
+- creates/updates a declarative config scaffold (`dbwarden.py`) if needed
 - does not mutate your database schema
 
 ## Notes

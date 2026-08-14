@@ -7,6 +7,22 @@ description: Release notes for DBWarden, newest first. Tracks features, fixes, a
 
 All notable changes to DBWarden, newest first. Versions follow semantic versioning and are tagged in the repository.
 
+## [Unreleased]
+
+### Changed
+
+- **Declarative configuration parity.** `DbwardenDatabase` now supports the complete `database_config(...)` field and default surface, inherited and direct plugin configuration, equivalent handles and validation, and aliased or indirect class discovery.
+- **Generated files use atomic replacement.** Migration files, model state, generated models, rollback files, plugin state, and exported configuration now avoid leaving truncated files after an interrupted write.
+- **Database settings mask URLs through SQLAlchemy URL parsing.** Settings and config output now handle encoded credentials and IPv6 hosts without exposing passwords.
+
+### Fixed
+
+- **Unsafe SQL identifiers are quoted or rejected.** Backend-generated schema, table, column, statistics, and drop-object SQL now protects reserved words and embedded identifier quotes.
+- **Live command disconnects no longer report success.** Explicit `check` and `snapshot` operations propagate connection failures after retries.
+- **Configuration and impact scans reject symlink escapes.** Workspace discovery no longer imports or scans symlinked files and directories outside the intended root.
+- **Plugin provenance is HTTPS-only and size-bounded.** Plugin lock and consent TOML serialization escapes structural characters, and installer/provenance inputs are validated.
+- **Migration SQL splitting respects quoted strings and comments.** Semicolons inside SQL literals and comments no longer split statements incorrectly.
+
 ## [0.17.0] - 2026-08-13
 
 ### Added

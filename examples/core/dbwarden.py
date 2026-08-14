@@ -5,29 +5,28 @@
 # "this is the project root." DBWarden uses a sandboxed loader to
 # import it safely without conflicting with the installed package.
 
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-# Each call to database_config() registers a named database target.
-# The object returned (here, "primary") can be used at runtime in
-# Python code, for example, to inject sessions into FastAPI routes.
-primary = database_config(
+class Primary(DbwardenDatabase):
+    # Concrete subclasses register a named database target automatically.
+    # Primary.handle can be used at runtime, for example, to inject sessions
+    # into FastAPI routes.
     # Arbitrary name used with --database / -d on the CLI
-    database_name="primary",
+    database_name = "primary"
 
     # Exactly one database must have default=True. This is the one
     # used when you omit --database from CLI commands.
-    default=True,
+    default = True
 
     # The SQLAlchemy backend type. DBWarden uses this to generate
     # backend-specific DDL for PostgreSQL.
-    database_type="postgresql",
+    database_type = "postgresql"
 
     # The SQLAlchemy connection URL (sync driver).
     # Update user/password/host/port to match your local PostgreSQL.
-    database_url_sync="postgresql://user:password@localhost:5432/primary",
+    database_url_sync = "postgresql://user:password@localhost:5432/primary"
 
     # Dotted paths to Python modules containing SQLAlchemy model
     # classes. DBWarden discovers them by scanning these modules
     # and their parent packages for DeclarativeBase subclasses.
-    model_paths=["app"],
-)
+    model_paths = ["app"]

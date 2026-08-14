@@ -2,6 +2,10 @@
 
 Never hardcode database credentials in `dbwarden.py`. This page covers how to inject secrets safely.
 
+The default configuration style is a `DbwardenDatabase` subclass. The examples
+below use the equivalent `database_config(...)` function form where it keeps the
+credential-loading pattern concise; both APIs accept the same URL values.
+
 ## The problem
 
 The quick-start examples show inline connection strings:

@@ -1,6 +1,7 @@
 # Configuration API Reference
 
-Complete reference for the `database_config()` function.
+Complete reference for the `database_config()` function and the equivalent
+`DbwardenDatabase` declarative API.
 
 This is a reference page. For step-by-step guides, see
 [Quick Start](../configuration/quick-start.md), [Concepts](../configuration/concepts.md),
@@ -52,6 +53,45 @@ Both fire when your `dbwarden.py` is loaded, not at migration time.
 | `ch_named_collections`, `ch_roles`, `ch_users`, `ch_row_policies`, `ch_quotas`, `ch_settings_profiles`, `ch_grants` | `dbwarden-ch-rbac` |
 
 Install with `dbwarden plugin add <name>`. `pg_schema` and `pg_migration_lock_timeout` are core and need no plugin.
+
+## Declarative API
+
+For configuration that benefits from inheritance, define a concrete subclass of
+`DbwardenDatabase`. Every explicit `database_config()` field is available as a
+class attribute, and concrete subclasses register automatically when imported.
+
+```python
+from dbwarden import DbwardenDatabase
+
+
+class Shared(DbwardenDatabase):
+    __abstract__ = True
+    database_type = "postgresql"
+    model_paths = ["app.models"]
+    plugin_config = {
+        "pg_roles": ["app_owner"],
+    }
+
+
+class Primary(Shared):
+    database_name = "primary"
+    database_url_sync = "postgresql://user:pass@localhost/myapp"
+    default = True
+```
+
+Plugin keys may also be declared directly as class attributes:
+
+```python
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    database_url_sync = "postgresql://user:pass@localhost/myapp"
+    pg_roles = ["app_owner"]
+```
+
+`Primary.handle` is the `DatabaseHandle` returned by the function API. Mutable
+values such as `model_paths`, `model_tables`, and `plugin_config` are copied for
+each registered subclass, so child classes can override them without mutating
+their base class.
 
 ## Required arguments
 

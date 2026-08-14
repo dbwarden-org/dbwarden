@@ -2,6 +2,10 @@
 
 DBWarden treats MySQL (and its fork MariaDB) as **first-class backends**: every natively supported feature is reverse-engineered, diffed, and emitted as correct DDL.
 
+Database declarations use `DbwardenDatabase` subclasses by default. The
+equivalent `database_config(...)` function API remains supported for existing
+projects and integration examples.
+
 ## First-Class Features
 
 "First-class" means the round-trip is verified: reverse-engineer a live database with `generate-models`, feed the output back into `make-migrations`, and get **zero diff**.

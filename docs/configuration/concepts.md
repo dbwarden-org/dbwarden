@@ -69,6 +69,33 @@ for name, url in DATABASES.items():
     )
 ```
 
+## Two Equivalent APIs
+
+Use `database_config(...)` for direct, one-off declarations. Use
+`DbwardenDatabase` subclasses when several databases share settings or plugin
+configuration through inheritance:
+
+```python
+from dbwarden import DbwardenDatabase
+
+
+class Production(DbwardenDatabase):
+    __abstract__ = True
+    database_type = "postgresql"
+    model_paths = ["app.models"]
+
+
+class Primary(Production):
+    database_name = "primary"
+    database_url_sync = "postgresql://localhost/main"
+    default = True
+```
+
+Every explicit `database_config(...)` field is available as a class attribute.
+Concrete classes register on import, and their `.handle` is the same handle
+returned by the function API. Mark shared bases with `__abstract__ = True` so
+they are not registered independently.
+
 ## Configuration Loading
 
 ### Discovery Order
@@ -80,7 +107,7 @@ DBWarden searches for configuration in this order:
       not found
 2. dbwarden.py in parent directories
       not found
-3. Full scan for files with database_config()
+3. Full scan for files with declarative classes or database_config()
       not found
 4. DBWARDEN_CONFIG_MODULE environment variable
       not found
@@ -99,7 +126,7 @@ $ dbwarden history    #  Config loads here
 
 **Load process:**
 1. Python imports your config module
-2. `database_config()` calls execute
+2. Concrete `DbwardenDatabase` classes register, or `database_config()` calls execute
 3. Databases register in internal registry
 4. Validation runs
 5. Command executes with loaded config
@@ -386,7 +413,8 @@ Common scenarios:
 
 ### How It Works
 
-Each `database_config()` call registers an independent database:
+Each concrete `DbwardenDatabase` class registers an independent database. The
+equivalent `database_config()` calls behave the same way:
 
 ```python
 primary = database_config(
@@ -483,7 +511,7 @@ Shows the variable name instead of resolved value.
 ### Configuration Time
 
 When config loads:
-- `database_config()` calls execute
+- Declarative classes register, or `database_config()` calls execute
 - Validation runs
 - Internal registry populates
 - **No database connections made**

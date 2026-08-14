@@ -14,19 +14,18 @@ Dev mode swaps the configured database target for `dev_database_url` and `dev_da
 Configuration example:
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://user:password@localhost:5432/main",
-    model_paths=["app.models"],
-    model_tables=["users", "posts", "comments"],
-    dev_database_type="sqlite",
-    dev_database_url="sqlite:///./development.db",
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://user:password@localhost:5432/main"
+    model_paths = ["app.models"]
+    model_tables = ["users", "posts", "comments"]
+    dev_database_type = "sqlite"
+    dev_database_url = "sqlite:///./development.db"
 ```
 
 Run local commands against the development target:

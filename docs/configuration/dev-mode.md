@@ -2,6 +2,10 @@
 
 Use SQLite for local development and PostgreSQL in production with the same codebase.
 
+The examples below use the supported `database_config(...)` function alternative
+for compactness. New projects can declare the same fields on a
+`DbwardenDatabase` subclass.
+
 ## What Is Dev Mode?
 
 Dev mode lets you configure **two database URLs**:

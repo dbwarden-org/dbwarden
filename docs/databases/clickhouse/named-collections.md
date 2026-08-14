@@ -2,7 +2,7 @@
 
 **Requires the `dbwarden-ch-rbac` plugin:** `dbwarden plugin add dbwarden-ch-rbac`. The `ch_named_collection` object handler ships in that plugin, not in core.
 
-Named collections are the mechanism for declaring credentials without exposing secret values. They are declared in the config layer, referenced by name from engine and RBAC specs.
+Named collections are the mechanism for declaring credentials without exposing secret values. They are declared in the config layer, referenced by name from engine and RBAC specs. The examples use the supported `database_config(...)` function form for plugin-owned settings; new projects may declare the same plugin configuration on a `DbwardenDatabase` subclass.
 
 ## Declaration
 
@@ -136,3 +136,8 @@ ChUserSpec(
 ## Rollback behavior
 
 `DROP NAMED COLLECTION` rolls back as `CREATE NAMED COLLECTION`. Key changes roll back as inverse key changes.
+# Named Collections
+
+The examples use the supported `database_config(...)` function form for
+plugin-owned settings. New projects may declare the same plugin configuration
+on a `DbwardenDatabase` subclass.

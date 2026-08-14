@@ -25,7 +25,7 @@ dbwarden status --all
 
 ## Key Concepts
 
-- Each `database_config()` entry gets its own migration directory under `migrations/`
+- Each declarative database class gets its own migration directory under `migrations/` (the equivalent `database_config()` function form is also supported)
 - `--database primary` / `--database analytics` targets a specific database
 - `--all` targets every configured database
 - Each database has independent migration history and lock table

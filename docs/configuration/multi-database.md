@@ -13,37 +13,64 @@ Common scenarios:
 
 ## Basic Setup
 
-Configure each database with `database_config()`:
+Define each database as a concrete `DbwardenDatabase` subclass:
 
 ```python
 # dbwarden.py
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
 # Primary database
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://localhost/main",
-    model_paths=["app.models.primary"],
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://localhost/main"
+    model_paths = ["app.models.primary"]
 
 # Analytics database
-analytics = database_config(
-    database_name="analytics",
-    database_type="postgresql",
-    database_url_sync="postgresql://localhost/analytics",
-    model_paths=["app.models.analytics"],
-)
+class Analytics(DbwardenDatabase):
+    database_name = "analytics"
+    database_type = "postgresql"
+    database_url_sync = "postgresql://localhost/analytics"
+    model_paths = ["app.models.analytics"]
 
 # Logging database
-logging = database_config(
-    database_name="logging",
-    database_type="postgresql",
-    database_url_sync="postgresql://localhost/logs",
-    model_paths=["app.models.logging"],
-)
+class Logging(DbwardenDatabase):
+    database_name = "logging"
+    database_type = "postgresql"
+    database_url_sync = "postgresql://localhost/logs"
+    model_paths = ["app.models.logging"]
 ```
+
+The equivalent `database_config(...)` function API remains supported, including
+for plugins and integration code that use function-style declarations.
+
+The same setup can use inherited declarative classes when databases share
+backend or model settings:
+
+```python
+from dbwarden import DbwardenDatabase
+
+
+class ServiceDatabase(DbwardenDatabase):
+    __abstract__ = True
+    database_type = "postgresql"
+    model_paths = ["app.models"]
+
+
+class Primary(ServiceDatabase):
+    database_name = "primary"
+    database_url_sync = "postgresql://localhost/main"
+    default = True
+
+
+class Analytics(ServiceDatabase):
+    database_name = "analytics"
+    database_url_sync = "postgresql://localhost/analytics"
+```
+
+Both APIs can also be mixed in one source, but database names must remain
+unique and exactly one entry must set `default=True`.
 
 ## Model Organization
 

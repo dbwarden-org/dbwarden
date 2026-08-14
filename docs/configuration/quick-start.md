@@ -23,17 +23,17 @@ This creates:
 
 ## Step 2: Your First Configuration
 
-Open `dbwarden.py` and add:
+Open `dbwarden.py` and add the default class-based configuration:
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="sqlite",
-    database_url_sync="sqlite:///./app.db",
-)
+
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "sqlite"
+    database_url_sync = "sqlite:///./app.db"
 ```
 
 That's it! **4 required parameters**:
@@ -43,6 +43,10 @@ That's it! **4 required parameters**:
 - `database_url_sync` - How to connect? (sync URL for CLI/migrations)
 
 Start with SQLite for the simplest setup. Switch to PostgreSQL later.
+
+The function alternative, `database_config(...)`, is also fully supported. Some
+plugins use that form in their examples or integration code, so you may see
+both configuration styles in DBWarden documentation.
 
 ## Step 3: Test the Configuration
 
@@ -128,10 +132,37 @@ $ dbwarden status
 
 ### `database_config` registered your database
 
-When Python loads `dbwarden.py`, it executes `database_config()` which:
+When Python loads `dbwarden.py`, it registers the concrete `DbwardenDatabase`
+class, which:
 1. Validates your parameters
 2. Registers the database in DBWarden's internal registry
 3. Sets up migration directories
+
+The supported `database_config(...)` function alternative performs the same
+registration and validation steps.
+
+### Declarative configuration
+
+For shared settings, the equivalent class-based API supports inheritance:
+
+```python
+from dbwarden import DbwardenDatabase
+
+
+class Shared(DbwardenDatabase):
+    __abstract__ = True
+    database_type = "sqlite"
+    model_paths = ["app.models"]
+
+
+class Primary(Shared):
+    database_name = "primary"
+    database_url_sync = "sqlite:///./app.db"
+    default = True
+```
+
+Concrete subclasses register automatically, and `Primary.handle` provides the
+same `DatabaseHandle` returned by `database_config(...)`.
 
 ### DBWarden Can Now Find Your Database
 
@@ -172,15 +203,14 @@ model_paths=["app.models"]
 
 ```python
 # dbwarden.py
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="sqlite",
-    database_url_sync="sqlite:///./app.db",
-    model_paths=["app.models"],
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "sqlite"
+    database_url_sync = "sqlite:///./app.db"
+    model_paths = ["app.models"]
 ```
 
 ## Complete Production Example
@@ -188,19 +218,21 @@ primary = database_config(
 ```python
 # dbwarden.py
 import os
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync=os.getenv("DATABASE_URL"),
-    dev_database_type="sqlite",
-    dev_database_url="sqlite:///./dev.db",
-    model_paths=["app.models"],
-    secure_values=True,
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = os.getenv("DATABASE_URL")
+    dev_database_type = "sqlite"
+    dev_database_url = "sqlite:///./dev.db"
+    model_paths = ["app.models"]
+    secure_values = True
 ```
+
+The `database_config(...)` function alternative remains supported and may be
+used by plugins or integration code.
 
 ## What's Next?
 

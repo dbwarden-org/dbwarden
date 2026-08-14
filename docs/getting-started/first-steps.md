@@ -18,27 +18,26 @@ $ dbwarden init
 This creates:
 
 - a migrations directory structure
-- a Python configuration scaffold (`dbwarden.py`)
+- a declarative Python configuration scaffold (`dbwarden.py`)
 
 Why it matters: DBWarden expects a project-local migration layout and config source so migration behavior is deterministic per repository.
 
 ## Step 2: Define one explicit database entry
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://user:password@localhost:5432/main",
-    model_paths=["app.models"],
-    model_tables=["users"],
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://user:password@localhost:5432/main"
+    model_paths = ["app.models"]
+    model_tables = ["users"]
 ```
 
-Why it matters: DBWarden resolves migration targets from explicit typed entries, not inferred environment state.
+Why it matters: DBWarden resolves migration targets from explicit typed entries, not inferred environment state. The equivalent `database_config(...)` function API remains supported and may appear in plugin integrations.
 
 ## Step 3: Add SQLAlchemy models
 
@@ -111,7 +110,7 @@ Use status to confirm pending/applied counts and history to confirm execution or
 
 ## Common first-run issues
 
-- `No configuration found`: ensure your project has one discovered config source with `database_config(...)`
+- `No configuration found`: ensure your project has one discovered config source with a concrete `DbwardenDatabase` subclass or a `database_config(...)` call
 - `Database '<name>' not found`: ensure `--database` matches configured `database_name`
 - `No SQLAlchemy models found`: set `model_paths` explicitly in config
 

@@ -118,16 +118,18 @@ Optional dependency groups:
 Create a file named `dbwarden.py` in your project root:
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://user:pass@localhost:5432/myapp",
-    database_url_async="postgresql+asyncpg://user:pass@localhost:5432/myapp",
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://user:pass@localhost:5432/myapp"
+    database_url_async = "postgresql+asyncpg://user:pass@localhost:5432/myapp"
 ```
+
+The function alternative, `database_config(...)`, remains supported. Some
+plugins use it in examples or integration code.
 
 ### 2. Define your models
 

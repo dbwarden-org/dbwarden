@@ -2,6 +2,10 @@
 
 Learn how DBWarden discovers your SQLAlchemy models for migration generation.
 
+Examples use `database_config(...)` as a compact function alternative. The same
+`model_paths` and `model_tables` fields can be declared on the default
+`DbwardenDatabase` class API.
+
 ## What Is Model Discovery?
 
 Model discovery is the process where DBWarden:

@@ -98,30 +98,31 @@ This creates:
 When you run `init`, DBWarden:
 
 1. Creates `migrations/` if missing
-2. Creates `dbwarden.py` (or updates existing config source) with import scaffolding
+2. Creates `dbwarden.py` (or updates existing config source) with declarative class scaffolding
 3. Does not overwrite existing `database_config(...)` definitions you have added
 
 You can run `init` safely on an existing project - it is idempotent.
 
 ## Quick configuration
 
-After init, configure your first database by editing `dbwarden.py` (or your existing config file that contains `database_config(...)` calls):
+After init, configure your first database by editing `dbwarden.py` (or your existing config file):
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://user:password@localhost:5432/mydb",
-    dev_database_type="sqlite",
-    dev_database_url="sqlite:///./development.db",
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://user:password@localhost:5432/mydb"
+    dev_database_type = "sqlite"
+    dev_database_url = "sqlite:///./development.db"
 ```
 
 The `dev_database_*` fields are optional but recommended - they enable fast local iterations with `--dev`.
+The function alternative, `database_config(...)`, remains supported, and some
+plugins use it in examples or integration code.
 
 ## Verify configuration loads
 

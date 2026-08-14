@@ -6,7 +6,9 @@ description: 'Learn how to configure DBWarden for single and multi-database setu
 
 # Configuration
 
-DBWarden uses Python-based configuration with `database_config()` to define your databases.
+DBWarden uses Python-based configuration with declarative `DbwardenDatabase`
+classes as the default method. The equivalent `database_config()` function
+alternative remains supported, and some plugins use it in their examples.
 
 **One configuration source** for migrations, CLI tools, and runtime: no split configs.
 
@@ -16,14 +18,13 @@ The simplest configuration possible:
 
 ```python
 # dbwarden.py
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="sqlite",
-    database_url_sync="sqlite:///./app.db",
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "sqlite"
+    database_url_sync = "sqlite:///./app.db"
 ```
 
 That's it! **4 parameters** to get started.
@@ -154,79 +155,74 @@ DBWarden discovers your configuration automatically:
 
 1. **Looks for `dbwarden.py`** in current directory or parents
 2. **Checks `DBWARDEN_CONFIG_MODULE`** environment variable
-3. **Scans for `database_config()` calls** in your codebase (full project tree walk)
+3. **Scans for declarative classes and `database_config()` calls** in your codebase (full project tree walk)
 4. **Looks for `warden.toml`** as an alternative TOML-based config file
 
-`dbwarden.py` is the default convention and the file created by `dbwarden init`, but `database_config(...)` can live in any discovered Python file inside your project.
+`dbwarden.py` is the default convention and the file created by `dbwarden init`. The default class API or the supported `database_config(...)` function alternative can live in any discovered Python file inside your project.
 
 ## Common Patterns
 
 ### Single Database (Minimal)
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://localhost/myapp",
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://localhost/myapp"
 ```
 
 ### With Dev Mode (Recommended)
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://localhost/myapp",
-    dev_database_type="sqlite",
-    dev_database_url="sqlite:///./dev.db",
-    model_paths=["app.models"],
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://localhost/myapp"
+    dev_database_type = "sqlite"
+    dev_database_url = "sqlite:///./dev.db"
+    model_paths = ["app.models"]
 ```
 
 ### Multiple Databases
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
 # Primary
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://localhost/main",
-    model_paths=["app.models.primary"],
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://localhost/main"
+    model_paths = ["app.models.primary"]
 
 # Analytics
-analytics = database_config(
-    database_name="analytics",
-    database_type="postgresql",
-    database_url_sync="postgresql://localhost/analytics",
-    model_paths=["app.models.analytics"],
-)
+class Analytics(DbwardenDatabase):
+    database_name = "analytics"
+    database_type = "postgresql"
+    database_url_sync = "postgresql://localhost/analytics"
+    model_paths = ["app.models.analytics"]
 ```
 
 ### Production with Environment Variables
 
 ```python
 import os
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync=os.getenv("DATABASE_URL"),
-    model_paths=["app.models"],
-    secure_values=True,
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = os.getenv("DATABASE_URL")
+    model_paths = ["app.models"]
+    secure_values = True
 ```
 
 ## Why Python Configuration?

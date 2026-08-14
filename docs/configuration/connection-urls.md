@@ -2,6 +2,9 @@
 
 Complete reference for database connection URL formats.
 
+The URL examples are API-neutral. In new configurations, assign these values
+to a `DbwardenDatabase` subclass; `database_config(...)` remains supported.
+
 ## URL Format
 
 All database URLs follow this general structure:

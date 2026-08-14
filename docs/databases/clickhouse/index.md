@@ -2,6 +2,10 @@
 
 DBWarden treats ClickHouse as a first-class backend. Every natively supported feature is reverse-engineered, diffed, and emitted as correct DDL.
 
+Database declarations use `DbwardenDatabase` subclasses by default. The
+equivalent `database_config(...)` function API remains supported for existing
+projects and integration examples.
+
 **Before reading further:** ClickHouse's object model is fundamentally different from PostgreSQL. What is a `SET` in PG is often a `CREATE` commitment in CH. Read [Immutability](immutability.md) first.
 
 ## Documentation Sections

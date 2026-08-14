@@ -7,25 +7,23 @@
 # and its own lock.  CLI commands target a specific database
 # with --database / -d, or use --all to target every database.
 
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://user:password@localhost:5432/primary",
-    database_url_async="postgresql+asyncpg://user:password@localhost:5432/primary",
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://user:password@localhost:5432/primary"
+    database_url_async = "postgresql+asyncpg://user:password@localhost:5432/primary"
     # Model discovery is scoped to this database only.
     # When you run `dbwarden make-migrations --database primary`,
     # it only scans these model paths.
-    model_paths=["app.models.primary"],
-)
+    model_paths = ["app.models.primary"]
 
-analytics = database_config(
-    database_name="analytics",
+class Analytics(DbwardenDatabase):
+    database_name = "analytics"
     # No default=True here: exactly one target must have it.
-    database_type="clickhouse",
+    database_type = "clickhouse"
     # ClickHouse uses HTTP for the sync connection.
-    database_url_sync="http://localhost:8123/analytics",
-    model_paths=["app.models.analytics"],
-)
+    database_url_sync = "http://localhost:8123/analytics"
+    model_paths = ["app.models.analytics"]

@@ -46,6 +46,8 @@ There are no migration scripts to write or maintain. There is no migration runti
 - Offline migration generation for CI pipelines without a live database
 - Schema snapshots for deterministic diffs and rename detection
 - Typed `class Meta` system with import-time validation
+- Registry-driven PostgreSQL diff and SQL emission pipeline
+- Typed multi-database configuration with inheritance-friendly declarations
 - Multi-database support: PostgreSQL, MySQL, ClickHouse, MariaDB, SQLite
 - Extensible plugin system with official plugins for seeds, RBAC, FastAPI, sandbox testing, and PostgreSQL/ClickHouse extensions
 - Reverse-engineer live databases into models with `generate-models` (supports `--base` for custom imports)
@@ -93,7 +95,7 @@ Optional dependency groups:
 
 | Group        | Default | Provides                             |
 |--------------|---------|--------------------------------------|
-| `[postgres]` | Yes     | `psycopg2-binary`                    |
+| `[postgres]` |         | `psycopg2-binary`                    |
 | `[mysql]`    |         | `pymysql`                            |
 | `[clickhouse]` |       | `clickhouse-connect`, `aiohttp`      |
 | `[dev]`      |         | `pytest`, `zensical`, `seoslug`, `httpx2` |
@@ -105,32 +107,39 @@ Optional dependency groups:
 Create a file named `dbwarden.py` in your project root:
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://user:pass@localhost:5432/myapp",
-    database_url_async="postgresql+asyncpg://user:pass@localhost:5432/myapp",
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    database_type = "postgresql"
+    database_url_sync = "postgresql://user:pass@localhost:5432/myapp"
+    database_url_async = "postgresql+asyncpg://user:pass@localhost:5432/myapp"
+    default = True
 ```
+
+Concrete subclasses register automatically. `Primary.handle` is the same
+`DatabaseHandle` returned by the function alternative, `database_config(...)`.
+That function API remains fully supported, and some plugins use it in examples
+or integration code.
 
 ### 2. Define your models
 
 ```python
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime
-from sqlalchemy.orm import declarative_base
+from datetime import datetime
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from dbwarden.databases import TableMeta, IndexSpec
 
-Base = declarative_base()
+
+class Base(DeclarativeBase):
+    pass
 
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(Integer, primary_key=True)
-    email = Column(String(255), unique=True, nullable=False)
-    bio = Column(Text, nullable=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    bio: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     class Meta(TableMeta):
         comment = "Core user accounts"
@@ -139,11 +148,11 @@ class User(Base):
 class Post(Base):
     __tablename__ = "posts"
 
-    id = Column(Integer, primary_key=True)
-    title = Column(String(255), nullable=False)
-    body = Column(Text, nullable=False)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime, nullable=False)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
     class Meta(TableMeta):
         indexes = [
@@ -276,8 +285,7 @@ dbwarden make-migrations "add bio column" --offline
 
 The model state file is updated in place after each migration.
 
-> **⚠️ WARNING: NEVER DELETE THE MODEL STATE FILE**
-> This file (`.dbwarden/model_state.*.json`) is the source of truth for your database schema. You may **delete migration files** safely, but **NEVER delete the model state file**. If accidentally deleted, restore it from git immediately or re-generate with `dbwarden export-models`. Deleting it causes dbwarden to lose track of your schema state, which can lead to data loss or incorrect migrations.
+> **Important:** The model state file (`.dbwarden/model_state.*.json`) is used for offline migration generation. It is auto-generated and committed to version control. If accidentally deleted, restore it from git (`git checkout .dbwarden/model_state.*.json`) or regenerate it by running `dbwarden export-models --database <db>` against a live database. Without it, offline commands like `make-migrations --offline` will not work, but online operations are unaffected.
 
 ---
 
@@ -342,9 +350,11 @@ Schema layer is complete with `MdbTableMeta` / `MdbColumnMeta` and `mdb.field()`
 
 **Graceful disconnection**: Automatic retry logic and clear error messages when a database is unreachable.
 
+**CLI automation**: Global `--json`, `--debug`, `--debug-level trace`, and `--perf` flags provide structured output and diagnostics. Configure optional databases with `skip_if_missing=True`; use `--disable-skip` to force connection failures, and treat exit code `3` as partial success.
+
 ---
 
-## Plugins
+## Official plugins
 
 DBWarden features a plugin system with three trust tiers (official, verified, community). Official plugins extend core with features that were previously built-in, now maintained independently:
 
@@ -359,6 +369,16 @@ DBWarden features a plugin system with three trust tiers (official, verified, co
 | `dbwarden-seeds` | [`dbwarden-seeds`](https://pypi.org/p/dbwarden-seeds) | Seed data management with code seeds and file-based SQL/Python seeds |
 
 See the [plugin documentation](https://dbwarden.emiliano-go.com/plugins/) for installation, development guides, and the full Verified standard.
+
+---
+
+## Next steps
+
+- Start with [Features](https://dbwarden.emiliano-go.com/features/)
+- Follow the guides in [Get Started](https://dbwarden.emiliano-go.com/getting-started/setup/)
+- Explore [Cookbook & Examples](https://dbwarden.emiliano-go.com/cookbook/)
+- Browse [Plugins](https://dbwarden.emiliano-go.com/plugins/)
+- Use the [CLI Reference](https://dbwarden.emiliano-go.com/cli-reference/)
 
 ---
 

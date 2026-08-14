@@ -15,19 +15,18 @@
 ## Step 1: Configuration with Session Handles
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://user:password@localhost:5432/myapp",
-    database_url_async="postgresql+asyncpg://user:password@localhost:5432/myapp",
-    model_paths=["app.models"],
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://user:password@localhost:5432/myapp"
+    database_url_async = "postgresql+asyncpg://user:password@localhost:5432/myapp"
+    model_paths = ["app.models"]
 ```
 
-The `primary` object is a `DatabaseHandle`. It exposes `primary.async_session` and `primary.sync_session` as FastAPI-compatible dependency annotations; no separate dependency module needed.
+`Primary.handle` is a `DatabaseHandle`. It exposes `Primary.handle.async_session` and `Primary.handle.sync_session` as FastAPI-compatible dependency annotations; no separate dependency module needed. The equivalent `database_config(...)` function API returns the same handle.
 
 ## Step 2: Lifespan Hook
 
@@ -77,7 +76,7 @@ async def get_user(user_id: int, session: primary.async_session):
     return user
 ```
 
-`primary.async_session` is a type alias for `Annotated[AsyncSession, Depends(...)]`. FastAPI resolves it to an actual database session using the engine configured in `database_config()`.
+`primary.async_session` is a type alias for `Annotated[AsyncSession, Depends(...)]`. FastAPI resolves it to an actual database session using the engine configured by `Primary` (or the equivalent `database_config()` function).
 
 The session is automatically:
 - Opened when the route handler starts
@@ -198,7 +197,7 @@ curl http://localhost:8000/db/status
 
 ## Key Takeaways
 
-- `database_config()` returns a `DatabaseHandle` with built-in FastAPI dependencies
+- `Primary.handle` is a `DatabaseHandle` with built-in FastAPI dependencies; `database_config()` returns the equivalent handle
 - `dbwarden_lifespan` integrates schema validation into the app lifecycle
 - `primary.async_session` works directly as a route parameter type annotation
 - `DBWardenHealthRouter` exposes liveness, readiness, and per-database health

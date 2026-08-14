@@ -27,31 +27,31 @@ A project with three databases:
 ## Step 1: The Configuration
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://user:password@localhost:5432/primary",
-    database_url_async="postgresql+asyncpg://user:password@localhost:5432/primary",
-    model_paths=["app.models.primary"],
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://user:password@localhost:5432/primary"
+    database_url_async = "postgresql+asyncpg://user:password@localhost:5432/primary"
+    model_paths = ["app.models.primary"]
 
-legacy = database_config(
-    database_name="legacy",
-    database_type="mysql",
-    database_url_sync="mysql+pymysql://user:password@localhost:3306/legacy",
-    model_paths=["app.models.legacy"],
-)
+class Legacy(DbwardenDatabase):
+    database_name = "legacy"
+    database_type = "mysql"
+    database_url_sync = "mysql+pymysql://user:password@localhost:3306/legacy"
+    model_paths = ["app.models.legacy"]
 
-analytics = database_config(
-    database_name="analytics",
-    database_type="clickhouse",
-    database_url_sync="http://localhost:8123/analytics",
-    model_paths=["app.models.analytics"],
-)
+class Analytics(DbwardenDatabase):
+    database_name = "analytics"
+    database_type = "clickhouse"
+    database_url_sync = "http://localhost:8123/analytics"
+    model_paths = ["app.models.analytics"]
 ```
+
+The equivalent `database_config(...)` function API remains supported for
+function-style integrations and plugin examples.
 
 Key rules:
 - Exactly one database must have `default=True` (used when `--database` is omitted)
@@ -233,7 +233,7 @@ CREATE TABLE IF NOT EXISTS customers (
 
 ## Key Takeaways
 
-- Multiple `database_config()` calls create independent database targets
+- Multiple declarative classes, or `database_config()` calls, create independent database targets
 - Each database has its own migration directory, lock, and history
 - `--database` targets a specific database; `--all` targets every database
 - `default=True` controls which database is used when `--database` is omitted

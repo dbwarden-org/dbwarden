@@ -26,31 +26,31 @@ This keeps schema changes reviewable in code review and runnable without hidden 
 
 ## Typed Database Configuration
 
-Configure one or many databases with explicit `database_config(...)` calls.
+Configure one or many databases with explicit `DbwardenDatabase` subclasses.
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://user:password@localhost:5432/main",
-    model_paths=["app.models"],
-    model_tables=["users", "posts", "comments"],
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://user:password@localhost:5432/main"
+    model_paths = ["app.models"]
+    model_tables = ["users", "posts", "comments"]
 
-analytics = database_config(
-    database_name="analytics",
-    database_type="clickhouse",
-    database_url_sync="clickhouse://default:@localhost:8123/analytics",
-    model_paths=["app.analytics_models"],
-    model_tables=["events", "page_views"],
-)
+class Analytics(DbwardenDatabase):
+    database_name = "analytics"
+    database_type = "clickhouse"
+    database_url_sync = "clickhouse://default:@localhost:8123/analytics"
+    model_paths = ["app.analytics_models"]
+    model_tables = ["events", "page_views"]
 ```
 
 Each entry is validated before use, including database names, table names, `model_paths`, `model_tables`, and duplicate target detection.
+The supported `database_config(...)` function alternative is useful when a
+plugin or integration supplies function-style configuration.
 
 ## Model-Driven Migration Generation
 

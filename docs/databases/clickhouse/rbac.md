@@ -2,7 +2,10 @@
 
 **Requires the `dbwarden-ch-rbac` plugin:** `dbwarden plugin add dbwarden-ch-rbac`. The plugin owns both the `ch_*` RBAC config keys and the object handlers that emit their DDL. Core ships the spec dataclasses only, so declaring these keys without the plugin installed raises `DBWardenConfigError` when your `dbwarden.py` loads.
 
-All RBAC objects are declared in the config layer via `database_config()`.
+All RBAC objects are declared in the config layer. The examples use the
+supported `database_config()` function form for plugin-owned settings; new
+projects may declare the same plugin configuration on a `DbwardenDatabase`
+subclass.
 
 ## Config keys
 
@@ -272,3 +275,8 @@ This prevents accidental deactivation of users during migration runs.
 ## Rollback behavior
 
 Every RBAC CREATE has a DROP rollback and vice versa. Settings changes revert via `ALTER USER ... SETTINGS ...`.
+# ClickHouse RBAC
+
+The examples use the supported `database_config(...)` function form for
+plugin-owned settings. New projects may declare the same plugin configuration
+on a `DbwardenDatabase` subclass.

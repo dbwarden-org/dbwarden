@@ -19,14 +19,14 @@ examples/
 
 | # | Section | What You'll Learn | Example Dir |
 |---|---------|-------------------|-------------|
-| 1 | [Project Setup](01-project-setup.md) | `init`, `config`, understanding `database_config()` | `examples/core/` |
+| 1 | [Project Setup](01-project-setup.md) | `init`, `config`, understanding declarative configuration | `examples/core/` |
 | 2 | [Models & Migrations](02-models-and-migrations.md) | Model definitions, `make-migrations`, `new`, `make-rollback` | `examples/core/` |
 | 3 | [Apply & Inspect](03-apply-and-inspect.md) | `migrate`, `rollback`, `downgrade`, `history`, `status`, `check`, `check-db` | `examples/core/` |
 | 4 | [Offline & CI](04-offline-ci.md) | `export-models`, `make-migrations --offline` | `examples/core/` |
 | 5 | [Schema Inspection](05-schema-inspection.md) | `diff`, `snapshot`, `generate-models` | `examples/core/` |
 | 6 | [Safety & Impact](06-safety-impact.md) | `check`, `check-impact`, destructive change detection | `examples/core/` |
 | 7 | [Seeds](07-seeds.md) | `seed create/apply/rollback/list`, SQL seeds, `@seed_data` | `examples/core/` |
-| 8 | [Multi-Database](08-multi-database.md) | Multiple `database_config()`, PG + ClickHouse, `--all` flag | `examples/multi-database/` |
+| 8 | [Multi-Database](08-multi-database.md) | Multiple declarative databases, PG + ClickHouse, `--all` flag | `examples/multi-database/` |
 | 9 | [FastAPI Integration](09-fastapi-integration.md) | Lifespan hooks, health endpoints, session DI, migration endpoints | `examples/fastapi-app/` |
 | 10 | [Auto Schemas](10-auto-schemas.md) | `@auto_schema`, `CreateSchema`, `UpdateSchema`, `PublicSchema` (requires `dbwarden-fastapi` plugin) | `examples/fastapi-app/` |
 | 11 | [Observability](11-observability.md) | Prometheus metrics, structured logging, query tracing | `examples/observability/` |
@@ -54,16 +54,15 @@ PostgreSQL is a first-class backend with full round-trip support (read and write
 For the complete reference on PostgreSQL-specific metadata (identity columns, collation, compression, generated columns, tablespace, inheritance, exclusion constraints, deferrable FKs, advanced index options), see the [PostgreSQL Deep Dive](../databases/postgresql/index.md).
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://user:password@localhost:5432/myapp",
-    database_url_async="postgresql+asyncpg://user:password@localhost:5432/myapp",
-    model_paths=["app.models"],
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://user:password@localhost:5432/myapp"
+    database_url_async = "postgresql+asyncpg://user:password@localhost:5432/myapp"
+    model_paths = ["app.models"]
 ```
 
 ### MySQL / MariaDB
@@ -73,14 +72,13 @@ MySQL and MariaDB are first-class backends with full round-trip support. All MyS
 See the [MySQL Deep Dive](../databases/mysql.md) for the complete reference, including MySQL-specific model metadata via `class Meta(MyTableMeta)`.
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-legacy = database_config(
-    database_name="legacy",
-    database_type="mysql",
-    database_url_sync="mysql+pymysql://user:password@localhost:3306/legacy",
-    model_paths=["app.legacy_models"],
-)
+class Legacy(DbwardenDatabase):
+    database_name = "legacy"
+    database_type = "mysql"
+    database_url_sync = "mysql+pymysql://user:password@localhost:3306/legacy"
+    model_paths = ["app.legacy_models"]
 ```
 
 ### ClickHouse

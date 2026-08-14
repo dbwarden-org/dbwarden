@@ -30,12 +30,12 @@ description: Key terms and concepts used throughout the DBWarden documentation, 
 : A seed defined as a Python class extending `Seed`, with `run()` and optional `rollback()` methods. The recommended way to manage seed data.
 
 **Configuration (dbwarden.py)**
-: DBWarden uses a Python file (`dbwarden.py`) with `database_config()` calls, providing type safety, runtime flexibility, and IDE support for configuring databases.
+: DBWarden uses a Python file (`dbwarden.py`) with concrete `DbwardenDatabase` classes by default. The equivalent `database_config()` function API is also supported, providing type safety, runtime flexibility, and IDE support for configuring databases.
 
 ## D
 
 **Database Config**
-: A single `database_config()` call that defines one database. Each config includes the database name, type, connection URL, model paths, and optional dev mode settings.
+: A concrete `DbwardenDatabase` class, or equivalent `database_config()` call, that defines one database. Each config includes the database name, type, connection URL, model paths, and optional dev mode settings.
 
 **Dev Mode**
 : Using a different database type (typically SQLite) for local development while targeting a production database (e.g., PostgreSQL) in deployment, enabled via the `dev_database_type` and `dev_database_url` config options.
@@ -49,7 +49,7 @@ description: Key terms and concepts used throughout the DBWarden documentation, 
 ## F
 
 **FastAPI Integration**
-: DBWarden's built-in support for FastAPI including async sessions, health endpoints, migration endpoints, Prometheus metrics, and distributed locking. Configured once via `database_config()`.
+: DBWarden's built-in support for FastAPI including async sessions, health endpoints, migration endpoints, Prometheus metrics, and distributed locking. Configured once via a `DbwardenDatabase` class or the equivalent `database_config()` function.
 
 ## G
 

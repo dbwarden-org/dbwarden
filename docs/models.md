@@ -2,17 +2,20 @@
 
 This page is the **reference** for all supported Meta attributes across every backend. For a step-by-step walkthrough of defining models, see the [Modeling Guide](getting-started/modeling.md).
 
-DBWarden reads SQLAlchemy model metadata to generate migration SQL. Use `model_paths` in your `database_config(...)` entries to control discovery.
+DBWarden reads SQLAlchemy model metadata to generate migration SQL. Use
+`model_paths` on your `DbwardenDatabase` classes, or in equivalent
+`database_config(...)` entries, to control discovery.
 
 ```python
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://user:pass@localhost:5432/main",
-    model_paths=["app.models"],
-    model_tables=["users", "posts", "comments"],
-)
+from dbwarden import DbwardenDatabase
+
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://user:pass@localhost:5432/main"
+    model_paths = ["app.models"]
+    model_tables = ["users", "posts", "comments"]
 ```
 
 ## Common Meta Attributes

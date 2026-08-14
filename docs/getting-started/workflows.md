@@ -12,26 +12,27 @@ This guide covers larger day-to-day workflows once the basics are in place.
 DBWarden can manage more than one database from one config source.
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://user:password@localhost:5432/main",
-    model_paths=["app.models"],
-    model_tables=["users", "posts", "comments"],
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://user:password@localhost:5432/main"
+    model_paths = ["app.models"]
+    model_tables = ["users", "posts", "comments"]
 
-analytics = database_config(
-    database_name="analytics",
-    database_type="clickhouse",
-    database_url_sync="clickhouse://default:@localhost:8123/analytics",
-    model_paths=["app.analytics_models"],
-    model_tables=["events", "page_views"],
-)
+class Analytics(DbwardenDatabase):
+    database_name = "analytics"
+    database_type = "clickhouse"
+    database_url_sync = "clickhouse://default:@localhost:8123/analytics"
+    model_paths = ["app.analytics_models"]
+    model_tables = ["events", "page_views"]
 ```
+
+The equivalent `database_config(...)` function form remains supported and is
+used by some plugins and integration examples.
 
 Apply migrations per database:
 

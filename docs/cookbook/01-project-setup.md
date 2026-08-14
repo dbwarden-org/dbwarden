@@ -3,7 +3,7 @@
 ## What You'll Learn
 
 - How to initialize a DBWarden project with `dbwarden init`
-- How configuration is structured via `database_config()`
+- How configuration is structured via `DbwardenDatabase` classes
 - How to inspect your loaded configuration
 
 ## Prerequisites
@@ -32,16 +32,15 @@ It also writes a starter `dbwarden.py` if one doesn't exist. In our case, we alr
 Our `examples/core/dbwarden.py`:
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="sqlite",
-    database_url_sync="sqlite:///./app.db",
-    model_paths=["app"],
-    model_tables=["users", "posts"],
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "sqlite"
+    database_url_sync = "sqlite:///./app.db"
+    model_paths = ["app"]
+    model_tables = ["users", "posts"]
 ```
 
 Each parameter has a specific role:
@@ -55,7 +54,7 @@ Each parameter has a specific role:
 | `model_paths` | `["app"]` | Python module paths to scan for SQLAlchemy models |
 | `model_tables` | `["users", "posts"]` | Optional table-name filter for this database |
 
-The return value `primary` is a `DatabaseHandle` object. It's also used later for FastAPI dependency injection: the same object provides `primary.async_session` and `primary.sync_session`.
+`Primary.handle` is a `DatabaseHandle` object. It's also used later for FastAPI dependency injection: the same object provides `Primary.handle.async_session` and `Primary.handle.sync_session`. The equivalent `database_config(...)` function API remains supported.
 
 ## Step 3: Viewing the Configuration
 
@@ -74,11 +73,11 @@ This confirms DBWarden has discovered and loaded your configuration. The `(defau
 
 ## What Happens Under the Hood
 
-When you import `dbwarden` and call `database_config()`:
+When you import `dbwarden` and define a concrete `DbwardenDatabase` subclass:
 
-1. The function call is registered in DBWarden's internal registry
+1. The concrete class is registered in DBWarden's internal registry
 2. On first CLI command, DBWarden discovers `dbwarden.py` via AST scanning
-3. It imports the module and executes each `database_config()` call
+3. It imports the module and registers each concrete database class
 4. It validates uniqueness, default rules, and model path resolution
 5. The resolved configuration is cached for the session
 
@@ -86,7 +85,7 @@ When you import `dbwarden` and call `database_config()`:
 
 - `dbwarden init` creates the directory skeleton: run it once per project
 - `dbwarden config` shows what DBWarden actually resolved (useful for debugging)
-- `database_config()` is the single entry point for all configuration
+- `DbwardenDatabase` is the default configuration API; `database_config()` remains a supported function alternative
 - `model_paths` controls which Python modules are scanned for models
 - We chose SQLite here so the example runs with zero external services
 

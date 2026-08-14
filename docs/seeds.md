@@ -49,7 +49,7 @@ Key advantages over the old decorator approach:
 
 | Attribute | Default | Description |
 |-----------|---------|-------------|
-| `__seed_database__` | `"default"` | Routes the seed to the named database handle configured in `database_config(...)`. |
+| `__seed_database__` | `"default"` | Routes the seed to the named database handle configured by a `DbwardenDatabase` class or `database_config(...)`. |
 | `__seed_description__` | `""` | Human-readable label shown in `dbwarden seed list` output. |
 | `__seed_on_conflict__` | `"ignore"` | What to do when a row with matching columns exists: `"ignore"` (skip silently), `"update"` (overwrite), or `"error"` (raise). |
 | `__seed_conflict_columns__` | `None` | List of column names used for conflict detection. Required when `__seed_on_conflict__` is `"update"`. |

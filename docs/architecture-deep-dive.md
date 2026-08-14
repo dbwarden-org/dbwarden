@@ -26,7 +26,7 @@ When runtime config is requested:
 
 1. discover one config source (`dbwarden.py` or single callsite)
 2. fallback to `DBWARDEN_CONFIG_MODULE` when configured
-3. import source and execute `database_config(...)` calls
+3. import source and register concrete `DbwardenDatabase` classes or execute `database_config(...)` calls
 4. validate uniqueness/default/model-path rules
 5. resolve selected database and apply `--dev` swap when enabled
 

@@ -1,6 +1,6 @@
 # Migrate from TOML
 
-If your project currently uses `warden.toml` for DBWarden configuration, this guide walks through transitioning to the Python-based `database_config(...)` approach.
+If your project currently uses `warden.toml` for DBWarden configuration, this guide walks through transitioning to Python-based configuration with the default `DbwardenDatabase` API. The equivalent `database_config(...)` function remains supported.
 
 ## Why migrate
 

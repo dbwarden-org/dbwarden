@@ -1,6 +1,7 @@
 # `database`
 
-Display configured databases. Config is defined in Python code via `database_config()`, so
+Display configured databases. Config is defined in Python code via declarative
+`DbwardenDatabase` classes or `database_config()`, so
 `database list` is a read-only command for viewing what's registered.
 
 ## Usage

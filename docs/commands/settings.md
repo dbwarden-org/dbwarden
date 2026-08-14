@@ -1,7 +1,7 @@
 # `settings`
 
 View DBWarden configuration. All database settings are defined in Python code via
-`database_config()`, so `settings show` is a read-only command for inspecting
+declarative database classes or `database_config()`, so `settings show` is a read-only command for inspecting
 the current configuration.
 
 ## `settings show`

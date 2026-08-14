@@ -29,45 +29,47 @@ See [Installation](../installation.md) for full details.
 
 ## Config Examples
 
+The default configuration style uses `DbwardenDatabase` subclasses. The
+equivalent `database_config(...)` function API remains supported for plugins
+and integrations.
+
 PostgreSQL:
 
 ```python
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://user:password@localhost:5432/main",
-)
+from dbwarden import DbwardenDatabase
+
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://user:password@localhost:5432/main"
 ```
 
 MySQL:
 
 ```python
-legacy = database_config(
-    database_name="legacy",
-    database_type="mysql",
-    database_url_sync="mysql://user:password@localhost:3306/legacy",
-)
+class Legacy(DbwardenDatabase):
+    database_name = "legacy"
+    database_type = "mysql"
+    database_url_sync = "mysql://user:password@localhost:3306/legacy"
 ```
 
 SQLite:
 
 ```python
-dev = database_config(
-    database_name="dev",
-    database_type="sqlite",
-    database_url_sync="sqlite:///./development.db",
-)
+class Dev(DbwardenDatabase):
+    database_name = "dev"
+    database_type = "sqlite"
+    database_url_sync = "sqlite:///./development.db"
 ```
 
 ClickHouse:
 
 ```python
-analytics = database_config(
-    database_name="analytics",
-    database_type="clickhouse",
-    database_url_sync="clickhouse://user:password@localhost:8123/analytics",
-)
+class Analytics(DbwardenDatabase):
+    database_name = "analytics"
+    database_type = "clickhouse"
+    database_url_sync = "clickhouse://user:password@localhost:8123/analytics"
 ```
 
 ## Internal Connection Handling

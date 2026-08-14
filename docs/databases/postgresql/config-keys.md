@@ -1,6 +1,8 @@
 # Config Keys
 
-PostgreSQL features are configured through keys in your `database_config(...)` call. These keys live alongside the connection URL and model paths.
+PostgreSQL features are configured through keys on your `DbwardenDatabase`
+class or in the equivalent `database_config(...)` call. These keys live
+alongside the connection URL and model paths.
 
 **Most of these keys are contributed by plugins.** The plugin owns both the config key and the object handler that emits its DDL. Declaring a key whose plugin is not installed raises `DBWardenConfigError` when your `dbwarden.py` loads, naming the plugin to install. Keys that no plugin owns are rejected as unknown arguments, so typos fail immediately instead of being silently ignored.
 

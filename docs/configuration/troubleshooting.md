@@ -2,6 +2,9 @@
 
 Solutions to common configuration issues.
 
+Configuration sources may use either the default `DbwardenDatabase` class API
+or the supported `database_config(...)` function alternative.
+
 ## "No configuration found"
 
 ### Symptom

@@ -49,16 +49,18 @@ uv add dbwarden
 Create `dbwarden.py` in your project root. This replaces `alembic.ini` and `env.py`:
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://user:pass@localhost:5432/myapp",
-    database_url_async="postgresql+asyncpg://user:pass@localhost:5432/myapp",
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://user:pass@localhost:5432/myapp"
+    database_url_async = "postgresql+asyncpg://user:pass@localhost:5432/myapp"
 ```
+
+The existing `database_config(...)` function API is also supported if your
+project or a plugin already uses that form.
 
 Model discovery is automatic. If you want explicit control over which modules are scanned, pass `model_paths`. See [Setup](setup.md) and [Model Discovery](../configuration/model-discovery.md).
 

@@ -2,6 +2,10 @@
 
 Real-world configuration patterns for production deployments.
 
+The snippets use the supported `database_config(...)` function alternative to
+keep environment-variable patterns compact. The same fields work on the
+default `DbwardenDatabase` class API.
+
 ## Environment Variables
 
 ### Basic Pattern
