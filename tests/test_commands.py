@@ -31,8 +31,9 @@ class TestInitCommand:
                 settings_path = Path(tmpdir) / "dbwarden.py"
                 assert settings_path.exists()
                 content = settings_path.read_text(encoding="utf-8")
-                assert "from dbwarden import database_config" in content
-                assert "database_config(" in content
+                assert "from dbwarden import DbwardenDatabase" in content
+                assert "class Primary(DbwardenDatabase):" in content
+                assert "database_config(" not in content
             finally:
                 os.chdir(old_cwd)
 
@@ -58,8 +59,27 @@ class TestInitCommand:
 
                 settings_path = Path(tmpdir) / "dbwarden.py"
                 content = settings_path.read_text(encoding="utf-8")
-                assert content.count("from dbwarden import database_config") == 1
-                assert content.count("database_config(") == 1
+                assert content.count("from dbwarden import DbwardenDatabase") == 1
+                assert content.count("class Primary(DbwardenDatabase):") == 1
+            finally:
+                os.chdir(old_cwd)
+
+    def test_init_preserves_existing_function_config(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            old_cwd = os.getcwd()
+            os.chdir(tmpdir)
+            try:
+                settings_path = Path(tmpdir) / "dbwarden.py"
+                settings_path.write_text(
+                    "from dbwarden import database_config\n\n"
+                    "primary = database_config(database_name='primary', "
+                    "database_url_sync='sqlite:///primary.db')\n",
+                    encoding="utf-8",
+                )
+                init_cmd()
+                content = settings_path.read_text(encoding="utf-8")
+                assert "from dbwarden import database_config" in content
+                assert "class Primary(DbwardenDatabase):" not in content
             finally:
                 os.chdir(old_cwd)
 

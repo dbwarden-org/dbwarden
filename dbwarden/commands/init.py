@@ -1,42 +1,19 @@
 from pathlib import Path
-import os
-import tempfile
+import shutil
 
 from dbwarden.constants import MIGRATIONS_DIR
 from dbwarden.logging import get_logger
 from dbwarden.output import success, success_panel
+from dbwarden.files import atomic_write_text
 
 
 def _atomic_write(path: Path, content: str) -> None:
-    """Write content atomically using rename."""
+    """Write content atomically while retaining a backup of the old file."""
     path = path.resolve()
-    dir_path = path.parent
-    
-    # Create temp file in same directory for atomic rename
-    fd, tmp_path = tempfile.mkstemp(
-        dir=str(dir_path),
-        prefix=f".{path.name}.",
-        suffix=".tmp",
-        text=True,
-    )
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(content)
-        
-        # Backup existing file
-        if path.exists():
-            backup_path = path.with_suffix(path.suffix + ".bak")
-            path.replace(backup_path)
-        
-        # Atomic rename from temp to final
-        os.replace(tmp_path, path)
-    except Exception:
-        # Clean up temp file on failure
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-        raise
+    if path.exists():
+        backup_path = path.with_suffix(path.suffix + ".bak")
+        shutil.copy2(path, backup_path)
+    atomic_write_text(path, content)
 
 
 def _ensure_settings_file(settings_path: Path, db_name: str) -> None:
@@ -46,25 +23,27 @@ def _ensure_settings_file(settings_path: Path, db_name: str) -> None:
         content = settings_path.read_text(encoding="utf-8")
     lines = content.splitlines()
 
-    import_line = "from dbwarden import database_config"
-    has_import = any(line.strip() == import_line for line in lines)
-    has_scaffold = "database_config(" in content
+    import_line = "from dbwarden import DbwardenDatabase"
+    has_declarative_import = any(line.strip() == import_line for line in lines)
+    has_function_config = "database_config(" in content
+    has_declarative_config = "DbwardenDatabase" in content and "class " in content
+    has_scaffold = has_function_config or has_declarative_config
 
     updated = content
-    if not has_import:
+    if not has_scaffold and not has_declarative_import:
         updated = (
             f"{import_line}\n\n{updated}" if updated.strip() else f"{import_line}\n"
         )
 
     if not has_scaffold:
         scaffold = (
-            "\n\ndatabase_config(\n"
-            f'    database_name="{db_name}",\n'
-            "    default=True,\n"
-            '    database_type="sqlite",\n'
-            '    database_url_sync="sqlite:///./app.db",\n'
-            f'    migrations_dir="migrations/{db_name}",\n'
-            ")\n"
+            "\n\nclass Primary(DbwardenDatabase):\n"
+            "    \"\"\"Default database configuration.\"\"\"\n"
+            f'    database_name = "{db_name}"\n'
+            "    default = True\n"
+            '    database_type = "sqlite"\n'
+            '    database_url_sync = "sqlite:///./app.db"\n'
+            f'    migrations_dir = "migrations/{db_name}"\n'
         )
         updated = f"{updated.rstrip()}{scaffold}"
 

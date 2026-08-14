@@ -131,9 +131,14 @@ def _build_database_target_key(url: str, db_type: str, base_dir: Path) -> str:
 def _discover_dbwarden_files(root: Path) -> list[Path]:
     matches: list[Path] = []
     for current, dirs, files in os.walk(root):
-        dirs[:] = [d for d in dirs if d not in _IGNORE_DIRS]
+        dirs[:] = [
+            d for d in dirs
+            if d not in _IGNORE_DIRS and not (Path(current) / d).is_symlink()
+        ]
         if "dbwarden.py" in files:
-            matches.append(Path(current) / "dbwarden.py")
+            candidate = Path(current) / "dbwarden.py"
+            if not candidate.is_symlink() and candidate.is_file():
+                matches.append(candidate)
     return sorted(matches)
 
 
@@ -159,22 +164,69 @@ def _file_has_database_config_call(path: Path) -> bool:
             func = node.func
             if isinstance(func, ast.Name) and func.id == "database_config":
                 return True
+    declarative_names = {"DbwardenDatabase"}
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom) and node.module == "dbwarden":
+            for alias in node.names:
+                if alias.name == "DbwardenDatabase":
+                    declarative_names.add(alias.asname or alias.name)
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "dbwarden":
+                    declarative_names.add(f"{alias.asname or 'dbwarden'}.DbwardenDatabase")
+
+    class_names: set[str] = set()
+    class_bases: dict[str, list[str]] = {}
     for node in ast.walk(tree):
-        if isinstance(node, ast.ClassDef):
-            if any((isinstance(base, ast.Name) and base.id == "DbwardenDatabase") for base in node.bases):
-                return True
+        if not isinstance(node, ast.ClassDef):
+            continue
+        class_names.add(node.name)
+        bases: list[str] = []
+        for base in node.bases:
+            if isinstance(base, ast.Name):
+                bases.append(base.id)
+            elif isinstance(base, ast.Attribute) and isinstance(base.value, ast.Name):
+                bases.append(f"{base.value.id}.{base.attr}")
+        class_bases[node.name] = bases
+
+        attributes: set[str] = set()
+        for statement in node.body:
+            if isinstance(statement, ast.Assign):
+                attributes.update(
+                    target.id for target in statement.targets if isinstance(target, ast.Name)
+                )
+            elif isinstance(statement, ast.AnnAssign) and isinstance(statement.target, ast.Name):
+                attributes.add(statement.target.id)
+        if {"database_name", "database_url_sync"}.issubset(attributes) or {
+            "database_name", "database_url_async"
+        }.issubset(attributes):
+            return True
+
+    known = set(declarative_names)
+    while True:
+        derived = {
+            name for name, bases in class_bases.items() if any(base in known for base in bases)
+        }
+        if not derived - known:
+            break
+        known.update(derived)
+    if class_names & known:
+        return True
     return False
 
 
 def _full_scan_database_config_calls(root: Path) -> list[Path]:
     matches: list[Path] = []
     for current, dirs, files in os.walk(root):
-        dirs[:] = [d for d in dirs if d not in _IGNORE_DIRS]
+        dirs[:] = [
+            d for d in dirs
+            if d not in _IGNORE_DIRS and not (Path(current) / d).is_symlink()
+        ]
         for filename in files:
             if not filename.endswith(".py"):
                 continue
             path = Path(current) / filename
-            if _file_has_database_config_call(path):
+            if not path.is_symlink() and path.is_file() and _file_has_database_config_call(path):
                 matches.append(path)
     return sorted(matches)
 
