@@ -462,6 +462,32 @@ def _prepend_ch_preamble(
     return upgrade_sql, rollback_sql, changes
 
 
+def _order_tables_for_creation(tables: list[Any]) -> list[Any]:
+    """Create referenced tables before tables that add foreign keys to them."""
+    by_name = {table.name: table for table in tables}
+    ordered: list[Any] = []
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(table: Any) -> None:
+        if table.name in visited:
+            return
+        if table.name in visiting:
+            return
+        visiting.add(table.name)
+        for foreign_key in table.foreign_keys:
+            referenced = foreign_key.get("referred_table")
+            if referenced in by_name:
+                visit(by_name[referenced])
+        visiting.remove(table.name)
+        visited.add(table.name)
+        ordered.append(table)
+
+    for table in tables:
+        visit(table)
+    return ordered
+
+
 def generate_migration_sql(
     tables: list,
     migrations_dir: str | None = None,
@@ -581,6 +607,7 @@ def generate_migration_sql(
         changes: list[Change] = []
         backend = _get_backend_name_md(database)
 
+        tables = _order_tables_for_creation(tables)
         enum_types: dict[str, list[str]] = {}
         for table in tables:
             for col in table.columns:

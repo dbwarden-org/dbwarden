@@ -72,6 +72,15 @@ class TestGetDbConnection:
 
 
 class TestGetEngine:
+    def test_clickhouse_url_conversion_preserves_credentials(self):
+        from dbwarden.database.connection import _convert_url_to_clickhouse_dialect
+
+        result = _convert_url_to_clickhouse_dialect(
+            "clickhouse://clickhouse:clickhouse@localhost:8123/harness"
+        )
+
+        assert result == "clickhousedb://clickhouse:clickhouse@localhost:8123/harness"
+
     @patch("dbwarden.database.connection.get_database")
     @patch("dbwarden.database.connection._get_engine")
     def test_get_engine(self, mock_get_engine, mock_get_db):

@@ -81,6 +81,21 @@ class TestMigratePerf:
         assert "Model state write completed in" in output
         assert "SQL (" not in output
 
+    def test_deferred_snapshots_write_only_the_final_snapshot(self, sqlite_project):
+        migrations_dir = Path("migrations/primary")
+        _write_migration(
+            str(migrations_dir),
+            "primary__0002_create_second.sql",
+            "-- upgrade\n\nCREATE TABLE second (id INTEGER PRIMARY KEY)\n\n"
+            "-- rollback\n\nDROP TABLE second\n",
+        )
+
+        _run_migrate(db_name="primary", defer_snapshots=True)
+
+        snapshots = tuple(Path(".dbwarden/schemas").glob("*.schema.json"))
+        assert len(snapshots) == 1
+        assert "0002" in snapshots[0].name
+
 
 class TestCliPerfFlag:
     def test_migrate_accepts_perf_flag(self):
@@ -93,6 +108,17 @@ class TestCliPerfFlag:
             assert result.exit_code == 0
         _, kwargs = mock.call_args
         assert kwargs["perf"] is True
+
+    def test_migrate_accepts_defer_snapshots_flag(self):
+        from dbwarden.cli.main import app
+
+        runner = CliRunner()
+        with patch("dbwarden.cli.main.handle_migrate") as mock:
+            with patch("dbwarden.cli.main.validate_directory"):
+                result = runner.invoke(app, ["migrate", "--defer-snapshots"])
+            assert result.exit_code == 0
+        _, kwargs = mock.call_args
+        assert kwargs["defer_snapshots"] is True
 
     def test_rollback_accepts_perf_flag(self):
         from dbwarden.cli.main import app

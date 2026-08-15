@@ -103,6 +103,7 @@ def handle_migrate(
     sandbox: bool = False,
     apply_seeds: bool = False,
     perf: bool = False,
+    defer_snapshots: bool = False,
 ) -> None:
     """Handle migrate command."""
     migrate_cmd(
@@ -118,6 +119,7 @@ def handle_migrate(
         sandbox=sandbox,
         apply_seeds=apply_seeds,
         perf=perf,
+        defer_snapshots=defer_snapshots,
     )
 
 

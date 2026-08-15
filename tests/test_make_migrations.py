@@ -100,6 +100,33 @@ def test_generate_migration_sql_table_rename_no_snapshot():
     assert any(c.operation == "rename_table" for c in changes)
 
 
+def test_generate_migration_sql_orders_referenced_tables_before_foreign_keys():
+    parent = ModelTable(
+        name="orders",
+        columns=[ModelColumn("id", "INTEGER", False, True, False, None, None)],
+    )
+    child = ModelTable(
+        name="order_items",
+        columns=[
+            ModelColumn("id", "INTEGER", False, True, False, None, None),
+            ModelColumn("order_id", "INTEGER", False, False, False, None, None),
+        ],
+        foreign_keys=[
+            {
+                "columns": ["order_id"],
+                "referred_table": "orders",
+                "referred_columns": ["id"],
+            }
+        ],
+    )
+
+    upgrade_sql, _, _ = generate_migration_sql([child, parent])
+
+    assert upgrade_sql.index("CREATE TABLE IF NOT EXISTS orders") < upgrade_sql.index(
+        "CREATE TABLE IF NOT EXISTS order_items"
+    )
+
+
 def test_generate_migration_sql_skips_duplicate_create_from_pending_migration():
     with tempfile.TemporaryDirectory() as tmpdir:
         _write_migration(

@@ -425,6 +425,14 @@ class ColumnHandler(ObjectHandler):
                 and pk_count <= 1
                 and "int" in str(model_col.type).lower()
             )
+        if (
+            backend == "sqlite"
+            and model_col.primary_key
+            and pk_count <= 1
+            and "int" in str(model_col.type).lower()
+            and model_col.autoincrement in (None, "auto", True)
+        ):
+            return
         if model_autoinc is not None and bool(snap_autoinc) != bool(model_autoinc):
             if pk_count > 1 and backend in ("mysql", "mariadb"):
                 return

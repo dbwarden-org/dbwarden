@@ -52,13 +52,13 @@ This applies versioned migrations and any repeatable migration behavior supporte
 
 ### 3. Check the Resulting Schema
 
-Run DBWarden's check command:
+Run DBWarden's diff command:
 
 ```bash
-dbwarden check --database primary
+dbwarden diff --database primary
 ```
 
-The check compares the database state with the model state. If the command reports differences, CI fails. Some teams also run `dbwarden diff` in table or JSON mode for diagnostic output:
+The diff compares the database state with the model state. If the command reports differences, CI fails. `dbwarden check` is a separate safety classifier, not the schema-convergence comparison. Some teams also run `dbwarden diff` in table or JSON mode for diagnostic output:
 
 ```bash
 dbwarden diff --database primary --out table
@@ -125,15 +125,55 @@ jobs:
       - name: Apply migrations
         run: dbwarden migrate --database primary
 
-      - name: Check convergence
-        run: dbwarden check --database primary
+       - name: Check convergence
+         run: dbwarden diff --database primary
 
       - name: Print drift diagnostics on failure
         if: failure()
         run: dbwarden diff --database primary --out table
 ```
 
-The `--health-cmd` option belongs to Docker service configuration. The DBWarden commands are the two important checks: `migrate` and `check`.
+The `--health-cmd` option belongs to Docker service configuration. The DBWarden commands are the two important convergence commands: `migrate` and `diff`.
+
+## Measured Cost
+
+The cost is dominated by replaying the migration history, not by the final
+schema diff. On 2026-08-14, the harness measured a synthetic 500-migration
+SQLite project with one table per migration:
+
+| DBWarden executable | Preparation | Full replay | Final diff | Total |
+|---|---:|---:|---:|---:|
+| Current core checkout | 2.2s | 274.1s | 6.0s | 282.3s |
+| PyPI `0.16.5` | 1.8s | 291.8s | 6.7s | 300.3s |
+
+The current core checkout also supports bulk replay with one final snapshot:
+
+```bash
+dbwarden migrate --defer-snapshots
+```
+
+The same 500-migration SQLite workload measured `10.4s` for replay and
+`18.3s` total with deferred snapshots. This preserves the final convergence
+artifact while avoiding a full schema reflection after every migration. The
+default remains per-migration snapshots for compatibility with audit workflows;
+long-history CI gates should use the deferred mode and retain the final
+snapshot as their correctness artifact.
+
+These are local reference measurements, not an SLA. Database startup,
+filesystem speed, migration complexity, indexes, plugins, and backend network
+latency can materially change the result. The benchmark is reproducible from
+the standalone harness with:
+
+```bash
+DBWARDEN_HARNESS_RUN_500_MIGRATION=1 uv run pytest \
+  suites/performance/test_convergence_500.py -s
+```
+
+The current `convergence-audit` GitHub Actions job runs `pytest -m p0`. At
+present only a handler-level ClickHouse test carries the `p0` marker, so that
+job is not equivalent to replaying a project's full migration history. A
+project that needs the stronger guarantee should run the harness's
+provider-backed convergence suite as a separate, explicitly budgeted job.
 
 ## Example Error Caught by the Gate
 

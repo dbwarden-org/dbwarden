@@ -47,6 +47,11 @@ $ dbwarden make-migrations --database primary --safe-type-change
 
 After each migration is applied, DBWarden writes a **schema snapshot** to `.dbwarden/schemas/<migration_id>.schema.json`. These snapshots capture the full DDL state (tables, columns, types, indexes, constraints, enums) at that point in time.
 
+For long migration histories, `dbwarden migrate --defer-snapshots` writes only
+the final schema snapshot for the batch. This avoids repeated full-schema
+reflection while preserving the final state needed by convergence and offline
+diff workflows. Omit the flag when per-migration audit snapshots are required.
+
 `make-migrations` diffs your SQLAlchemy models against the **latest** snapshot instead of the live database. This means:
 
 - You don't need a running database to generate migrations (after the first `migrate`).

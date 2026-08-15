@@ -99,6 +99,7 @@ def migrate_single(
     sandbox: bool = False,
     apply_seeds: bool = False,
     perf: bool = False,
+    defer_snapshots: bool = False,
 ) -> None:
     """
     Apply pending migrations to a single database.
@@ -115,6 +116,7 @@ def migrate_single(
         sandbox: Apply migrations in a temporary sandbox database instead.
         apply_seeds: Apply pending seeds after migrations (overrides config).
         perf: Emit per-statement timing breakdowns for executed SQL.
+        defer_snapshots: Write only the final schema snapshot for a batch.
     """
     from dbwarden.commands.perf import PhaseTimer
     from dbwarden.config import get_database
@@ -261,11 +263,12 @@ def migrate_single(
                 perf=perf,
             )
 
-            with PhaseTimer(logger, "Snapshot write", perf=perf):
-                _write_migration_snapshot(
-                    db_name=db_name,
-                    migration_id=Path(filename).stem,
-                )
+            if not defer_snapshots:
+                with PhaseTimer(logger, "Snapshot write", perf=perf):
+                    _write_migration_snapshot(
+                        db_name=db_name,
+                        migration_id=Path(filename).stem,
+                    )
 
             duration = time.time() - start_time
             logger.log_migration_end(version, filename, duration)
@@ -338,6 +341,13 @@ def migrate_single(
         if config.auto_apply_seeds or apply_seeds:
             _apply_pending_seeds_after_migrate(db_name)
 
+        if defer_snapshots and (versioned_count > 0 or runs_always_filepaths or runs_on_change_filepaths):
+            with PhaseTimer(logger, "Final snapshot write", perf=perf):
+                _write_migration_snapshot(
+                    db_name=db_name,
+                    migration_id=latest_version or "final",
+                )
+
         if versioned_count > 0:
             success(f"Migrations completed successfully: {versioned_count} migrations applied.")
             if metrics_enabled():
@@ -392,6 +402,7 @@ def migrate_cmd(
     sandbox: bool = False,
     apply_seeds: bool = False,
     perf: bool = False,
+    defer_snapshots: bool = False,
 ) -> None:
     """
     Apply pending migrations to the database.
@@ -458,6 +469,7 @@ def migrate_cmd(
                     sandbox=sandbox,
                     apply_seeds=apply_seeds,
                     perf=perf,
+                    defer_snapshots=defer_snapshots,
                 )
                 result.succeeded.append(db_name)
             except Exception as e:
@@ -503,6 +515,7 @@ def migrate_cmd(
             sandbox=sandbox,
             apply_seeds=apply_seeds,
             perf=perf,
+            defer_snapshots=defer_snapshots,
         )
 
 

@@ -23,3 +23,15 @@ def test_migrate_all_attempts_every_database_and_raises_on_failure():
             migrate_cmd(all_databases=True)
 
     assert calls == ["primary", "broken"]
+
+
+def test_migrate_forwards_deferred_snapshot_mode():
+    received: dict[str, object] = {}
+
+    def run_one(**kwargs):
+        received.update(kwargs)
+
+    with patch("dbwarden.commands.migrate.migrate_single", side_effect=run_one):
+        migrate_cmd(database="primary", defer_snapshots=True)
+
+    assert received["defer_snapshots"] is True

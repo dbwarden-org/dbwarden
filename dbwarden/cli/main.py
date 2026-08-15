@@ -439,6 +439,11 @@ def migrate(
     perf: bool = typer.Option(
         False, "--perf", help="Log per-SQL-statement timing breakdowns"
     ),
+    defer_snapshots: bool = typer.Option(
+        False,
+        "--defer-snapshots",
+        help="Write one final schema snapshot instead of one after every migration",
+    ),
 ):
     """Apply pending migrations to the database."""
     validate_directory()
@@ -455,6 +460,7 @@ def migrate(
         sandbox=sandbox,
         apply_seeds=apply_seeds,
         perf=perf,
+        defer_snapshots=defer_snapshots,
     )
 
 

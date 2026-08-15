@@ -21,7 +21,7 @@ def _convert_url_to_clickhouse_dialect(url: str) -> str:
     """
     from sqlalchemy.engine import make_url
 
-    if url.startswith(("http://", "https://", "clickhousedb://")):
+    if url.startswith(("http://", "https://", "clickhouse://", "clickhousedb://")):
         parsed = make_url(url)
         host = parsed.host or "localhost"
         port = parsed.port or 8123
