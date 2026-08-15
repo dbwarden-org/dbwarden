@@ -1,6 +1,6 @@
 # Installation
 
-This guide covers installing DBWarden in your project and verifying it works correctly.
+This guide covers installing dbwarden in your project and verifying it works correctly.
 
 ## Requirements
 
@@ -43,7 +43,7 @@ uv add "dbwarden[postgres,mysql,fastapi]"
 
 ## Database drivers
 
-DBWarden uses SQLAlchemy under the hood. The recommended way to install drivers is via the extras above:
+dbwarden uses SQLAlchemy under the hood. The recommended way to install drivers is via the extras above:
 
 ```bash
 # PostgreSQL
@@ -68,7 +68,7 @@ uv add clickhouse-connect # ClickHouse
 
 ## Verify installation
 
-After installing, confirm DBWarden is available:
+After installing, confirm dbwarden is available:
 
 ```bash
 $ dbwarden version
@@ -82,7 +82,7 @@ You should see output:
 
 ## Initialize in your project
 
-Create the DBWarden structure in your project directory:
+Create the dbwarden structure in your project directory:
 
 ```bash
 $ dbwarden init
@@ -95,7 +95,7 @@ This creates:
 
 ## What happens during init
 
-When you run `init`, DBWarden:
+When you run `init`, dbwarden:
 
 1. Creates `migrations/` if missing
 2. Creates `dbwarden.py` (or updates existing config source) with declarative class scaffolding

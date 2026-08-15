@@ -1,16 +1,16 @@
 ---
-description: Frequently asked questions about DBWarden plugins.
+description: Frequently asked questions about dbwarden plugins.
 ---
 
 # Plugin FAQ
 
 ## Can I Use A Plugin Without The CLI?
 
-Yes. Install it with `uv add` or `pip install`. DBWarden still applies trust rules when loading it, so community plugins installed this way still require consent (`dbwarden plugin trust <name>` or the interactive prompt).
+Yes. Install it with `uv add` or `pip install`. dbwarden still applies trust rules when loading it, so community plugins installed this way still require consent (`dbwarden plugin trust <name>` or the interactive prompt).
 
 ## What Happens If An Official Plugin's Provenance Fails?
 
-Installation aborts and nothing is installed. Official plugin install is fail-closed: if provenance cannot be verified, DBWarden refuses rather than installing unverified code.
+Installation aborts and nothing is installed. Official plugin install is fail-closed: if provenance cannot be verified, dbwarden refuses rather than installing unverified code.
 
 ## How Do I Know A Community Plugin Is Safe?
 
@@ -30,7 +30,7 @@ Yes. Install them as project dependencies. Use `--format json` on `plugin list` 
 
 ## How Do I Get My Plugin Verified?
 
-Follow the [Verified Plugin Standard](developing/verified-standard.md): pass the seven mandatory tests and open a review issue in the DBWarden repository.
+Follow the [Verified Plugin Standard](developing/verified-standard.md): pass the seven mandatory tests and open a review issue in the dbwarden repository.
 
 ## What Happens When I Upgrade A Community Plugin?
 

@@ -1,10 +1,10 @@
 ---
-description: Install DBWarden plugins with the CLI, uv, or pip.
+description: Install dbwarden plugins with the CLI, uv, or pip.
 ---
 
 # Installing Plugins
 
-## DBWarden CLI
+## dbwarden CLI
 
 ```bash
 dbwarden plugin add <distribution-name>
@@ -12,9 +12,9 @@ dbwarden plugin add <distribution-name>
 
 What `plugin add` does depends on the [trust tier](consent-and-trust.md) of the distribution:
 
-- **Official**: DBWarden verifies provenance first. On success it installs the package and writes an entry to `.dbwarden/plugins.lock` recording the version, filename, SHA-256, and verifying identity. If provenance cannot be verified, installation aborts and nothing is installed (fail-closed).
+- **Official**: dbwarden verifies provenance first. On success it installs the package and writes an entry to `.dbwarden/plugins.lock` recording the version, filename, SHA-256, and verifying identity. If provenance cannot be verified, installation aborts and nothing is installed (fail-closed).
 - **Verified**: installed like any package; it will load automatically once the installed version meets the verified minimum.
-- **Community**: the package is installed but **not** trusted. You must run `dbwarden plugin trust <name>` (or accept the interactive consent prompt) before DBWarden loads it.
+- **Community**: the package is installed but **not** trusted. You must run `dbwarden plugin trust <name>` (or accept the interactive consent prompt) before dbwarden loads it.
 
 ```text
               Plugin Installed
@@ -47,7 +47,7 @@ uv add dbwarden-fastapi
 pip install dbwarden-fastapi
 ```
 
-DBWarden still applies its trust model when loading. Community plugins installed this way still require consent, and Official plugins installed this way are **not** provenance-locked (no `.dbwarden/plugins.lock` entry is written unless you use `plugin add`).
+dbwarden still applies its trust model when loading. Community plugins installed this way still require consent, and Official plugins installed this way are **not** provenance-locked (no `.dbwarden/plugins.lock` entry is written unless you use `plugin add`).
 
 ## Version Pinning
 
@@ -61,7 +61,7 @@ Community consent is version-specific: upgrading a community plugin invalidates 
 
 ## What Happens During Official Install
 
-Provenance verification uses PyPI's [PEP 740](https://peps.python.org/pep-0740/) attestations. DBWarden:
+Provenance verification uses PyPI's [PEP 740](https://peps.python.org/pep-0740/) attestations. dbwarden:
 
 1. Looks up the distribution in `OFFICIAL_PLUGINS` for its expected GitHub repository and publishing workflow.
 2. Resolves the target version on PyPI (the pinned/`--version` release, or the highest stable release) and selects its distribution file and SHA-256.
@@ -72,7 +72,7 @@ Any missing attestation, publisher mismatch, digest mismatch, or network error m
 
 ## Updating Plugins
 
-Update with your package manager, then reconcile DBWarden's view:
+Update with your package manager, then reconcile dbwarden's view:
 
 ```bash
 uv add "dbwarden-fastapi@latest"

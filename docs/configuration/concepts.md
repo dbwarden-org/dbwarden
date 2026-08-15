@@ -1,10 +1,10 @@
 # Configuration Concepts
 
-Understand how DBWarden configuration works under the hood.
+Understand how dbwarden configuration works under the hood.
 
 ## What is Configuration?
 
-Configuration tells DBWarden:
+Configuration tells dbwarden:
 - **Where** your databases are (connection URLs)
 - **What** kind of databases they are (PostgreSQL, SQLite, etc.)
 - **Where** your SQLAlchemy models live (for migration generation)
@@ -100,7 +100,7 @@ they are not registered independently.
 
 ### Discovery Order
 
-DBWarden searches for configuration in this order:
+dbwarden searches for configuration in this order:
 
 ```
 1. dbwarden.py in current directory
@@ -116,7 +116,7 @@ Error: No configuration found
 
 ### When Configuration Loads
 
-Configuration loads when you run **any** DBWarden command:
+Configuration loads when you run **any** dbwarden command:
 
 ```bash
 $ dbwarden migrate    #  Config loads here
@@ -133,7 +133,7 @@ $ dbwarden history    #  Config loads here
 
 ### Validation Rules
 
-DBWarden validates configuration at load time:
+dbwarden validates configuration at load time:
 
 | Rule | Why It Matters |
 |------|----------------|
@@ -173,17 +173,17 @@ Validation happens **before** any commands execute.
 
 ### Config Source Precedence
 
-When looking for config, DBWarden uses this precedence:
+When looking for config, dbwarden uses this precedence:
 
 1. **Top-level `dbwarden.py`**: the conventional standalone config file at your project root. This is the default scaffold created by `dbwarden init`, not the only valid location. Always sandboxed (only `dbwarden` imports allowed).
 
 2. **`DBWARDEN_CONFIG_MODULE`**: an explicit environment variable override. Always imported normally as a Python module (no sandbox). This is the escape hatch for projects with ambiguous full-scan results or non-standard layouts.
 
-3. **Full-scan discovery**: if neither of the above produces a config source, DBWarden walks your project tree looking for any `database_config(...)` call. This means `database_config(...)` can live in any discovered Python file inside your project. Files directly at the project root are sandboxed; files inside subdirectories are imported normally.
+3. **Full-scan discovery**: if neither of the above produces a config source, dbwarden walks your project tree looking for any `database_config(...)` call. This means `database_config(...)` can live in any discovered Python file inside your project. Files directly at the project root are sandboxed; files inside subdirectories are imported normally.
 
 ### Config Loading Security (Sandbox)
 
-DBWarden applies import restrictions only to config files that are **isolated** (sandboxed) vs **in-package** (normal import):
+dbwarden applies import restrictions only to config files that are **isolated** (sandboxed) vs **in-package** (normal import):
 
 | Mode | Import behavior | Applies to |
 |------|----------------|------------|
@@ -194,7 +194,7 @@ An isolated config file runs in a sandbox that prevents accidental escalation of
 
 An in-package config file is imported as a normal Python module, with full access to `app.*` and any other project imports. This is the correct path when your `database_config(...)` call lives in an application package that imports other project modules.
 
-**Import root detection.** For full-scan-discovered files, DBWarden tries to resolve the dotted module path. It checks two common import roots in order:
+**Import root detection.** For full-scan-discovered files, dbwarden tries to resolve the dotted module path. It checks two common import roots in order:
 
 - `src/` (PEP 517/518, setuptools, poetry)
 - The project root itself
@@ -225,7 +225,7 @@ $ dbwarden migrate --database primary
 $ dbwarden migrate
 ```
 
-Without `default=True`, DBWarden wouldn't know which database to use for the second command.
+Without `default=True`, dbwarden wouldn't know which database to use for the second command.
 
 ### Only One Default
 
@@ -255,7 +255,7 @@ $ dbwarden migrate --database analytics  # Targets analytics, not primary
 
 ### What Are `model_paths`?
 
-`model_paths` tells DBWarden where your SQLAlchemy models live:
+`model_paths` tells dbwarden where your SQLAlchemy models live:
 
 ```python
 primary = database_config(
@@ -304,13 +304,13 @@ analytics = database_config(
 ```
 
 This is useful when all models live under one shared package but each
-database only owns a subset.  DBWarden validates every name in
+database only owns a subset.  dbwarden validates every name in
 `model_tables` exists among the discovered tables and prevents overlap
 between databases (unless `overlap_models=True`).
 
 ### When Is It Required?
 
-**Single database:** Optional (DBWarden scans entire codebase)
+**Single database:** Optional (dbwarden scans entire codebase)
 
 ```python
 # This works
@@ -519,7 +519,7 @@ When config loads:
 ### Runtime
 
 When commands run:
-- DBWarden reads from registry
+- dbwarden reads from registry
 - **Connects to database**
 - Executes command logic
 

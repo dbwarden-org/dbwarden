@@ -108,7 +108,7 @@ Volatility semantics:
 
 ### Function Overloading
 
-PostgreSQL supports multiple functions with the same name but different argument types. DBWarden tracks the full argument signature. Two functions with the same name but different `args` are treated as distinct objects.
+PostgreSQL supports multiple functions with the same name but different argument types. dbwarden tracks the full argument signature. Two functions with the same name but different `args` are treated as distinct objects.
 
 ### WINDOW Functions
 

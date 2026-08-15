@@ -24,7 +24,7 @@ $ dbwarden check --database primary --out json
 
 ## Current behavior
 
-DBWarden runs generic safety checks for all backends, covering column type changes, nullability changes, default changes, and table operations. For ClickHouse specifically, additional checks classify changes for:
+dbwarden runs generic safety checks for all backends, covering column type changes, nullability changes, default changes, and table operations. For ClickHouse specifically, additional checks classify changes for:
 
 - added or removed columns
 - type changes

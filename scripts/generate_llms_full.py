@@ -13,7 +13,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DOCS_DIR = PROJECT_ROOT / "docs"
 OUTPUT = DOCS_DIR / "llms-full.txt"
-SITE_URL = "https://dbwarden.org"
+SITE_URL = "https://docs.dbwarden.org"
 
 SKIP_FILES = {
     "llms.txt",
@@ -51,8 +51,8 @@ def main() -> int:
     ]
 
     sections = [
-        "# DBWarden Documentation",
-        "> Full documentation for DBWarden - a SQL-first database migration system",
+        "# dbwarden Documentation",
+        "> Full documentation for dbwarden - a SQL-first database migration system",
         f"> Source: {SITE_URL}",
         f"> Pages: {len(md_files)}",
         "",

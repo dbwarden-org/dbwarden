@@ -1,6 +1,6 @@
 ---
 name: Feature Request
-about: Suggest a new feature for DBWarden
+about: Suggest a new feature for dbwarden
 labels: enhancement
 ---
 

@@ -1,5 +1,5 @@
 ---
-description: 'Deploy database schema changes safely with DBWarden: pre-flight checks, impact
+description: 'Deploy database schema changes safely with dbwarden: pre-flight checks, impact
   analysis, sandbox validation, migration locking, rollback planning, and CI/CD integration
   patterns.'
 ---
@@ -126,7 +126,7 @@ For databases that already have a schema (migrating from another tool or brownfi
 $ dbwarden migrate --database primary --baseline --to-version 0005
 ```
 
-`--baseline` marks migrations as applied without executing them. Use this to tell DBWarden "this database already has schema up to version 0005."
+`--baseline` marks migrations as applied without executing them. Use this to tell dbwarden "this database already has schema up to version 0005."
 
 ## Smoke test after deploy
 

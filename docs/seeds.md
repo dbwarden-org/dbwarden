@@ -2,7 +2,7 @@
 
 **Requires the `dbwarden-seeds` plugin:** `dbwarden plugin add dbwarden-seeds`. Seed management was previously built into core and now ships as an official plugin. The `dbwarden seed` commands still exist in core, but without the plugin installed each one exits with a message telling you to install it.
 
-DBWarden provides seed data management for populating databases with initial or reference data. Seeds complement migrations by handling data that belongs in version control.
+dbwarden provides seed data management for populating databases with initial or reference data. Seeds complement migrations by handling data that belongs in version control.
 
 ## Overview
 
@@ -339,7 +339,7 @@ $ dbwarden seed rollback --database primary --to-version 0002
 
 ## Seed Tracking Table
 
-DBWarden tracks applied seeds in `_dbwarden_seeds` (configurable via `seed_table`):
+dbwarden tracks applied seeds in `_dbwarden_seeds` (configurable via `seed_table`):
 
 | Column | Description |
 |--------|-------------|
@@ -354,7 +354,7 @@ The tracking table is created automatically on first seed apply. Each version ca
 
 ### Checksum Drift
 
-When a seed file has been modified since it was last applied, DBWarden emits a warning:
+When a seed file has been modified since it was last applied, dbwarden emits a warning:
 
 ```
 Warning: Seed V0001 has been modified since last apply (checksum mismatch).

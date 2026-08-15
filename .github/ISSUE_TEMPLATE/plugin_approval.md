@@ -1,6 +1,6 @@
 ---
 name: Plugin Approval
-about: Request the Approved (Verified) tier for a DBWarden plugin
+about: Request the Approved (Verified) tier for a dbwarden plugin
 labels: plugin-approval
 ---
 
@@ -9,7 +9,7 @@ Approved plugins load without per-user consent once the installed version meets
 the approved minimum, so this is a request for users to trust your code by
 default. Fill in every section; a reviewer works from this issue.
 
-Standard: https://dbwarden.org/plugins/developing/approved-standard/
+Standard: https://docs.dbwarden.org/plugins/developing/approved-standard/
 -->
 
 ## Plugin repository
@@ -60,7 +60,7 @@ python -c "from dbwarden.plugin_conformance import core_imports_outside_stable_a
 
 ## Object type overrides
 
-<!-- Does any handler claim an object_type that DBWarden core already handles?
+<!-- Does any handler claim an object_type that dbwarden core already handles?
      A plugin handler overrides core for that type, so DDL for it comes from you
      instead. If yes, list the types and explain why replacing core is correct
      rather than adding a new type. If no, write "none". -->

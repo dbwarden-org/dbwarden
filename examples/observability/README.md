@@ -1,6 +1,6 @@
-# DBWarden Observability
+# dbwarden Observability
 
-Demonstrates Prometheus metrics, structured logging, and query tracing with DBWarden.
+Demonstrates Prometheus metrics, structured logging, and query tracing with dbwarden.
 
 ## Prerequisites
 
@@ -52,4 +52,4 @@ Produces JSON-formatted logs for log aggregators (ELK, Datadog, etc.).
 
 ### Grafana
 
-Open http://localhost:3000, add Prometheus data source (http://prometheus:9090), and import the DBWarden dashboard.
+Open http://localhost:3000, add Prometheus data source (http://prometheus:9090), and import the dbwarden dashboard.

@@ -43,7 +43,7 @@ from dbwarden.output import set_output_mode
 from dbwarden.plugin import load_plugins
 
 app = typer.Typer(
-    help="""DBWarden - Professional database migration system for SQLAlchemy models
+    help="""dbwarden - Professional database migration system for SQLAlchemy models
 
 All commands support the --verbose / -v flag for detailed output and the
 --debug / --debug-level flags for DEBUG-level diagnostics.""",
@@ -52,11 +52,11 @@ All commands support the --verbose / -v flag for detailed output and the
 
 database_app = typer.Typer(help="List configured databases")
 app.add_typer(database_app, name="database")
-settings_app = typer.Typer(help="View DBWarden settings")
+settings_app = typer.Typer(help="View dbwarden settings")
 app.add_typer(settings_app, name="settings")
 seed_app = typer.Typer(help="Manage seed data")
 app.add_typer(seed_app, name="seed")
-plugin_app = typer.Typer(help="Manage DBWarden plugins")
+plugin_app = typer.Typer(help="Manage dbwarden plugins")
 app.add_typer(plugin_app, name="plugin")
 
 
@@ -133,7 +133,7 @@ def plugin_list(
         "table", "--format", "-f", help="Output format: table (default) or json"
     ),
 ) -> None:
-    """List installed DBWarden plugins."""
+    """List installed dbwarden plugins."""
     handle_plugin_list(output_format=output_format)
 
 
@@ -177,7 +177,7 @@ def plugin_add(
         False, "--dry-run", help="Show the install plan without installing"
     ),
 ) -> None:
-    """Install a DBWarden plugin."""
+    """Install a dbwarden plugin."""
     handle_plugin_add(dist_name, use_uv=use_uv, version=plugin_version, dry_run=dry_run)
 
 
@@ -191,7 +191,7 @@ def plugin_remove(
         False, "--dry-run", help="Show the uninstall plan without uninstalling"
     ),
 ) -> None:
-    """Uninstall a DBWarden plugin."""
+    """Uninstall a dbwarden plugin."""
     handle_plugin_remove(dist_name, use_uv=use_uv, dry_run=dry_run)
 
 
@@ -650,7 +650,7 @@ def config():
 
 @app.command()
 def version():
-    """Display DBWarden version and compatibility information."""
+    """Display dbwarden version and compatibility information."""
     handle_version()
 
 
@@ -803,7 +803,7 @@ def seed_rollback(
 
 
 def main() -> None:
-    """Main entry point for DBWarden CLI."""
+    """Main entry point for dbwarden CLI."""
     from dbwarden.database import reset_connection_logging
     from dbwarden.exceptions import DBWardenError
     from dbwarden.output import emit_error_json, error, json_mode

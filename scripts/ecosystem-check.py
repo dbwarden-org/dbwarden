@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run every known plugin's test suite against this checkout of DBWarden core.
+"""Run every known plugin's test suite against this checkout of dbwarden core.
 
 Usage:
     python scripts/ecosystem-check.py                       # clone official plugins

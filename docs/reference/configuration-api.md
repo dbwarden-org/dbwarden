@@ -31,7 +31,7 @@ def database_config(
     pg_migration_lock_timeout: int | None = None,
     **plugin_config: Any,
 ) -> DatabaseHandle:
-    """Register a database in DBWarden and return a handle with session dependencies."""
+    """Register a database in dbwarden and return a handle with session dependencies."""
 ```
 
 ## Plugin-contributed arguments
@@ -209,13 +209,13 @@ Path where this database's migration files are stored.
 
 ### `model_paths`
 
-A list of Python import paths where DBWarden should discover SQLAlchemy model definitions.
+A list of Python import paths where dbwarden should discover SQLAlchemy model definitions.
 
 **When required:**
-- **Single database:** Optional (DBWarden scans entire codebase)
+- **Single database:** Optional (dbwarden scans entire codebase)
 - **Multiple databases:** Required for each database
 
-**How it works:** DBWarden imports each path and inspects classes inheriting from `DeclarativeBase` or `declarative_base()`.
+**How it works:** dbwarden imports each path and inspects classes inheriting from `DeclarativeBase` or `declarative_base()`.
 
 **Examples:**
 ```python
@@ -246,7 +246,7 @@ tables are ignored.
   shared models package.
 
 **How it works:**
-1. DBWarden discovers all models via `model_paths`
+1. dbwarden discovers all models via `model_paths`
 2. If `model_tables` is set, it validates every name exists among the
    discovered tables
 3. Only the matching tables participate in migrations, diffs, and exports
@@ -272,7 +272,7 @@ audit = database_config(
 ```
 
 **Overlap validation:** If two databases both set `model_tables` with
-overlapping names, DBWarden raises an error (same behavior as
+overlapping names, dbwarden raises an error (same behavior as
 `model_paths` overlap). Set `overlap_models=True` to allow it.
 
 **Must be valid SQL identifiers.** Dotted (schema-qualified) names are not
@@ -280,7 +280,7 @@ supported in the initial release.
 
 ### `migration_table`
 
-Name of the table DBWarden uses to record applied migrations and repeatable migration checksums.
+Name of the table dbwarden uses to record applied migrations and repeatable migration checksums.
 
 - Defaults to `_dbwarden_migrations`
 - Must be a valid SQL identifier
@@ -302,11 +302,11 @@ primary = database_config(
 Use this when:
 
 - integrating with an existing database that already reserves a migrations table name
-- isolating DBWarden metadata under a project-specific convention
+- isolating dbwarden metadata under a project-specific convention
 
 ### `seed_table`
 
-Name of the table DBWarden uses to record applied seeds.
+Name of the table dbwarden uses to record applied seeds.
 
 - Defaults to `_dbwarden_seeds`
 - Must be a valid SQL identifier
@@ -328,7 +328,7 @@ Use this when integrating with an existing database that already reserves the se
 
 ### `auto_apply_seeds`
 
-When `True`, DBWarden automatically applies pending code seeds after each successful `migrate` run.
+When `True`, dbwarden automatically applies pending code seeds after each successful `migrate` run.
 
 - Defaults to `False`
 - Applies per database entry
@@ -356,7 +356,7 @@ Use this when:
 
 These define an alternate connection for local development workflows.
 
-When `--dev` is passed to any DBWarden command:
+When `--dev` is passed to any dbwarden command:
 - `database_type` is swapped to `dev_database_type`
 - `database_url_sync` / `database_url_async` are swapped to `dev_database_url`
 
@@ -391,7 +391,7 @@ See [Dev Mode](../configuration/dev-mode.md) for complete workflow and patterns.
 
 ### `overlap_models`
 
-By default, DBWarden prevents model path overlap between databases.
+By default, dbwarden prevents model path overlap between databases.
 
 Set `overlap_models=True` when:
 
@@ -479,7 +479,7 @@ will be removed in a future version.
 
 ## Configuration rules (enforced at load time)
 
-DBWarden validates your config to prevent dangerous misconfigurations:
+dbwarden validates your config to prevent dangerous misconfigurations:
 
 | Rule | Error message (if violated) |
 |------|---------------------------|
@@ -502,7 +502,7 @@ The resolution priority is:
 2. If `DBWARDEN_CONFIG_MODULE` environment variable is set, use that module
 3. Full scan for any file containing `database_config(...)` calls
 
-If more than one discovery source is found, DBWarden fails with an ambiguity error.
+If more than one discovery source is found, dbwarden fails with an ambiguity error.
 
 `dbwarden.py` is the default convention, but it is not the only valid location. Any discovered Python file inside the project can call `database_config(...)`.
 

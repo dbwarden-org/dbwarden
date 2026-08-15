@@ -1,5 +1,5 @@
 ---
-description: Key terms and concepts used throughout the DBWarden documentation, including
+description: Key terms and concepts used throughout the dbwarden documentation, including
   migration lifecycle, database backends, safety tooling, FastAPI integration, and configuration.
 ---
 
@@ -30,7 +30,7 @@ description: Key terms and concepts used throughout the DBWarden documentation, 
 : A seed defined as a Python class extending `Seed`, with `run()` and optional `rollback()` methods. The recommended way to manage seed data.
 
 **Configuration (dbwarden.py)**
-: DBWarden uses a Python file (`dbwarden.py`) with concrete `DbwardenDatabase` classes by default. The equivalent `database_config()` function API is also supported, providing type safety, runtime flexibility, and IDE support for configuring databases.
+: dbwarden uses a Python file (`dbwarden.py`) with concrete `DbwardenDatabase` classes by default. The equivalent `database_config()` function API is also supported, providing type safety, runtime flexibility, and IDE support for configuring databases.
 
 ## D
 
@@ -49,7 +49,7 @@ description: Key terms and concepts used throughout the DBWarden documentation, 
 ## F
 
 **FastAPI Integration**
-: DBWarden's built-in support for FastAPI including async sessions, health endpoints, migration endpoints, Prometheus metrics, and distributed locking. Configured once via a `DbwardenDatabase` class or the equivalent `database_config()` function.
+: dbwarden's built-in support for FastAPI including async sessions, health endpoints, migration endpoints, Prometheus metrics, and distributed locking. Configured once via a `DbwardenDatabase` class or the equivalent `database_config()` function.
 
 ## G
 
@@ -83,7 +83,7 @@ description: Key terms and concepts used throughout the DBWarden documentation, 
 : A migration file created by hand (via `dbwarden new`) rather than auto-generated. Useful for data migrations, stored procedures, or any DDL outside model diffs.
 
 **Meta (class Meta)**
-: An inner class on SQLAlchemy models that provides DBWarden with backend-specific metadata like table comments, indexes, partitioning, engine options, and more.
+: An inner class on SQLAlchemy models that provides dbwarden with backend-specific metadata like table comments, indexes, partitioning, engine options, and more.
 
 **Migration File**
 : A plain SQL file with `-- upgrade` and `-- rollback` sections. Each file represents one atomic schema change.
@@ -94,7 +94,7 @@ description: Key terms and concepts used throughout the DBWarden documentation, 
 ## O
 
 **Observability**
-: DBWarden's monitoring capabilities including Prometheus metrics (migration counters, schema version gauges, connection pool health) and structured JSON logging.
+: dbwarden's monitoring capabilities including Prometheus metrics (migration counters, schema version gauges, connection pool health) and structured JSON logging.
 
 **Offline Mode**
 : Generating migrations using stored JSON schema snapshots instead of connecting to a live database, enabling CI/CD pipelines without database access.
@@ -107,10 +107,10 @@ description: Key terms and concepts used throughout the DBWarden documentation, 
 ## R
 
 **Rename Detection**
-: DBWarden can detect column and table renames by comparing schema snapshots, generating `ALTER TABLE ... RENAME` instead of `DROP` + `ADD`.
+: dbwarden can detect column and table renames by comparing schema snapshots, generating `ALTER TABLE ... RENAME` instead of `DROP` + `ADD`.
 
 **Rollback**
-: The `-- rollback` section of a migration file containing SQL to undo the upgrade. DBWarden enforces that every migration has a corresponding rollback.
+: The `-- rollback` section of a migration file containing SQL to undo the upgrade. dbwarden enforces that every migration has a corresponding rollback.
 
 **Round-Trip**
 : A backend that supports both reading schema (via `generate-models`) and writing schema (via `make-migrations`/`migrate`). Verified when reverse-engineering a database and re-generating produces zero diff.

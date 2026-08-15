@@ -69,7 +69,7 @@ _RESERVED_EXTRA_FIELDS = frozenset({
     "stack_info",
     "thread",
     "threadName",
-    # DBWarden JSON payload keys
+    # dbwarden JSON payload keys
     "timestamp",
     "level",
     "logger",
@@ -331,7 +331,7 @@ class LogCandidate:
 
 class DBWardenLogger:
     """
-    Structured logging for DBWarden operations.
+    Structured logging for dbwarden operations.
 
     Provides configurable logging levels and colored output
     for migration operations with database context.
@@ -350,7 +350,7 @@ class DBWardenLogger:
         db_type: str | None = None,
     ) -> None:
         """
-        Initialize the DBWarden logger.
+        Initialize the dbwarden logger.
 
         Args:
             name: Logger name (default: "dbwarden")
@@ -839,7 +839,7 @@ def get_logger(
     db_type: str | None = None,
 ) -> DBWardenLogger:
     """
-    Get the global DBWarden logger instance.
+    Get the global dbwarden logger instance.
 
     Args:
         debug_enabled: If True, sets logger to DEBUG level. Kept for backward

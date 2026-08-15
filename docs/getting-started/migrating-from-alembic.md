@@ -1,20 +1,20 @@
 ---
-description: Migrate from Alembic to DBWarden step by step. Map Alembic concepts to their
-  DBWarden equivalents, baseline an existing database, verify convergence, and retire your
+description: Migrate from Alembic to dbwarden step by step. Map Alembic concepts to their
+  dbwarden equivalents, baseline an existing database, verify convergence, and retire your
   revision scripts without losing history.
 ---
 
 # Migrating from Alembic
 
-This guide is for teams with an existing Alembic setup who want to switch to DBWarden. The migration is low-risk by design: your SQLAlchemy models stay exactly where they are, your database is never rebuilt, and your Alembic history remains in git. You are replacing the migration workflow, not the schema.
+This guide is for teams with an existing Alembic setup who want to switch to dbwarden. The migration is low-risk by design: your SQLAlchemy models stay exactly where they are, your database is never rebuilt, and your Alembic history remains in git. You are replacing the migration workflow, not the schema.
 
-If you are evaluating rather than migrating, read [Why DBWarden](../index.md#why-dbwarden) first. The short version: Alembic maintains schema truth in a chain of revision scripts, DBWarden maintains it in your models and derives plain SQL migrations from them.
+If you are evaluating rather than migrating, read [Why dbwarden](../index.md#why-dbwarden) first. The short version: Alembic maintains schema truth in a chain of revision scripts, dbwarden maintains it in your models and derives plain SQL migrations from them.
 
 ## Concept mapping
 
-Every Alembic concept has a DBWarden counterpart. This table is the mental model for the whole guide.
+Every Alembic concept has a dbwarden counterpart. This table is the mental model for the whole guide.
 
-| Alembic | DBWarden |
+| Alembic | dbwarden |
 |---|---|
 | `alembic.ini` + `env.py` | `dbwarden.py` config file |
 | Revision script (`.py`) | Migration file (`.sql`) with `-- upgrade` / `-- rollback` sections |
@@ -26,13 +26,13 @@ Every Alembic concept has a DBWarden counterpart. This table is the mental model
 | `alembic current` | `dbwarden status` |
 | `alembic history` | `dbwarden history` |
 | `alembic upgrade head --sql` (offline mode) | `dbwarden make-migrations --sql`, or full offline generation via `export-models` + `--offline` |
-| `alembic_version` table | DBWarden migration table |
+| `alembic_version` table | dbwarden migration table |
 | Hand-written revision | `dbwarden new "description"` (manual SQL migration) |
 
 Two Alembic features have no direct equivalent, and you should know that before starting:
 
-- **Python data migrations.** Alembic revisions can run arbitrary Python. DBWarden manual migrations (`dbwarden new`) are SQL. Most backfills express well in SQL; if yours do not, plan for how you will run them (application scripts, one-off jobs) before switching.
-- **Revision branching and merging.** DBWarden uses a linear versioned sequence per database. If your team relies on `alembic merge` workflows, the linear model is a real change to your process.
+- **Python data migrations.** Alembic revisions can run arbitrary Python. dbwarden manual migrations (`dbwarden new`) are SQL. Most backfills express well in SQL; if yours do not, plan for how you will run them (application scripts, one-off jobs) before switching.
+- **Revision branching and merging.** dbwarden uses a linear versioned sequence per database. If your team relies on `alembic merge` workflows, the linear model is a real change to your process.
 
 ## Prerequisites
 
@@ -72,7 +72,7 @@ dbwarden init
 
 ## Step 2: Generate the baseline migration
 
-Your first `make-migrations` run has no prior DBWarden state, so it generates the full schema from your models:
+Your first `make-migrations` run has no prior dbwarden state, so it generates the full schema from your models:
 
 ```bash
 dbwarden make-migrations "baseline from alembic"
@@ -88,7 +88,7 @@ Your database already has the schema, so the baseline migration must be recorded
 dbwarden migrate --baseline
 ```
 
-This marks the migration as applied in DBWarden's migration table. Nothing runs against the database. This is the equivalent of `alembic stamp head` for a fresh setup.
+This marks the migration as applied in dbwarden's migration table. Nothing runs against the database. This is the equivalent of `alembic stamp head` for a fresh setup.
 
 ## Step 4: Verify convergence
 
@@ -98,7 +98,7 @@ dbwarden check
 dbwarden diff
 ```
 
-`status` should show no pending migrations. `diff` compares your models against the live database and should report no differences. If `diff` is clean, DBWarden and reality agree, and the migration is effectively done.
+`status` should show no pending migrations. `diff` compares your models against the live database and should report no differences. If `diff` is clean, dbwarden and reality agree, and the migration is effectively done.
 
 For extra confidence, make a trivial model change (add a nullable column), run `dbwarden make-migrations`, inspect the generated SQL and its rollback, then revert the change and delete the generated file. That exercise shows you the full loop before you rely on it.
 
@@ -127,13 +127,13 @@ Once you trust the new workflow:
 
 - Remove `alembic.ini`, `env.py`, and the `versions/` directory from the active workflow. They stay in git history, which is where migration archaeology belongs.
 - Remove `alembic` from your dependencies and any `alembic upgrade head` calls from deploy scripts, replacing them with `dbwarden migrate`.
-- The `alembic_version` table in your database is inert. Drop it when convenient, or leave it; DBWarden does not touch it.
+- The `alembic_version` table in your database is inert. Drop it when convenient, or leave it; dbwarden does not touch it.
 
 If you prefer a transition period, both tools can coexist: they track state in separate tables. Generate the same change with both and compare the SQL until you are confident. Keep the overlap short, since two sources of truth defeats the point.
 
 ## Workflow changes to communicate to your team
 
-- **Renames are explicit.** Where autogenerate guessed (usually as drop-and-create), DBWarden requires `--rename table.old:new` or `--rename-table old:new`. A rename never becomes silent data loss, but your team must know the flags exist.
+- **Renames are explicit.** Where autogenerate guessed (usually as drop-and-create), dbwarden requires `--rename table.old:new` or `--rename-table old:new`. A rename never becomes silent data loss, but your team must know the flags exist.
 - **Rollback is a contract.** Generated migrations include an executable `-- rollback` section, and placeholder rollbacks are refused. Irreversible changes must be declared with `-- dbwarden: irreversible`. See [Rollback Generation](../correctness/rollback-generation.md).
 - **Table metadata moves into `class Meta`.** Comments, advanced indexes, and backend-specific options that previously lived in revision scripts or raw SQL are declared on the model. See [Modeling](modeling.md).
 - **Destructive changes can be checked first.** `dbwarden check-impact` reports which code still references a column or table you are about to drop. Make it part of review for destructive migrations.

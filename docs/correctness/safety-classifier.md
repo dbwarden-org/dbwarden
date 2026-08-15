@@ -2,7 +2,7 @@
 
 The safety classifier detects risky schema changes before migration execution. It reads the migration plan, classifies each operation, and forces the operator to acknowledge changes that may affect data or availability.
 
-The principle is simple: DBWarden should not silently drop data.
+The principle is simple: dbwarden should not silently drop data.
 
 ## What It Scans
 
@@ -45,7 +45,7 @@ dbwarden check --database primary --force
 
 ## Severity Levels
 
-DBWarden safety classifications map to three operational meanings.
+dbwarden safety classifications map to three operational meanings.
 
 ### Info
 
@@ -200,6 +200,6 @@ See [Convergence Gate](convergence-gate.md).
 
 ## Philosophy
 
-DBWarden does not try to guess business intent. It can tell that a column drop destroys stored values, but it cannot know whether those values are obsolete. It can identify that a ClickHouse engine transition is lossy, but it cannot know whether the application already copied the data elsewhere.
+dbwarden does not try to guess business intent. It can tell that a column drop destroys stored values, but it cannot know whether those values are obsolete. It can identify that a ClickHouse engine transition is lossy, but it cannot know whether the application already copied the data elsewhere.
 
 For that reason, the safety classifier makes risk visible and requires acknowledgement. It is a correctness mechanism because it prevents accidental data loss from being treated as ordinary schema drift.

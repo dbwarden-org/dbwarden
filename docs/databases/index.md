@@ -1,8 +1,8 @@
 # Supported Databases
 
-DBWarden supports PostgreSQL (the default and first-class backend), MySQL, MariaDB, SQLite, and ClickHouse.
+dbwarden supports PostgreSQL (the default and first-class backend), MySQL, MariaDB, SQLite, and ClickHouse.
 
-A **round-trip** backend is one where DBWarden can both read schema (via `generate-models`) and write schema (via `make-migrations` / `migrate`).
+A **round-trip** backend is one where dbwarden can both read schema (via `generate-models`) and write schema (via `make-migrations` / `migrate`).
 
 ## Backend Matrix
 
@@ -74,7 +74,7 @@ class Analytics(DbwardenDatabase):
 
 ## Internal Connection Handling
 
-DBWarden uses SQLAlchemy engines, with backend-specific URL normalization where needed.
+dbwarden uses SQLAlchemy engines, with backend-specific URL normalization where needed.
 
 Conceptual flow:
 
@@ -88,7 +88,7 @@ def get_engine(config):
 
 Connections include retry logic: `get_db_connection()` wraps engine connections with up to 5 attempts and exponential backoff when the database is temporarily unavailable (e.g. during a restart or network hiccup). Engines are cached and reused across calls.
 
-For PostgreSQL schema support, set `pg_schema` in `database_config(...)`. DBWarden sets `search_path` on connection so all unqualified references use that schema:
+For PostgreSQL schema support, set `pg_schema` in `database_config(...)`. dbwarden sets `search_path` on connection so all unqualified references use that schema:
 
 ```python
 primary = database_config(
@@ -128,7 +128,7 @@ $ dbwarden --dev migrate -d primary
 
 ## Translation Note
 
-When targeting SQLite in dev mode, DBWarden translates unsupported backend-specific types/defaults.
+When targeting SQLite in dev mode, dbwarden translates unsupported backend-specific types/defaults.
 
 - Unknown/unsupported types fallback to `TEXT` with warnings
 - `--strict-translation` turns those warnings into errors
@@ -185,7 +185,7 @@ See [MySQL Deep Dive](mysql.md) for MariaDB-specific notes.
 
 ClickHouse has full round-trip support: `generate-models` reads schema from a live ClickHouse server, and `make-migrations` / `migrate` auto-generates DDL for table operations.
 
-- HTTP-based wire protocol; DBWarden uses ClickHouse client, not SQLAlchemy session
+- HTTP-based wire protocol; dbwarden uses ClickHouse client, not SQLAlchemy session
 - DDL operations are mostly auto-generated: table rename, column type change, nullable and LowCardinality changes, projections, RBAC objects, and engine recreation. Placeholder rollback is refused by the strict rollback contract unless the migration is explicitly irreversible.
 - Full engine metadata support via `class Meta(CHTableMeta)` with `ChEngineSpec`, `ProjectionSpec`, `CHColumnMeta`
 - Supports materialized views, projections, dictionaries, replicated engines

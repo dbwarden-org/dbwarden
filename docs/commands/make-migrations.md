@@ -45,7 +45,7 @@ $ dbwarden make-migrations --database primary --safe-type-change
 
 ## Schema Snapshots
 
-After each migration is applied, DBWarden writes a **schema snapshot** to `.dbwarden/schemas/<migration_id>.schema.json`. These snapshots capture the full DDL state (tables, columns, types, indexes, constraints, enums) at that point in time.
+After each migration is applied, dbwarden writes a **schema snapshot** to `.dbwarden/schemas/<migration_id>.schema.json`. These snapshots capture the full DDL state (tables, columns, types, indexes, constraints, enums) at that point in time.
 
 For long migration histories, `dbwarden migrate --defer-snapshots` writes only
 the final schema snapshot for the batch. This avoids repeated full-schema
@@ -71,7 +71,7 @@ See [Schema Snapshots](schema-snapshots.md) for details.
 | `irreversible` | Generated only for known irreversible operations or explicit acknowledgement. Normal mode prints a warning. |
 | `placeholder` | Refused by default. |
 
-A rollback SQL comment is not treated as a successful rollback. If rollback cannot be generated safely, DBWarden fails generation instead of writing a migration that appears reversible.
+A rollback SQL comment is not treated as a successful rollback. If rollback cannot be generated safely, dbwarden fails generation instead of writing a migration that appears reversible.
 
 Explicit irreversible declaration for committed migrations:
 
@@ -83,7 +83,7 @@ See [Rollback Coverage](../correctness/rollback-coverage-matrix.md) for PostgreS
 
 ## Rename Detection
 
-When a column is dropped from the snapshot and a new column of the same type is added to the model, DBWarden auto-detects it as a potential **rename** and emits `ALTER TABLE ... RENAME COLUMN` instead of `DROP` + `ADD`.
+When a column is dropped from the snapshot and a new column of the same type is added to the model, dbwarden auto-detects it as a potential **rename** and emits `ALTER TABLE ... RENAME COLUMN` instead of `DROP` + `ADD`.
 
 ### Auto-detection rules
 
@@ -230,11 +230,11 @@ For databases that don't support in-place `ALTER COLUMN TYPE` (or when you want 
 
 ## ClickHouse Engine Recreate
 
-When a ClickHouse table's engine changes, for example `MergeTree` to `ReplicatedMergeTree`, it cannot be altered in-place. DBWarden supports two strategies depending on the table type.
+When a ClickHouse table's engine changes, for example `MergeTree` to `ReplicatedMergeTree`, it cannot be altered in-place. dbwarden supports two strategies depending on the table type.
 
 ### Table strategy (CREATE + INSERT + RENAME)
 
-For regular `MergeTree`-family tables, DBWarden generates a multi-step operation:
+For regular `MergeTree`-family tables, dbwarden generates a multi-step operation:
 
 1. Create the new table with the new engine as `<table>__dbw_new`
 2. Copy data: `INSERT INTO __dbw_new SELECT ... FROM <table>`
@@ -283,7 +283,7 @@ Rollback for ClickHouse table recreation is deliberately conservative:
 |------------------|-------------------|
 | Row-preserving engines | Reverse recreate rollback is generated as conditional. |
 | Lossy engines | Rollback is irreversible because row-level detail can be lost. |
-| Unknown engines | Rollback is irreversible because DBWarden cannot prove safety. |
+| Unknown engines | Rollback is irreversible because dbwarden cannot prove safety. |
 
 Lossy engines include `ReplacingMergeTree`, `SummingMergeTree`, `AggregatingMergeTree`, `CollapsingMergeTree`, `VersionedCollapsingMergeTree`, and replicated variants.
 
@@ -326,7 +326,7 @@ ALTER TABLE users DROP COLUMN legacy_field
 
 ## Table Rename Detection
 
-When a table is dropped from the snapshot and a new table with similar columns is added to the model, DBWarden auto-detects it as a potential **table rename** using a column-overlap heuristic.
+When a table is dropped from the snapshot and a new table with similar columns is added to the model, dbwarden auto-detects it as a potential **table rename** using a column-overlap heuristic.
 
 ### Auto-detection
 
@@ -491,7 +491,7 @@ Table renames are ordered first so that all subsequent statements reference the 
 
 ## Generated artifacts
 
-When a migration is generated, DBWarden writes two files side by side:
+When a migration is generated, dbwarden writes two files side by side:
 
 - `{database_name}__{version}_{description}.sql`
 - `{database_name}__{version}_{description}.plan.json`
@@ -536,11 +536,11 @@ Possible `resolved_from` values:
 | `"prompt"` | Confirmed interactively by the user |
 | (absent) | Auto-detected rename kept without prompt (currently unused, reserved) |
 
-`--plan` switches the command into JSON-output mode. In that mode DBWarden prints the plan to stdout and does not write the `.sql` or `.plan.json` files.
+`--plan` switches the command into JSON-output mode. In that mode dbwarden prints the plan to stdout and does not write the `.sql` or `.plan.json` files.
 
 ## Auto-Generated Names
 
-When no description is provided, DBWarden automatically generates a descriptive name from the schema changes:
+When no description is provided, dbwarden automatically generates a descriptive name from the schema changes:
 
 | Change | Generated Name |
 |--------|----------------|

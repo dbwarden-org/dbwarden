@@ -54,7 +54,7 @@ _KNOWN_TABLE_ATTRS = frozenset({
 
 
 def apply_meta(cls: type) -> None:
-    """Read ``class Meta`` from a mapped model and populate DBWarden metadata."""
+    """Read ``class Meta`` from a mapped model and populate dbwarden metadata."""
     if getattr(cls, "__dbwarden_meta_applied__", False):
         return
 
@@ -67,7 +67,7 @@ def apply_meta(cls: type) -> None:
             if col.info:
                 raise DBWardenConfigError(
                     f"Column '{cls.__tablename__}.{col.name}' has non-empty .info before "
-                    f"DBWarden metadata injection. Do not use mapped_column(info=...) - "
+                    f"dbwarden metadata injection. Do not use mapped_column(info=...) - "
                     f"declare field metadata in class Meta instead."
                 )
 

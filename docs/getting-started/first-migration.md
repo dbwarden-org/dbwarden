@@ -5,7 +5,7 @@ description: Define your first SQLAlchemy models, generate a migration, review t
 
 # Your First Migration
 
-This guide walks through the core DBWarden workflow: define models, generate SQL, apply the migration, inspect the result, and roll it back.
+This guide walks through the core dbwarden workflow: define models, generate SQL, apply the migration, inspect the result, and roll it back.
 
 ## Create the Models
 
@@ -57,7 +57,7 @@ $ dbwarden make-migrations "create core tables" --database primary
 Created migration: migrations/primary/primary__0001_create_core_tables.sql
 ```
 
-DBWarden compares your current models against the live schema, or snapshot state, and writes a new SQL migration file.
+dbwarden compares your current models against the live schema, or snapshot state, and writes a new SQL migration file.
 
 The `make-migrations` and `migrate` command names deliberately mirror Django's `makemigrations` and `migrate`, so the generate-then-apply loop is familiar if you have used Django. The rest of the CLI follows its own conventions.
 
@@ -106,7 +106,7 @@ Applying migration: primary__0001_create_core_tables.sql
 Migration applied successfully
 ```
 
-Internally, DBWarden resolves the config, acquires the migration lock, executes the upgrade SQL, records the checksum, and releases the lock.
+Internally, dbwarden resolves the config, acquires the migration lock, executes the upgrade SQL, records the checksum, and releases the lock.
 
 ## Verify the Result
 
@@ -155,7 +155,7 @@ class Base(DeclarativeBase):
     pass
 ```
 
-DBWarden does not export a shared `Base`. You define a local SQLAlchemy declarative base in your project.
+dbwarden does not export a shared `Base`. You define a local SQLAlchemy declarative base in your project.
 
 ### Step 2: Define the Models
 
@@ -185,7 +185,7 @@ This command inspects the configured models, compares them with the current sche
 
 ### Step 5: Review Upgrade and Rollback
 
-Every migration file contains both directions. This is one of DBWarden's core design choices: a migration is not complete until the rollback exists.
+Every migration file contains both directions. This is one of dbwarden's core design choices: a migration is not complete until the rollback exists.
 
 ### Step 6: Apply the Migration
 
@@ -226,6 +226,6 @@ Use manual migrations for cases like:
 - type changes that require custom `USING` expressions
 - backend-specific operations that need hand-written SQL
 
-DBWarden will track these files the same way it tracks generated migrations.
+dbwarden will track these files the same way it tracks generated migrations.
 
 Next, continue with [Developing Locally](developing-locally.md).

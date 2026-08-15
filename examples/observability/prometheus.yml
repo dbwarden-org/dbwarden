@@ -2,7 +2,7 @@ global:
   scrape_interval: 15s
 
 scrape_configs:
-  # Prometheus scrapes the DBWarden FastAPI /metrics endpoint.
+  # Prometheus scrapes the dbwarden FastAPI /metrics endpoint.
   # The metrics endpoint exposes six dbwarden_* metric families
   # plus standard Python process metrics from prometheus-client.
   - job_name: "dbwarden-app"

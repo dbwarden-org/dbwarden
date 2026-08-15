@@ -15,7 +15,7 @@
 
 In FastAPI applications, you typically define SQLAlchemy models for the database and Pydantic schemas for the API. This means maintaining two parallel definitions for every entity: the ORM layer and the API layer. They drift apart over time.
 
-DBWarden's `@auto_schema` eliminates this duplication by deriving Pydantic schemas directly from model annotations.
+dbwarden's `@auto_schema` eliminates this duplication by deriving Pydantic schemas directly from model annotations.
 
 ## Step 1: Define a Model with @auto_schema
 

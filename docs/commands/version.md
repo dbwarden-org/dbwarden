@@ -1,6 +1,6 @@
 # `version`
 
-Show DBWarden version.
+Show dbwarden version.
 
 ## Usage
 

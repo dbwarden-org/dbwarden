@@ -1,5 +1,5 @@
 ---
-description: Build DBWarden value plugins with named hooks.
+description: Build dbwarden value plugins with named hooks.
 ---
 
 # Value Plugins
@@ -52,11 +52,11 @@ def setup(registrar) -> None:
     registrar.register("migration_routes", migration_routes) # multi hook
 ```
 
-Each registered function imports what it needs from DBWarden (and FastAPI) **inside its body**, so importing the package registers the hooks without pulling in FastAPI. Core then resolves them where needed: `dbwarden_fastapi.get_session("primary")` calls the registered `session_factory`; if no plugin registered it, core uses its built-in fallback.
+Each registered function imports what it needs from dbwarden (and FastAPI) **inside its body**, so importing the package registers the hooks without pulling in FastAPI. Core then resolves them where needed: `dbwarden_fastapi.get_session("primary")` calls the registered `session_factory`; if no plugin registered it, core uses its built-in fallback.
 
 ## The Import-Deferred Pattern
 
-`setup` is exported from `__init__.py`, and registration happens only when DBWarden calls it. Keep heavy imports out of module scope by deferring them into each hook function:
+`setup` is exported from `__init__.py`, and registration happens only when dbwarden calls it. Keep heavy imports out of module scope by deferring them into each hook function:
 
 ```python
 # src/dbwarden_example/__init__.py

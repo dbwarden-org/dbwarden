@@ -1,7 +1,7 @@
 [project]
-site_name = "DBWarden Documentation"
-site_description = "DBWarden: SQL-first database migration system for Python and SQLAlchemy projects. Multi-DB migrations, impact analysis, seal data management, and production safety controls."
-site_url = "https://dbwarden.org"
+site_name = "dbwarden Documentation"
+site_description = "dbwarden: SQL-first database migration system for Python and SQLAlchemy projects. Multi-DB migrations, impact analysis, seal data management, and production safety controls."
+site_url = "https://docs.dbwarden.org"
 docs_dir = "docs"
 site_dir = "site"
 
@@ -48,12 +48,12 @@ toggle.name = "Switch to light mode"
 [[project.extra.social]]
 icon = "fontawesome/brands/github"
 link = "https://github.com/dbwarden-org/dbwarden"
-name = "DBWarden on GitHub"
+name = "dbwarden on GitHub"
 
 [[project.extra.social]]
 icon = "fontawesome/brands/python"
 link = "https://pypi.org/project/dbwarden/"
-name = "DBWarden on PyPI"
+name = "dbwarden on PyPI"
 
 [[project.nav]]
 Overview = [
@@ -197,10 +197,10 @@ Reference = [
 [project.markdown_extensions]
 "seoslug.contrib.zensical" = {
   canonical_host = "dbwarden.org",
-  public_base_url = "https://dbwarden.org/",
-  site_name = "DBWarden Documentation",
-  title_template = "{title} - DBWarden",
-  default_og_image = "https://dbwarden.org/assets/images/og-image.png",
+  public_base_url = "https://docs.dbwarden.org/",
+  site_name = "dbwarden Documentation",
+  title_template = "{title} - dbwarden",
+  default_og_image = "https://docs.dbwarden.org/assets/images/og-image.png",
   publisher_name = "Emiliano Gandini Outeda",
   locale = "en_US",
   twitter_site = "@emiliano_go_",

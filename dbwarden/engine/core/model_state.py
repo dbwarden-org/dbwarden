@@ -8,7 +8,7 @@ from dbwarden.engine.core.models import IndexInfo, ModelColumn, ModelTable
 STATE_FORMAT_VERSION = 2
 
 MODEL_STATE_WARNING = (
-    "This file records the schema that DBWarden expects the database to be in "
+    "This file records the schema that dbwarden expects the database to be in "
     "after the last migration. It is auto-generated and version-controlled. "
     "If accidentally deleted, restore from git (git checkout .dbwarden/model_state.*.json) "
     "or regenerate by running: dbwarden export-models. "

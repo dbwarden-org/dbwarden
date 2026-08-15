@@ -1,6 +1,6 @@
 # 6. Safety & Impact Analysis
 
-Schema changes are the highest-risk operation in most deployments. Dropping a column that application code still references causes runtime errors. Changing a column type can break queries. DBWarden provides two tools to detect these issues before deploy: `check` classifies every migration operation by danger level, and `check-impact` finds affected code references.
+Schema changes are the highest-risk operation in most deployments. Dropping a column that application code still references causes runtime errors. Changing a column type can break queries. dbwarden provides two tools to detect these issues before deploy: `check` classifies every migration operation by danger level, and `check-impact` finds affected code references.
 
 For complete documentation see the [`check`](../commands/check.md) and [`check-impact`](../cli-reference.md) command references.
 

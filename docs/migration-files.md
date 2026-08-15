@@ -1,6 +1,6 @@
 # Migration File Format
 
-Migration files are the execution contract in DBWarden.
+Migration files are the execution contract in dbwarden.
 
 Everything that changes your database should be represented in explicit SQL files that can be reviewed, tested, and rolled back.
 
@@ -24,7 +24,7 @@ primary__0002_add_users_table.sql
 analytics__0001_create_events.sql
 ```
 
-When a migration is auto-generated with `make-migrations`, DBWarden also writes a companion plan file:
+When a migration is auto-generated with `make-migrations`, dbwarden also writes a companion plan file:
 
 ```text
 primary__0001_initial_schema.plan.json
@@ -49,16 +49,16 @@ If rollback is weak or incomplete, production recovery is weak or incomplete.
 
 ## Rollback contract
 
-Generated rollback is part of the migration contract. DBWarden classifies rollback before a migration is accepted:
+Generated rollback is part of the migration contract. dbwarden classifies rollback before a migration is accepted:
 
 | Kind | Meaning | Generation behavior |
 |------|---------|---------------------|
 | `real` | Executable rollback SQL restores the prior schema state for the operation. | Allowed. |
-| `conditional` | Executable rollback SQL is allowed only when prior state is captured and DBWarden can prove the inverse is structurally safe. | Allowed with verbose warning. |
+| `conditional` | Executable rollback SQL is allowed only when prior state is captured and dbwarden can prove the inverse is structurally safe. | Allowed with verbose warning. |
 | `irreversible` | Rollback is genuinely unsafe or impossible, such as lossy ClickHouse engine changes or PostgreSQL enum value additions. | Allowed only for known irreversible operations or explicit acknowledgement. |
 | `placeholder` | Rollback is only a comment or manual instruction. | Refused by default. |
 
-Placeholder rollback is not a working rollback. If DBWarden cannot emit executable rollback SQL, generation fails unless the migration is intentionally declared irreversible.
+Placeholder rollback is not a working rollback. If dbwarden cannot emit executable rollback SQL, generation fails unless the migration is intentionally declared irreversible.
 
 Explicit irreversible declaration:
 
@@ -70,7 +70,7 @@ Use this only when the team accepts that the migration cannot be rolled back aut
 
 ## Migration classes
 
-DBWarden supports three execution classes:
+dbwarden supports three execution classes:
 
 | Prefix | Class | Behavior |
 |--------|-------|----------|
@@ -86,7 +86,7 @@ DBWarden supports three execution classes:
 
 ## Execution model
 
-At runtime, DBWarden builds an execution plan from file discovery + migration metadata:
+At runtime, dbwarden builds an execution plan from file discovery + migration metadata:
 
 1. read versioned files and filter already-applied versions
 2. include `RA__` files

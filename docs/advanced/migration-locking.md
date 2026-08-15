@@ -1,6 +1,6 @@
 # Migration Locking
 
-DBWarden uses a database-level lock to prevent concurrent schema mutation. This page explains how it works, what happens when it fails, and how to recover from a stuck lock.
+dbwarden uses a database-level lock to prevent concurrent schema mutation. This page explains how it works, what happens when it fails, and how to recover from a stuck lock.
 
 ## How locking works
 
@@ -19,7 +19,7 @@ LockError: Migration lock is already held. Another migration process may be runn
 Use 'dbwarden unlock' to release the lock if necessary.
 ```
 
-DBWarden does not retry on lock failure. The calling process (CI job, deploy script) must decide whether to retry or abort.
+dbwarden does not retry on lock failure. The calling process (CI job, deploy script) must decide whether to retry or abort.
 
 ## Inspecting lock state
 
@@ -46,7 +46,7 @@ Use the `locked_at` timestamp in the lock table to determine whether the lock is
 
 If a migration raises an error after partial execution:
 
-1. DBWarden rolls back the in-flight transaction (if the database supports transactional DDL, PostgreSQL does, MySQL does not)
+1. dbwarden rolls back the in-flight transaction (if the database supports transactional DDL, PostgreSQL does, MySQL does not)
 2. The lock is released
 3. The CLI exits non-zero
 
@@ -137,7 +137,7 @@ $ dbwarden status --database primary
 ## Distributed locking with Redis
 
 For multi-instance deployments where multiple application replicas could
-trigger migrations concurrently, DBWarden provides a Redis-backed
+trigger migrations concurrently, dbwarden provides a Redis-backed
 distributed lock through `dbwarden_fastapi.lock`:
 
 ```python

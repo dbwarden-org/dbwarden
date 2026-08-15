@@ -29,7 +29,7 @@ def _warn_override(object_type: str, plugin: str) -> None:
     _WARNED_OVERRIDES.add(key)
     logger.warning(
         "Plugin '%s' overrides the built-in handler for object type '%s'. "
-        "Migration SQL for '%s' now comes from the plugin, not DBWarden core.",
+        "Migration SQL for '%s' now comes from the plugin, not dbwarden core.",
         plugin,
         object_type,
         object_type,

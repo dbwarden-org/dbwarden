@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Enforce DBWarden import-boundary rules.
+"""Enforce dbwarden import-boundary rules.
 
 Rule 1: engine/core/ must never import from engine/backends/
          or any backend-specific package.

@@ -6,7 +6,7 @@ Configure your first database in **2 minutes**.
 
 You should have:
 - Python 3.10+ installed
-- DBWarden installed (`uv add dbwarden`)
+- dbwarden installed (`uv add dbwarden`)
 - A database to connect to (or use SQLite)
 
 ## Step 1: Initialize
@@ -46,11 +46,11 @@ Start with SQLite for the simplest setup. Switch to PostgreSQL later.
 
 The function alternative, `database_config(...)`, is also fully supported. Some
 plugins use that form in their examples or integration code, so you may see
-both configuration styles in DBWarden documentation.
+both configuration styles in dbwarden documentation.
 
 ## Step 3: Test the Configuration
 
-Verify DBWarden can read your config:
+Verify dbwarden can read your config:
 
 ```bash
 $ dbwarden settings show
@@ -70,7 +70,7 @@ primary (default)
 
 ## Step 4: Add Model Paths (Optional)
 
-If you have SQLAlchemy models, tell DBWarden where they are:
+If you have SQLAlchemy models, tell dbwarden where they are:
 
 ```python
 primary = database_config(
@@ -82,7 +82,7 @@ primary = database_config(
 )
 ```
 
-DBWarden will discover models from `app.models` and its submodules.
+dbwarden will discover models from `app.models` and its submodules.
 
 ## Step 5: Upgrade to PostgreSQL
 
@@ -135,7 +135,7 @@ $ dbwarden status
 When Python loads `dbwarden.py`, it registers the concrete `DbwardenDatabase`
 class, which:
 1. Validates your parameters
-2. Registers the database in DBWarden's internal registry
+2. Registers the database in dbwarden's internal registry
 3. Sets up migration directories
 
 The supported `database_config(...)` function alternative performs the same
@@ -164,7 +164,7 @@ class Primary(Shared):
 Concrete subclasses register automatically, and `Primary.handle` provides the
 same `DatabaseHandle` returned by `database_config(...)`.
 
-### DBWarden Can Now Find Your Database
+### dbwarden Can Now Find Your Database
 
 All CLI commands now know about your database:
 
@@ -179,13 +179,13 @@ $ dbwarden history
 
 ### "No configuration found"
 
-**Cause:** DBWarden can't find `dbwarden.py`
+**Cause:** dbwarden can't find `dbwarden.py`
 
 **Solution:** Ensure you're in the project directory and `dbwarden.py` exists.
 
 ### "No SQLAlchemy models found"
 
-**Cause:** DBWarden can't discover your models
+**Cause:** dbwarden can't discover your models
 
 **Solution:** Add `model_paths` to your config:
 

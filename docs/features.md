@@ -1,15 +1,15 @@
 ---
-description: Overview of DBWarden features, with short examples for migrations, safety checks,
+description: Overview of dbwarden features, with short examples for migrations, safety checks,
   multi-database configs, FastAPI integration, seed management, and more.
 ---
 
 # Features
 
-This page gives a compact overview of the main DBWarden features, with short examples. Use it to understand the surface area of the tool before diving into the guides and reference pages.
+This page gives a compact overview of the main dbwarden features, with short examples. Use it to understand the surface area of the tool before diving into the guides and reference pages.
 
 ## SQL-First Migrations
 
-DBWarden writes migrations as plain SQL files. Each file contains both an `--upgrade` section and a `--rollback` section.
+dbwarden writes migrations as plain SQL files. Each file contains both an `--upgrade` section and a `--rollback` section.
 
 ```sql
 -- upgrade
@@ -54,7 +54,7 @@ plugin or integration supplies function-style configuration.
 
 ## Model-Driven Migration Generation
 
-DBWarden reads SQLAlchemy models, diffs them against the live schema or an offline model state, and emits SQL.
+dbwarden reads SQLAlchemy models, diffs them against the live schema or an offline model state, and emits SQL.
 
 ```text
 $ dbwarden make-migrations "add posts table" --database primary
@@ -152,11 +152,11 @@ Generate SQLAlchemy model code from a live database.
 $ dbwarden generate-models --database primary --tables users,posts
 ```
 
-This is useful when adopting DBWarden in an existing project, documenting an inherited schema, or recovering model definitions.
+This is useful when adopting dbwarden in an existing project, documenting an inherited schema, or recovering model definitions.
 
 ## Offline Migrations
 
-DBWarden can generate migrations without connecting to a live database, by diffing current models against an exported model state.
+dbwarden can generate migrations without connecting to a live database, by diffing current models against an exported model state.
 
 ```bash
 $ dbwarden export-models --database primary
@@ -202,7 +202,7 @@ $ dbwarden --dev migrate --database primary
 
 ## Seed Management
 
-DBWarden tracks SQL and Python seed files separately from schema migrations.
+dbwarden tracks SQL and Python seed files separately from schema migrations.
 
 ```bash
 $ dbwarden seed create "load countries" --type sql --database primary
@@ -243,7 +243,7 @@ This is useful when validating generated SQL against a throwaway environment.
 
 ## Status, History, and Rollback
 
-DBWarden includes built-in commands for operational visibility.
+dbwarden includes built-in commands for operational visibility.
 
 ```bash
 $ dbwarden status --database primary

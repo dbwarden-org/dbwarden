@@ -2,7 +2,7 @@
 
 This page is the **reference** for all supported Meta attributes across every backend. For a step-by-step walkthrough of defining models, see the [Modeling Guide](getting-started/modeling.md).
 
-DBWarden reads SQLAlchemy model metadata to generate migration SQL. Use
+dbwarden reads SQLAlchemy model metadata to generate migration SQL. Use
 `model_paths` on your `DbwardenDatabase` classes, or in equivalent
 `database_config(...)` entries, to control discovery.
 
@@ -114,7 +114,7 @@ Backend-specific options are always set via a typed spec object attribute, never
 
 ### Backend Subpackages
 
-DBWarden organizes backend-specific types into subpackages under `dbwarden.databases`, also available there as short aliases:
+dbwarden organizes backend-specific types into subpackages under `dbwarden.databases`, also available there as short aliases:
 
 | Alias | Subpackage | Key types |
 |-------|------------|-----------|
@@ -140,7 +140,7 @@ ch_spec = ch.field(codec="ZSTD(3)", nullable=True)
 
 ## PostgreSQL Model Metadata
 
-When `database_type="postgresql"`, DBWarden supports first-class PostgreSQL metadata via `class Meta(PGTableMeta)` inner classes. This is the **only** supported surface: `mapped_column(info=...)` raises `DBWardenConfigError`.
+When `database_type="postgresql"`, dbwarden supports first-class PostgreSQL metadata via `class Meta(PGTableMeta)` inner classes. This is the **only** supported surface: `mapped_column(info=...)` raises `DBWardenConfigError`.
 
 ### Table-Level Meta
 
@@ -271,7 +271,7 @@ See [Views](databases/postgresql/views.md) for the full view lifecycle and auto-
 
 ## ClickHouse Model Metadata
 
-When `database_type="clickhouse"`, DBWarden supports first-class ClickHouse metadata via `class Meta(CHTableMeta)` inner classes. This is the **only** supported surface. Pass options via `mapped_column(info=...)` raises `DBWardenConfigError`.
+When `database_type="clickhouse"`, dbwarden supports first-class ClickHouse metadata via `class Meta(CHTableMeta)` inner classes. This is the **only** supported surface. Pass options via `mapped_column(info=...)` raises `DBWardenConfigError`.
 
 ### Table-Level Meta
 
@@ -495,7 +495,7 @@ Supported `ch.field()` options:
 
 ## MySQL Model Metadata
 
-When `database_type="mysql"` (or `"mariadb"`), DBWarden supports first-class MySQL metadata via `class Meta(MyTableMeta)` inner classes. This is the **only** supported surface: `mapped_column(info=...)` raises `DBWardenConfigError`.
+When `database_type="mysql"` (or `"mariadb"`), dbwarden supports first-class MySQL metadata via `class Meta(MyTableMeta)` inner classes. This is the **only** supported surface: `mapped_column(info=...)` raises `DBWardenConfigError`.
 
 ### Table-Level Meta
 

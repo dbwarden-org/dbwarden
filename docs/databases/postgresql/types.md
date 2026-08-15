@@ -2,7 +2,7 @@
 
 **Requires the `dbwarden-pgsql-types` plugin:** `dbwarden plugin add dbwarden-pgsql-types`. The `enum`, `domain`, and `composite_type` object handlers ship in that plugin, not in core.
 
-DBWarden supports three object-level type families: enums, domains, and composite types. Enums are model-derived (auto-discovered from table columns). Domains and composite types are config-driven.
+dbwarden supports three object-level type families: enums, domains, and composite types. Enums are model-derived (auto-discovered from table columns). Domains and composite types are config-driven.
 
 ## Enums
 
@@ -43,7 +43,7 @@ PostgreSQL does **not** support `ALTER TYPE ... DROP VALUE`. Removing an enum va
 3. `ALTER TABLE ... ALTER COLUMN c TYPE name USING c::text::name`
 4. `DROP TYPE name_old`
 
-This is **not** automated by DBWarden. Value removal is classified as a manual operation.
+This is **not** automated by dbwarden. Value removal is classified as a manual operation.
 
 ### Enum Type Normalization
 
@@ -127,7 +127,7 @@ PostgreSQL does **not** support `ALTER TYPE` for composite types. To modify a co
 2. `CREATE TYPE name AS (...);` with the new definition
 3. Recreate any dropped columns referencing this type
 
-This is **not** automated by DBWarden. Composite type changes are detected as drop-then-create with `CASCADE`.
+This is **not** automated by dbwarden. Composite type changes are detected as drop-then-create with `CASCADE`.
 
 ### Schema
 
@@ -139,7 +139,7 @@ Composite types can be scoped to a schema:
 
 ## Range Types
 
-PostgreSQL supports built-in range types that DBWarden normalizes during schema extraction:
+PostgreSQL supports built-in range types that dbwarden normalizes during schema extraction:
 
 | PostgreSQL Type | SQLAlchemy Type | Example Value |
 |----------------|-----------------|---------------|

@@ -1,14 +1,14 @@
 ---
-description: Install and inspect your first DBWarden plugin.
+description: Install and inspect your first dbwarden plugin.
 ---
 
 # Quickstart: Add FastAPI Support
 
-This quickstart walks through installing the official `dbwarden-fastapi` plugin, handling the consent prompt for community plugins, listing what DBWarden discovered, and using a session dependency in an endpoint.
+This quickstart walks through installing the official `dbwarden-fastapi` plugin, handling the consent prompt for community plugins, listing what dbwarden discovered, and using a session dependency in an endpoint.
 
 ## 1. Install The Plugin
 
-Use DBWarden's plugin installer:
+Use dbwarden's plugin installer:
 
 ```bash
 dbwarden plugin add dbwarden-fastapi
@@ -46,7 +46,7 @@ dbwarden plugin add dbwarden-fastapi --dry-run
 
 ## 2. Consent For Community Plugins
 
-Official and Verified plugins load automatically. A **Community** plugin, any distribution not listed in core, is discovered but not imported until you consent to the exact installed version. When you run a DBWarden command in an interactive terminal, you are prompted:
+Official and Verified plugins load automatically. A **Community** plugin, any distribution not listed in core, is discovered but not imported until you consent to the exact installed version. When you run a dbwarden command in an interactive terminal, you are prompted:
 
 ```text
 Enable community plugin 'dbwarden-example' version 0.1.0? [y/N]:
@@ -65,7 +65,7 @@ dbwarden plugin list
 ```
 
 ```text
-                                     DBWarden Plugins
+                                     dbwarden Plugins
 ┏━━━━━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━┓
 ┃ Distribution     ┃ Version ┃ Tier     ┃ Trusted ┃ State  ┃ Hooks           ┃ Objects ┃ Lock       ┃
 ┡━━━━━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━┩
@@ -82,7 +82,7 @@ dbwarden plugin list --format json
 
 ## 4. Use The Integration
 
-The FastAPI integration exposes session dependencies through DBWarden's FastAPI API. A minimal endpoint that uses the async session for the `primary` database:
+The FastAPI integration exposes session dependencies through dbwarden's FastAPI API. A minimal endpoint that uses the async session for the `primary` database:
 
 ```python
 from fastapi import Depends, FastAPI
@@ -99,7 +99,7 @@ async def users(session: AsyncSession = Depends(get_session("primary"))):
     return {"users": result.scalars().all()}
 ```
 
-`get_session` resolves the dependency through the plugin's `session_factory` hook. This import path is provided by the `dbwarden-fastapi` plugin package, not by DBWarden core. See the plugin's README for configuration.
+`get_session` resolves the dependency through the plugin's `session_factory` hook. This import path is provided by the `dbwarden-fastapi` plugin package, not by dbwarden core. See the plugin's README for configuration.
 
 ## Next Steps
 

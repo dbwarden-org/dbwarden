@@ -1,6 +1,6 @@
 # Model Discovery
 
-Learn how DBWarden discovers your SQLAlchemy models for migration generation.
+Learn how dbwarden discovers your SQLAlchemy models for migration generation.
 
 Examples use `database_config(...)` as a compact function alternative. The same
 `model_paths` and `model_tables` fields can be declared on the default
@@ -8,7 +8,7 @@ Examples use `database_config(...)` as a compact function alternative. The same
 
 ## What Is Model Discovery?
 
-Model discovery is the process where DBWarden:
+Model discovery is the process where dbwarden:
 1. Imports Python modules
 2. Finds SQLAlchemy model classes
 3. Extracts table metadata
@@ -30,7 +30,7 @@ primary = database_config(
 
 ### What Gets Discovered
 
-DBWarden looks for classes that inherit from:
+dbwarden looks for classes that inherit from:
 - `DeclarativeBase` (SQLAlchemy 2.0+)
 - `declarative_base()` return value (SQLAlchemy 1.4)
 
@@ -66,11 +66,11 @@ primary = database_config(
     default=True,
     database_type="sqlite",
     database_url_sync="sqlite:///./app.db",
-    # No model_paths - DBWarden scans entire codebase
+    # No model_paths - dbwarden scans entire codebase
 )
 ```
 
-DBWarden will scan your entire codebase for models.
+dbwarden will scan your entire codebase for models.
 
 Even for single-database projects, specifying `model_paths` makes discovery faster and more predictable.
 
@@ -101,7 +101,7 @@ analytics = database_config(
 
 ### Step 1: Import Modules
 
-DBWarden imports each module in `model_paths`:
+dbwarden imports each module in `model_paths`:
 
 ```python
 model_paths=["app.models", "app.legacy.models"]
@@ -116,7 +116,7 @@ import app.legacy.models
 
 ### Step 2: Recursive Discovery
 
-For each imported module, DBWarden recursively imports submodules:
+For each imported module, dbwarden recursively imports submodules:
 
 ```
 app/
@@ -131,11 +131,11 @@ app/
 
 ### Step 3: Find Model Classes
 
-For each module, DBWarden inspects all classes and finds those inheriting from `DeclarativeBase`.
+For each module, dbwarden inspects all classes and finds those inheriting from `DeclarativeBase`.
 
 ### Step 4: Extract Metadata
 
-For each model class, DBWarden extracts:
+For each model class, dbwarden extracts:
 - Table name
 - Columns (name, type, constraints)
 - Indexes
@@ -296,7 +296,7 @@ Both databases will include the same tables. Make sure this is intentional.
 
 ### "No SQLAlchemy models found"
 
-**Symptom:** DBWarden can't find your models.
+**Symptom:** dbwarden can't find your models.
 
 **Causes:**
 
@@ -410,7 +410,7 @@ analytics = database_config(
 
 **Symptom:** `ModuleNotFoundError` or `ImportError` when running commands.
 
-**Cause:** DBWarden tries to import module but it doesn't exist.
+**Cause:** dbwarden tries to import module but it doesn't exist.
 
 **Solution:** Verify the module path:
 

@@ -1,6 +1,6 @@
 # `init`
 
-Initialize DBWarden project scaffolding.
+Initialize dbwarden project scaffolding.
 
 ## Usage
 

@@ -6,18 +6,18 @@ from sqlalchemy.orm import declarative_base
 from dbwarden import TableMeta, IndexSpec
 
 # Every SQLAlchemy model must inherit from a common declarative base.
-# DBWarden discovers models by scanning for classes that inherit from it.
+# dbwarden discovers models by scanning for classes that inherit from it.
 Base = declarative_base()
 
 
 # ── TableMeta ──────────────────────────────────────────────────
 # The inner Meta class (inheriting from TableMeta) is how you attach
-# table-level metadata that DBWarden translates into DDL at migration
+# table-level metadata that dbwarden translates into DDL at migration
 # time.  The comment becomes a COMMENT ON TABLE in PostgreSQL, and
 # IndexSpec entries become CREATE INDEX statements.
 #
 # Columns defined directly on the model (via Column()) are read by
-# DBWarden's schema scanner, their types, nullability, defaults,
+# dbwarden's schema scanner, their types, nullability, defaults,
 # unique constraints, and foreign keys all feed into the generated SQL.
 
 class User(Base):

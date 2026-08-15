@@ -1,6 +1,6 @@
 # Architecture
 
-This page explains DBWarden internals for contributors and advanced debugging.
+This page explains dbwarden internals for contributors and advanced debugging.
 
 ## Layered architecture
 

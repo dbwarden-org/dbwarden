@@ -1,10 +1,10 @@
 ---
-description: Reference for DBWarden plugin CLI commands.
+description: Reference for dbwarden plugin CLI commands.
 ---
 
 # Plugin CLI
 
-All commands live under `dbwarden plugin`. Unlike other DBWarden commands, `dbwarden plugin` does not auto-load plugins first, so it can inspect and manage plugins without importing them.
+All commands live under `dbwarden plugin`. Unlike other dbwarden commands, `dbwarden plugin` does not auto-load plugins first, so it can inspect and manage plugins without importing them.
 
 ## Subcommands
 
@@ -38,7 +38,7 @@ dbwarden plugin list --format json
 Columns: Distribution, Version, Tier, Trusted, State, Hooks, Objects, Lock.
 
 ```text
-                                     DBWarden Plugins
+                                     dbwarden Plugins
 ┏━━━━━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━┓
 ┃ Distribution     ┃ Version ┃ Tier     ┃ Trusted ┃ State  ┃ Hooks           ┃ Objects ┃ Lock       ┃
 ┡━━━━━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━┩

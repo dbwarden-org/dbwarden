@@ -1,16 +1,16 @@
 # Offline Integrity
 
-Offline integrity lets DBWarden generate migrations without connecting to a live database. It does this by comparing current models to a checked-in model state file or schema snapshot instead of querying the database at generation time.
+Offline integrity lets dbwarden generate migrations without connecting to a live database. It does this by comparing current models to a checked-in model state file or schema snapshot instead of querying the database at generation time.
 
 This is a correctness feature because it removes accidental dependence on a developer's local database. CI can generate or verify migrations from repository state alone.
 
 ## Snapshot and Model State Concepts
 
-DBWarden uses two related state files.
+dbwarden uses two related state files.
 
 ### Schema Snapshots
 
-After migrations are applied, DBWarden can write checksummed schema snapshots under `.dbwarden/schemas/`. These snapshots represent the database schema after a migration point.
+After migrations are applied, dbwarden can write checksummed schema snapshots under `.dbwarden/schemas/`. These snapshots represent the database schema after a migration point.
 
 They support:
 
@@ -33,10 +33,10 @@ Commit it with the repository:
 
 ```bash
 git add .dbwarden/model_state.json
-git commit -m "Update DBWarden model state"
+git commit -m "Update dbwarden model state"
 ```
 
-The model state file records the schema that DBWarden expects the database to be in after the last migration. It is the baseline for offline diffing and can be regenerated at any time from a live database.
+The model state file records the schema that dbwarden expects the database to be in after the last migration. It is the baseline for offline diffing and can be regenerated at any time from a live database.
 
 ## Offline Migration Generation
 
@@ -68,13 +68,13 @@ Run it with:
 dbwarden make-migrations "add profile fields" --offline --database primary
 ```
 
-If the state file is missing, DBWarden tells you to run `export-models` first. If the state file is invalid, DBWarden refuses to use it.
+If the state file is missing, dbwarden tells you to run `export-models` first. If the state file is invalid, dbwarden refuses to use it.
 
 > **If accidentally deleted:** restore it from git (`git checkout .dbwarden/model_state.json`) or regenerate it by running `dbwarden export-models --database <db>` against a live database. Offline commands will work again immediately.
 
 ## Integrity Check
 
-Model state and schema snapshots are checksummed. Before DBWarden uses a state file, it validates that the file content matches the stored checksum.
+Model state and schema snapshots are checksummed. Before dbwarden uses a state file, it validates that the file content matches the stored checksum.
 
 The reason is straightforward:
 
@@ -173,7 +173,7 @@ Then CI runs:
 dbwarden make-migrations "ci offline check" --offline --database primary
 ```
 
-DBWarden detects the difference between the committed state and current models:
+dbwarden detects the difference between the committed state and current models:
 
 ```sql
 -- upgrade
@@ -189,7 +189,7 @@ If this migration was expected, commit it. If it was not expected, the model cha
 
 Offline integrity decouples migration generation from live database accidents.
 
-Without offline state, a developer's local database could contain manual changes. DBWarden might diff against that local drift and produce a migration that looks correct on one machine but fails in CI or production.
+Without offline state, a developer's local database could contain manual changes. dbwarden might diff against that local drift and produce a migration that looks correct on one machine but fails in CI or production.
 
 With offline state:
 

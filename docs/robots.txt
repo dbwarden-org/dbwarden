@@ -1,7 +1,7 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://dbwarden.org/sitemap.xml
+Sitemap: https://docs.dbwarden.org/sitemap.xml
 
 search: yes
 ai-input: yes

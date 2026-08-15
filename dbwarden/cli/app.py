@@ -3,7 +3,7 @@ import typer
 from dbwarden.config import set_dev_mode, set_strict_translation
 
 app = typer.Typer(
-    help="""DBWarden - Professional database migration system for SQLAlchemy models
+    help="""dbwarden - Professional database migration system for SQLAlchemy models
 
 All commands support the --verbose / -v flag for detailed output.""",
     add_completion=False,
@@ -11,7 +11,7 @@ All commands support the --verbose / -v flag for detailed output.""",
 
 database_app = typer.Typer(help="List configured databases")
 app.add_typer(database_app, name="database")
-settings_app = typer.Typer(help="View DBWarden settings")
+settings_app = typer.Typer(help="View dbwarden settings")
 app.add_typer(settings_app, name="settings")
 seed_app = typer.Typer(help="Manage seed data")
 app.add_typer(seed_app, name="seed")

@@ -1,6 +1,6 @@
 # Deterministic Diff
 
-The deterministic diff is the reason DBWarden can generate stable, reviewable migrations. Given the same model state and the same database snapshot, DBWarden should produce the same operation list every time.
+The deterministic diff is the reason dbwarden can generate stable, reviewable migrations. Given the same model state and the same database snapshot, dbwarden should produce the same operation list every time.
 
 Without deterministic diffing, automated migrations become noisy. A pull request might alternate between two equivalent SQL forms. Reviewers would waste time checking fake changes instead of real schema changes.
 
@@ -16,11 +16,11 @@ Examples:
 - ClickHouse engine parameters may be returned in a different order than they were declared.
 - Whitespace in view definitions may differ while the query is logically unchanged.
 
-If DBWarden compared raw strings directly, it would produce false diffs.
+If dbwarden compared raw strings directly, it would produce false diffs.
 
 ## Canonicalization
 
-DBWarden handlers canonicalize specs before diffing. Each handler owns the rules for its object type.
+dbwarden handlers canonicalize specs before diffing. Each handler owns the rules for its object type.
 
 The shape is:
 
@@ -83,7 +83,7 @@ Canonical form:
   varchar(255)
 ```
 
-After canonicalization, DBWarden does not emit a type-change migration for this column.
+After canonicalization, dbwarden does not emit a type-change migration for this column.
 
 ### Boolean Defaults
 
@@ -104,7 +104,7 @@ The diff should compare the normalized meaning, not the original spelling.
 
 ### Identifier Quoting
 
-PostgreSQL accepts both quoted and unquoted identifiers, but quoted identifiers preserve case. DBWarden normalizes safe names while preserving names that require quotes.
+PostgreSQL accepts both quoted and unquoted identifiers, but quoted identifiers preserve case. dbwarden normalizes safe names while preserving names that require quotes.
 
 ```text
 users.email
@@ -139,11 +139,11 @@ Canonical form:
   settings.index_granularity: 8192
 ```
 
-The canonical form lets DBWarden decide whether a real engine change occurred.
+The canonical form lets dbwarden decide whether a real engine change occurred.
 
 ### Projection and Skip Index Specs
 
-ClickHouse projections and skip indexes contain expressions. DBWarden normalizes the supported metadata fields so the diff sees stable names, expressions, types, and granularities.
+ClickHouse projections and skip indexes contain expressions. dbwarden normalizes the supported metadata fields so the diff sees stable names, expressions, types, and granularities.
 
 ```text
 Projection model:
@@ -206,7 +206,7 @@ Result: alter column type operation
 
 ## Why Determinism Matters
 
-Determinism gives DBWarden four practical properties.
+Determinism gives dbwarden four practical properties.
 
 ### Reviewability
 

@@ -1,17 +1,17 @@
 # Modeling Guide
 
-This guide walks through the process of defining SQLAlchemy models that DBWarden can read to generate migration SQL. For the complete reference of all supported Meta attributes, see [SQLAlchemy Models Reference](../models.md).
+This guide walks through the process of defining SQLAlchemy models that dbwarden can read to generate migration SQL. For the complete reference of all supported Meta attributes, see [SQLAlchemy Models Reference](../models.md).
 
-## How DBWarden Reads Models
+## How dbwarden Reads Models
 
-DBWarden discovers models in the directories specified by `model_paths` in your `database_config(...)`. It reads two sources of metadata from each model:
+dbwarden discovers models in the directories specified by `model_paths` in your `database_config(...)`. It reads two sources of metadata from each model:
 
 1. **Column definitions**: typed SQLAlchemy `Mapped[...] = mapped_column(...)` fields, nullability, defaults, primary keys
 2. **`class Meta` inner class**: backend-specific options like engine specs, partitioning, codecs
 
 All backend-specific metadata uses the `class Meta` pattern. The `__table_args__` approach is not supported for PostgreSQL metadata. Using `mapped_column(info=...)` for backend-specific options raises `DBWardenConfigError`.
 
-The `class Meta` convention is borrowed from Django's model metadata, so the pattern should read as familiar if you have used Django. DBWarden's version is typed and validated at import time: unknown attributes raise `DBWardenConfigError` when the module loads rather than producing incorrect DDL later.
+The `class Meta` convention is borrowed from Django's model metadata, so the pattern should read as familiar if you have used Django. dbwarden's version is typed and validated at import time: unknown attributes raise `DBWardenConfigError` when the module loads rather than producing incorrect DDL later.
 
 ## Common Meta Attributes
 
@@ -87,7 +87,7 @@ See the [reference](../models.md#postgresql-model-metadata) for the full list of
 
 ### PostgreSQL Views and Schemas
 
-DBWarden supports PostgreSQL views and materialized views via `PGViewMeta`. Define a view as a model with `__tablename__` matching the view name:
+dbwarden supports PostgreSQL views and materialized views via `PGViewMeta`. Define a view as a model with `__tablename__` matching the view name:
 
 ```python
 from dbwarden.databases.pgsql import PGViewMeta
@@ -140,7 +140,7 @@ The fastest way to get a correct model is to reverse-engineer it from your live 
 $ dbwarden generate-models -d primary --tables users,orders
 ```
 
-DBWarden produces one `.py` file per table (or a single `models.py` with `--single-file`). The generated output includes `class Meta` with all detected backend-specific metadata.
+dbwarden produces one `.py` file per table (or a single `models.py` with `--single-file`). The generated output includes `class Meta` with all detected backend-specific metadata.
 
 Review the generated code before using it:
 
@@ -216,15 +216,15 @@ class Order(Base):
 
 Auto-generated migrations handle most cases, but some schema changes still need manual intervention via `dbwarden new`:
 
-- PostgreSQL `USING` clause for type casts (e.g., casting `TEXT` to `INTEGER`). DBWarden emits `ALTER COLUMN ... TYPE` with a commented-out `-- USING col::newtype` line. Pass `--postgres-auto-using` to emit an active `USING` clause.
+- PostgreSQL `USING` clause for type casts (e.g., casting `TEXT` to `INTEGER`). dbwarden emits `ALTER COLUMN ... TYPE` with a commented-out `-- USING col::newtype` line. Pass `--postgres-auto-using` to emit an active `USING` clause.
 - Column renames not caught by the heuristic auto-detection. Use `--rename old_name:new_name` flags for deterministic renames, or rename in a manual migration.
-- Data migrations (backfilling, transforming existing data). DBWarden emits a SQL comment placeholder.
+- Data migrations (backfilling, transforming existing data). dbwarden emits a SQL comment placeholder.
 
 For these cases run `dbwarden new` and write the SQL by hand, or use the relevant flag for auto-generation.
 
 ## Best Practices
 
-- **One model class per table**: DBWarden discovers models by scanning directories. Each table should have exactly one model class.
+- **One model class per table**: dbwarden discovers models by scanning directories. Each table should have exactly one model class.
 - **Use `model_paths`**: always set `model_paths` explicitly in `database_config(...)`. Auto-discovery is available but explicit paths are more predictable.
 - **Review generated migrations**: always read the `.sql` file before running `dbwarden migrate`.
 - **Use `--dev` for local development**: configure a `dev_database_url` (SQLite works well) and use `dbwarden --dev` to iterate quickly without touching your real database.

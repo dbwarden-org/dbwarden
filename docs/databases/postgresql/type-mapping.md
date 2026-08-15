@@ -1,6 +1,6 @@
 # Type Mapping
 
-DBWarden normalizes SQLAlchemy column types to PostgreSQL native types during snapshot extraction and DDL generation.
+dbwarden normalizes SQLAlchemy column types to PostgreSQL native types during snapshot extraction and DDL generation.
 
 ## Standard SQLAlchemy Types
 
@@ -81,7 +81,7 @@ See [DDL Behavior](ddl-behavior.md#auto-increment-lifecycle) for the full lifecy
 
 ### SERIAL / BIGSERIAL
 
-`SERIAL` and `BIGSERIAL` are syntactic sugar for `INTEGER` / `BIGINT` with an auto-created sequence and a `DEFAULT nextval(...)` expression. DBWarden normalizes them during reverse-engineering:
+`SERIAL` and `BIGSERIAL` are syntactic sugar for `INTEGER` / `BIGINT` with an auto-created sequence and a `DEFAULT nextval(...)` expression. dbwarden normalizes them during reverse-engineering:
 
 - On input (`generate-models`): a column typed `INTEGER` with `nextval('seq'::regclass)` default is normalized to `Integer(autoincrement=True)`
 - On output (`make-migrations`): a column with `autoincrement=True` emits `SERIAL` / `BIGSERIAL` in `CREATE TABLE`
@@ -115,7 +115,7 @@ See [DDL Behavior](ddl-behavior.md#auto-increment-lifecycle) for the full lifecy
 
 ### Range Types
 
-Range types accept `Range` objects in Python. DBWarden preserves the range type variant:
+Range types accept `Range` objects in Python. dbwarden preserves the range type variant:
 
 | SQLAlchemy | PostgreSQL | Example Value |
 |------------|------------|---------------|
@@ -129,4 +129,4 @@ SQLAlchemy `Enum` types with `create_constraint=True` are extracted as `CREATE T
 
 ### Domain-Based Columns
 
-When a column uses a domain type (e.g., `us_postal_code`), DBWarden preserves the domain type name in the snapshot rather than expanding to the base type. See [Types](types.md#domains) for domain lifecycle.
+When a column uses a domain type (e.g., `us_postal_code`), dbwarden preserves the domain type name in the snapshot rather than expanding to the base type. See [Types](types.md#domains) for domain lifecycle.

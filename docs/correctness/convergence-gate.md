@@ -1,6 +1,6 @@
 # Convergence Gate
 
-The convergence gate is the strongest correctness check in DBWarden. It proves that the complete migration history can reproduce the schema declared by the current models.
+The convergence gate is the strongest correctness check in dbwarden. It proves that the complete migration history can reproduce the schema declared by the current models.
 
 The gate answers one question:
 
@@ -52,7 +52,7 @@ This applies versioned migrations and any repeatable migration behavior supporte
 
 ### 3. Check the Resulting Schema
 
-Run DBWarden's diff command:
+Run dbwarden's diff command:
 
 ```bash
 dbwarden diff --database primary
@@ -133,7 +133,7 @@ jobs:
         run: dbwarden diff --database primary --out table
 ```
 
-The `--health-cmd` option belongs to Docker service configuration. The DBWarden commands are the two important convergence commands: `migrate` and `diff`.
+The `--health-cmd` option belongs to Docker service configuration. The dbwarden commands are the two important convergence commands: `migrate` and `diff`.
 
 ## Measured Cost
 
@@ -141,7 +141,7 @@ The cost is dominated by replaying the migration history, not by the final
 schema diff. On 2026-08-14, the harness measured a synthetic 500-migration
 SQLite project with one table per migration:
 
-| DBWarden executable | Preparation | Full replay | Final diff | Total |
+| dbwarden executable | Preparation | Full replay | Final diff | Total |
 |---|---:|---:|---:|---:|
 | Current core checkout | 2.2s | 274.1s | 6.0s | 282.3s |
 | PyPI `0.16.5` | 1.8s | 291.8s | 6.7s | 300.3s |
@@ -248,7 +248,7 @@ This is stronger than checking that a single generated migration looks plausible
 
 ## Relationship to Offline Integrity
 
-Offline workflows are useful when CI cannot reach a database service. They let DBWarden generate migrations from a checked-in model state instead of a live database. That is deterministic, but it does not prove the SQL applies to a real engine.
+Offline workflows are useful when CI cannot reach a database service. They let dbwarden generate migrations from a checked-in model state instead of a live database. That is deterministic, but it does not prove the SQL applies to a real engine.
 
 A strong pipeline uses both:
 

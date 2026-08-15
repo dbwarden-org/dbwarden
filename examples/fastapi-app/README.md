@@ -1,6 +1,6 @@
-# FastAPI + DBWarden Example
+# FastAPI + dbwarden Example
 
-A complete FastAPI application using DBWarden for database migrations, health checks, and session management.
+A complete FastAPI application using dbwarden for database migrations, health checks, and session management.
 
 ## Prerequisites
 

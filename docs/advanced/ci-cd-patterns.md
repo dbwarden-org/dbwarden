@@ -1,6 +1,6 @@
 # CI/CD Patterns
 
-Patterns for running DBWarden migrations in automated pipelines.
+Patterns for running dbwarden migrations in automated pipelines.
 
 ## Core principle
 
@@ -209,7 +209,7 @@ auto-generated migration names.
 
 ## Exit codes
 
-DBWarden exits non-zero on:
+dbwarden exits non-zero on:
 
 - Migration failure
 - Checksum mismatch

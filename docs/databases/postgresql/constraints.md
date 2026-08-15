@@ -60,7 +60,7 @@ PostgreSQL 9.4+ supports modifying constraint deferrability without drop/create:
 ALTER TABLE t ALTER CONSTRAINT fk DEFERRABLE INITIALLY DEFERRED;
 ```
 
-DBWarden detects when only the deferrability changed and emits `ALTER CONSTRAINT` instead of a drop+add cycle.
+dbwarden detects when only the deferrability changed and emits `ALTER CONSTRAINT` instead of a drop+add cycle.
 
 ## Unique Constraints
 
@@ -71,7 +71,7 @@ Support for:
 - `NULLS NOT DISTINCT` (PG 15+)
 
 A unique constraint with `NULLS NOT DISTINCT` treats NULLs as equal, so only one row can contain NULL.
-If only the constraint name changes, DBWarden emits `ALTER TABLE ... RENAME CONSTRAINT ...` instead of dropping and recreating the unique constraint.
+If only the constraint name changes, dbwarden emits `ALTER TABLE ... RENAME CONSTRAINT ...` instead of dropping and recreating the unique constraint.
 
 ## Primary Key Constraints
 
@@ -130,7 +130,7 @@ Diffing compares the full expression; any change in operator, access method, or 
 
 ## UniqueSpec vs unique=True on PgIndexSpec
 
-PostgreSQL implements unique constraints as unique indexes under the hood. DBWarden supports both approaches, and the choice is a semantic one.
+PostgreSQL implements unique constraints as unique indexes under the hood. dbwarden supports both approaches, and the choice is a semantic one.
 
 | Aspect | `UniqueSpec` in `uniques` / `pg_uniques` | `unique=True` on `PgIndexSpec` in `pg_indexes` |
 |--------|------------------------------------------|------------------------------------------------|

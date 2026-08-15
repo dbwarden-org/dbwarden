@@ -70,10 +70,10 @@ def plugin_list_cmd(output_format: str = "table") -> None:
         plain(json.dumps([_report_to_dict(report) for report in reports], indent=2))
         return
     if not reports:
-        empty_state("No DBWarden plugins discovered.")
+        empty_state("No dbwarden plugins discovered.")
         return
 
-    table = Table(title="DBWarden Plugins")
+    table = Table(title="dbwarden Plugins")
     min_dist_width = max(
         len("Distribution"),
         max(len(report.distribution) for report in reports),

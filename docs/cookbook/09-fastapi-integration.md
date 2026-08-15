@@ -2,7 +2,7 @@
 
 ## What You'll Learn
 
-- How to wire DBWarden into a FastAPI application lifecycle
+- How to wire dbwarden into a FastAPI application lifecycle
 - How to use `primary.async_session` as a dependency injection
 - How to expose health check and migration endpoints
 - How to validate schema on startup
@@ -152,7 +152,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="DBWarden FastAPI Example",
+    title="dbwarden FastAPI Example",
     lifespan=lifespan,
 )
 

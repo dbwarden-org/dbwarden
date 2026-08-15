@@ -1,15 +1,15 @@
 ---
 title: Declarative Migrations for SQLAlchemy
-description: DBWarden is a SQL-first database migration system for Python and SQLAlchemy.
+description: dbwarden is a SQL-first database migration system for Python and SQLAlchemy.
   Generate reviewable SQL migrations from your models, validate them before production, and
   operate multiple databases from one config source.
 ---
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/dbwarden-org/dbwarden/refs/heads/main/assets/icon.png" alt="DBWarden" width="128"/>
+  <img src="https://raw.githubusercontent.com/dbwarden-org/dbwarden/refs/heads/main/assets/icon.png" alt="dbwarden" width="128"/>
 </p>
 <p align="center">
-  <strong style="font-size: 2.5em;">DBWarden</strong>
+  <strong style="font-size: 2.5em;">dbwarden</strong>
 </p>
 <p align="center">
   <em>Your SQLAlchemy models are your migrations.</em>
@@ -33,14 +33,14 @@ description: DBWarden is a SQL-first database migration system for Python and SQ
 </p>
 
 <p align="center">
-  <strong><a href="https://dbwarden.org/">Full documentation</a></strong>
+  <strong><a href="https://docs.dbwarden.org/">Full documentation</a></strong>
   &nbsp;|&nbsp;
   <strong><a href="https://github.com/dbwarden-org/dbwarden">Source Code</a></strong>
 </p>
 
 ---
 
-DBWarden is a declarative database migration and schema management tool for SQLAlchemy. You declare the schema you want in your SQLAlchemy models, and DBWarden derives everything else: migration SQL, rollbacks, snapshots, and safety checks.
+dbwarden is a declarative database migration and schema management tool for SQLAlchemy. You declare the schema you want in your SQLAlchemy models, and dbwarden derives everything else: migration SQL, rollbacks, snapshots, and safety checks.
 
 There are no migration scripts to write or maintain. There is no migration runtime. Your models are the contract. The database is kept in sync with them.
 
@@ -63,13 +63,13 @@ There are no migration scripts to write or maintain. There is no migration runti
 - Extensible plugin system with official plugins for seeds, RBAC, FastAPI, sandbox testing, and PostgreSQL/ClickHouse extensions
 - Reverse-engineer live databases into models with `generate-models`
 
-## Why DBWarden
+## Why dbwarden
 
-Schema management tools fall into two camps. Imperative tools have you author *changes*: revision scripts that describe how to get from one schema version to the next. Declarative tools have you author the *desired state* and derive the changes for you. DBWarden is declarative: your SQLAlchemy models are the single definition of what the schema should be.
+Schema management tools fall into two camps. Imperative tools have you author *changes*: revision scripts that describe how to get from one schema version to the next. Declarative tools have you author the *desired state* and derive the changes for you. dbwarden is declarative: your SQLAlchemy models are the single definition of what the schema should be.
 
 Most imperative tools ask you to maintain two representations of your schema: your ORM models and your migration files. When they drift, you find out at deploy time.
 
-DBWarden eliminates the second representation. Your SQLAlchemy models are the schema definition. DBWarden reads them, diffs them against the current database state, and generates the SQL to close the gap (including rollback) without you writing a line of migration code.
+dbwarden eliminates the second representation. Your SQLAlchemy models are the schema definition. dbwarden reads them, diffs them against the current database state, and generates the SQL to close the gap (including rollback) without you writing a line of migration code.
 
 This also means:
 
@@ -78,18 +78,18 @@ This also means:
 - No schema drift discovered in production: drift is caught at `make-migrations` time
 - Migrations that can be generated in CI without a database connection
 
-DBWarden is not a wrapper around Alembic. It is a different approach to the same problem. Alembic asks you to describe *how* to change the database; DBWarden asks you to describe *what* the schema should be. Alembic can autogenerate revisions, but each one becomes an imperative Python artifact you own, edit, and chain — the revision history is the source of truth. With DBWarden the models stay the source of truth, and the output is plain SQL.
+dbwarden is not a wrapper around Alembic. It is a different approach to the same problem. Alembic asks you to describe *how* to change the database; dbwarden asks you to describe *what* the schema should be. Alembic can autogenerate revisions, but each one becomes an imperative Python artifact you own, edit, and chain — the revision history is the source of truth. With dbwarden the models stay the source of truth, and the output is plain SQL.
 
-Unlike tools that apply declarative diffs directly to the database, DBWarden still produces versioned, reviewable migration files with explicit rollbacks: declarative authoring without giving up auditable deploy artifacts.
+Unlike tools that apply declarative diffs directly to the database, dbwarden still produces versioned, reviewable migration files with explicit rollbacks: declarative authoring without giving up auditable deploy artifacts.
 
 ## From zero to production
 
 Typical adoption path in an existing project:
 
-1. Point DBWarden at your existing SQLAlchemy models
+1. Point dbwarden at your existing SQLAlchemy models
 2. Run initial `make-migrations` to generate a baseline schema
 3. Commit generated migrations as your source of truth
-4. Replace your current migration workflow with the DBWarden CLI
+4. Replace your current migration workflow with the dbwarden CLI
 5. Optionally enable:
    - Migration impact analysis for safer deploys
    - Offline mode for CI pipelines without a database service
@@ -226,11 +226,11 @@ dbwarden status
 
 ## Migration engine
 
-**Model-driven generation**: DBWarden reads your SQLAlchemy models directly. When you change a model, it diffs the new state against the last snapshot and generates the SQL to reconcile them.
+**Model-driven generation**: dbwarden reads your SQLAlchemy models directly. When you change a model, it diffs the new state against the last snapshot and generates the SQL to reconcile them.
 
 **Plain SQL output**: Generated migrations are `.sql` files. No migration runtime, no generated Python. Review them, commit them, execute them directly against any environment.
 
-**Rollback contract**: Generated migrations carry both upgrade and rollback sections. DBWarden emits executable rollback when it is safe, refuses placeholder rollback by default, and requires an explicit irreversible declaration when rollback cannot be produced.
+**Rollback contract**: Generated migrations carry both upgrade and rollback sections. dbwarden emits executable rollback when it is safe, refuses placeholder rollback by default, and requires an explicit irreversible declaration when rollback cannot be produced.
 
 **Schema snapshots**: After every migration, a checksummed JSON snapshot is written to `.dbwarden/schemas/`. Snapshots power rename detection, offline diffing, and column-level comparisons without querying the live database.
 
@@ -257,7 +257,7 @@ Supported index features:
 
 ## Pre-deploy impact analysis
 
-Before applying schema changes, DBWarden can scan your codebase to identify what will be affected. It uses AST analysis with a grep fallback, so results reflect actual code structure rather than text matches.
+Before applying schema changes, dbwarden can scan your codebase to identify what will be affected. It uses AST analysis with a grep fallback, so results reflect actual code structure rather than text matches.
 
 ```bash
 dbwarden check-impact 0042 --database primary
@@ -364,7 +364,7 @@ Schema layer is complete with `MdbTableMeta` / `MdbColumnMeta` and `mdb.field()`
 
 ## Official plugins
 
-DBWarden features a plugin system with three trust tiers (official, verified, community). Official plugins extend core with features that were previously built-in, now maintained independently:
+dbwarden features a plugin system with three trust tiers (official, verified, community). Official plugins extend core with features that were previously built-in, now maintained independently:
 
 | Plugin | PyPI | Purpose |
 |---|---|---|
@@ -386,12 +386,12 @@ MIT
 
 ---
 
-DBWarden is built for teams that want declarative, reviewable, reproducible database changes, derived from the models they already maintain, not from migration scripts they have to write.
+dbwarden is built for teams that want declarative, reviewable, reproducible database changes, derived from the models they already maintain, not from migration scripts they have to write.
 
 ## Next Steps
 
 - Start with [Features](features.md)
 - Follow the guides in [Get Started](getting-started/setup.md)
 - Explore [Cookbook & Examples](cookbook/index.md)
-- Browse [Plugins](plugins/) to extend DBWarden's capabilities
+- Browse [Plugins](plugins/) to extend dbwarden's capabilities
 - Use [CLI Reference](cli-reference.md) as command lookup

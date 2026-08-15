@@ -1,6 +1,6 @@
 # Checksum Integrity
 
-DBWarden stores a SHA-256 checksum of each migration file at apply time. On subsequent runs, it recalculates the checksum and compares. A mismatch means the file changed after it was applied.
+dbwarden stores a SHA-256 checksum of each migration file at apply time. On subsequent runs, it recalculates the checksum and compares. A mismatch means the file changed after it was applied.
 
 ## What checksums protect against
 
@@ -21,7 +21,7 @@ The migration file was modified after it was applied.
 Use 'dbwarden history --database primary' to inspect applied migrations.
 ```
 
-This error blocks `migrate` and `status` from running. DBWarden will not proceed while a checksum is inconsistent.
+This error blocks `migrate` and `status` from running. dbwarden will not proceed while a checksum is inconsistent.
 
 ## Repeatable migrations
 
@@ -87,7 +87,7 @@ Never. A checksum mismatch means recorded history diverges from what is on disk.
 
 ## Schema snapshot checksums
 
-DBWarden also writes a **schema snapshot** after each migration:
+dbwarden also writes a **schema snapshot** after each migration:
 a JSON file at `.dbwarden/schemas/<migration_id>.schema.json`. Each
 snapshot contains a `checksum` field computed from the full snapshot
 content via SHA-256, plus a `previous_checksum` field linking it to

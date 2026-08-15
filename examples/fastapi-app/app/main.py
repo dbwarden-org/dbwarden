@@ -34,8 +34,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="DBWarden FastAPI Example",
-    description="Demonstrates FastAPI integration with DBWarden",
+    title="dbwarden FastAPI Example",
+    description="Demonstrates FastAPI integration with dbwarden",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -53,7 +53,7 @@ app.include_router(DBWardenRouter(), prefix="/db")
 @app.get("/")
 async def root():
     return {
-        "message": "DBWarden FastAPI Example",
+        "message": "dbwarden FastAPI Example",
         "docs": "/docs",
         "health": "/health/",
     }

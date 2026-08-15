@@ -1,8 +1,8 @@
-# This is the DBWarden configuration file.
+# This is the dbwarden configuration file.
 # It is loaded by the CLI when you run `dbwarden` commands from this directory.
 #
 # The filename "dbwarden.py" is the convention: it tells the CLI
-# "this is the project root." DBWarden uses a sandboxed loader to
+# "this is the project root." dbwarden uses a sandboxed loader to
 # import it safely without conflicting with the installed package.
 
 from dbwarden import DbwardenDatabase
@@ -18,7 +18,7 @@ class Primary(DbwardenDatabase):
     # used when you omit --database from CLI commands.
     default = True
 
-    # The SQLAlchemy backend type. DBWarden uses this to generate
+    # The SQLAlchemy backend type. dbwarden uses this to generate
     # backend-specific DDL for PostgreSQL.
     database_type = "postgresql"
 
@@ -27,6 +27,6 @@ class Primary(DbwardenDatabase):
     database_url_sync = "postgresql://user:password@localhost:5432/primary"
 
     # Dotted paths to Python modules containing SQLAlchemy model
-    # classes. DBWarden discovers them by scanning these modules
+    # classes. dbwarden discovers them by scanning these modules
     # and their parent packages for DeclarativeBase subclasses.
     model_paths = ["app"]

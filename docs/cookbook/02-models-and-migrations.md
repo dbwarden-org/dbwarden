@@ -168,14 +168,14 @@ DROP TABLE products
 DROP TABLE posts
 ```
 
-> **Note:** The example uses SQLite, which has limited DDL support. With PostgreSQL, DBWarden generates additional features:
+> **Note:** The example uses SQLite, which has limited DDL support. With PostgreSQL, dbwarden generates additional features:
 > - **`CREATE INDEX IF NOT EXISTS ...`**: from `IndexSpec` entries in `class Meta`
 > - **`COMMENT ON TABLE ...`**: from `Meta.comment` attributes
 > - **`CONSTRAINT ... CHECK (...)`**: from `Meta.checks`
 > - **`server_default`** expressions rendered as native SQL defaults
 > - Inline `REFERENCES` become table-level `FOREIGN KEY` constraints
 >
-> The generated SQL is always backend-specific. DBWarden adapts to the `database_type` configured in `dbwarden.py`.
+> The generated SQL is always backend-specific. dbwarden adapts to the `database_type` configured in `dbwarden.py`.
 
 ### Reading the Generated SQL
 
@@ -198,7 +198,7 @@ Note that with this SQLite backend the table order differs from the order in our
 
 **`-- rollback`**: Applied when you run `dbwarden rollback`
 
-1. Drops tables. Order may vary by backend; DBWarden handles dependency ordering automatically.
+1. Drops tables. Order may vary by backend; dbwarden handles dependency ordering automatically.
 
 ### Auto-generated Migration Name
 
@@ -216,7 +216,7 @@ The naming pattern is:
 
 ### PostgreSQL-Specific Model Metadata
 
-When your `database_type` is `"postgresql"`, DBWarden supports PostgreSQL-specific table and column metadata. The following model shows tablespace, fillfactor, identity columns, and column compression:
+When your `database_type` is `"postgresql"`, dbwarden supports PostgreSQL-specific table and column metadata. The following model shows tablespace, fillfactor, identity columns, and column compression:
 
 ```python
 from dbwarden.databases.pgsql import PGTableMeta, PGColumnMeta, pg
@@ -336,7 +336,7 @@ This prints the rollback SQL to stdout. Useful for quickly verifying what a roll
 
 ## Key Takeaways
 
-- DBWarden generates explicit, reviewable SQL: no hidden runtime behavior
+- dbwarden generates explicit, reviewable SQL: no hidden runtime behavior
 - Every migration has both `-- upgrade` and `-- rollback` sections
 - `class Meta(TableMeta)` is where table-level metadata (comments, indexes, checks) lives
 - `IndexSpec` produces named `CREATE INDEX` statements; always prefer named indexes

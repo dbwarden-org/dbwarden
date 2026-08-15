@@ -1,11 +1,11 @@
 ---
-description: 'Get started with DBWarden: initialize your project, define your database configuration,
+description: 'Get started with dbwarden: initialize your project, define your database configuration,
   and learn the migration workflow from model changes to applied SQL.'
 ---
 
 # First Steps
 
-This walkthrough is the foundation of the DBWarden workflow.
+This walkthrough is the foundation of the dbwarden workflow.
 
 The goal is not just to run commands, but to understand why each step exists and how it fits the migration lifecycle.
 
@@ -20,7 +20,7 @@ This creates:
 - a migrations directory structure
 - a declarative Python configuration scaffold (`dbwarden.py`)
 
-Why it matters: DBWarden expects a project-local migration layout and config source so migration behavior is deterministic per repository.
+Why it matters: dbwarden expects a project-local migration layout and config source so migration behavior is deterministic per repository.
 
 ## Step 2: Define one explicit database entry
 
@@ -37,11 +37,11 @@ class Primary(DbwardenDatabase):
     model_tables = ["users"]
 ```
 
-Why it matters: DBWarden resolves migration targets from explicit typed entries, not inferred environment state. The equivalent `database_config(...)` function API remains supported and may appear in plugin integrations.
+Why it matters: dbwarden resolves migration targets from explicit typed entries, not inferred environment state. The equivalent `database_config(...)` function API remains supported and may appear in plugin integrations.
 
 ## Step 3: Add SQLAlchemy models
 
-DBWarden uses model metadata to generate migration SQL. A minimal model example:
+dbwarden uses model metadata to generate migration SQL. A minimal model example:
 
 ```python
 from sqlalchemy import DateTime, Integer, String
@@ -69,7 +69,7 @@ Why it matters: model metadata is the input to `make-migrations`.
 $ dbwarden make-migrations -d "create users table" --database primary
 ```
 
-DBWarden creates a versioned SQL file under `migrations/primary/`.
+dbwarden creates a versioned SQL file under `migrations/primary/`.
 
 Why it matters: this file is now part of your code review process and deployment artifact.
 
@@ -91,7 +91,7 @@ Why it matters: rollback quality determines recovery quality.
 $ dbwarden migrate --database primary
 ```
 
-During execution DBWarden:
+During execution dbwarden:
 
 1. resolves config and target database
 2. acquires migration lock

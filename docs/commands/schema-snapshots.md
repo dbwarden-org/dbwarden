@@ -4,7 +4,7 @@ Schema snapshots are JSON files that record the full DDL state of a database at 
 
 ## How they work
 
-After each versioned migration is successfully applied by `migrate`, DBWarden extracts the complete schema from the live database and writes it as a `<migration_id>.schema.json` file:
+After each versioned migration is successfully applied by `migrate`, dbwarden extracts the complete schema from the live database and writes it as a `<migration_id>.schema.json` file:
 
 ```
 .dbwarden/schemas/

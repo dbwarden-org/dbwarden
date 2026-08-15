@@ -36,7 +36,7 @@ ALTER SEQUENCE order_number_seq MAXVALUE 9999999;
 ALTER SEQUENCE order_number_seq NO CYCLE;
 ```
 
-DBWarden detects changes to any sequence option and emits `ALTER SEQUENCE` instead of drop+create when feasible.
+dbwarden detects changes to any sequence option and emits `ALTER SEQUENCE` instead of drop+create when feasible.
 
 ## Options
 

@@ -1,6 +1,6 @@
 # 8. Multi-Database & Configuration
 
-DBWarden supports managing multiple databases in a single project; each with its own migration directory, lock, tracking table, and model paths. You can mix PostgreSQL, MySQL, and ClickHouse backends in the same codebase.
+dbwarden supports managing multiple databases in a single project; each with its own migration directory, lock, tracking table, and model paths. You can mix PostgreSQL, MySQL, and ClickHouse backends in the same codebase.
 
 For complete documentation see the [Multi-Database Configuration](../configuration/multi-database.md) reference.
 

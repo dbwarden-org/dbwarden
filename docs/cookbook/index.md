@@ -1,10 +1,10 @@
 # Cookbook & Examples
 
-Practical, runnable examples that walk through the entire DBWarden workflow: from project setup through advanced observability patterns.
+Practical, runnable examples that walk through the entire dbwarden workflow: from project setup through advanced observability patterns.
 
 ## How to Use
 
-Each cookbook section links to code under the [`examples/`](https://github.com/emiliano-gandini-outeda/DBWarden/tree/main/examples) directory. The **core examples** (sections 1-7) use SQLite and require only `uv add dbwarden`. Advanced examples may need Docker for PostgreSQL, ClickHouse, or Prometheus.
+Each cookbook section links to code under the [`examples/`](https://github.com/emiliano-gandini-outeda/dbwarden/tree/main/examples) directory. The **core examples** (sections 1-7) use SQLite and require only `uv add dbwarden`. Advanced examples may need Docker for PostgreSQL, ClickHouse, or Prometheus.
 
 ```
 examples/
@@ -45,7 +45,7 @@ Each section in the cookbook explains what these commands do, what SQL they prod
 
 ## Database-Specific Examples
 
-The core examples use SQLite for zero-dependency setup. For production, DBWarden fully supports PostgreSQL, MySQL, and ClickHouse; each with its own deep-dive guide and dedicated example patterns.
+The core examples use SQLite for zero-dependency setup. For production, dbwarden fully supports PostgreSQL, MySQL, and ClickHouse; each with its own deep-dive guide and dedicated example patterns.
 
 ### PostgreSQL
 
@@ -83,7 +83,7 @@ class Legacy(DbwardenDatabase):
 
 ### ClickHouse
 
-ClickHouse is supported with partial round-trip (read schema and auto-generate most DDL). DBWarden uses the ClickHouse HTTP client directly for DDL execution and supports full engine metadata via `class Meta(CHTableMeta)` with `ChEngineSpec`, `ProjectionSpec`, and `CHColumnMeta`.
+ClickHouse is supported with partial round-trip (read schema and auto-generate most DDL). dbwarden uses the ClickHouse HTTP client directly for DDL execution and supports full engine metadata via `class Meta(CHTableMeta)` with `ChEngineSpec`, `ProjectionSpec`, and `CHColumnMeta`.
 
 See the [ClickHouse Deep Dive](../databases/clickhouse/index.md) for full details on materialized views, projections, dictionaries, replicated engines, and ClickHouse-specific metadata.
 

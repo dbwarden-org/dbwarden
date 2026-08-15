@@ -1,6 +1,6 @@
-# Core DBWarden Workflow
+# Core dbwarden Workflow
 
-A progressive example demonstrating the core DBWarden migration workflow.
+A progressive example demonstrating the core dbwarden migration workflow.
 
 ## Prerequisites
 

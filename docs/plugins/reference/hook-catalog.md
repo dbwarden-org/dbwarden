@@ -1,5 +1,5 @@
 ---
-description: Reference for DBWarden plugin hooks.
+description: Reference for dbwarden plugin hooks.
 ---
 
 # Hook Catalog

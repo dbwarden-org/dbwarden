@@ -145,7 +145,7 @@ PgIndexSpec("ix_logs_created_at", ["created_at"],
 
 ## REINDEX
 
-DBWarden does not auto-generate `REINDEX` statements. When an index becomes corrupted or bloated, recreate it manually:
+dbwarden does not auto-generate `REINDEX` statements. When an index becomes corrupted or bloated, recreate it manually:
 
 ```sql
 REINDEX INDEX CONCURRENTLY ix_users_email;
@@ -166,7 +166,7 @@ Without `NULLS NOT DISTINCT`, a unique index allows multiple NULL values (Postgr
 
 ## Unique Constraint vs Unique Index
 
-For declaring uniqueness, DBWarden offers two paths:
+For declaring uniqueness, dbwarden offers two paths:
 
 | Path | API | Use case |
 |------|-----|----------|

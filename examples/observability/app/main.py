@@ -19,7 +19,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="DBWarden Observability Example",
+    title="dbwarden Observability Example",
     lifespan=lifespan,
 )
 
@@ -55,4 +55,4 @@ app.include_router(DBWardenHealthRouter(), prefix="/health")
 
 @app.get("/")
 async def root():
-    return {"message": "DBWarden Observability Example"}
+    return {"message": "dbwarden Observability Example"}

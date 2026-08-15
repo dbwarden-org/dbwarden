@@ -1,6 +1,6 @@
 # Round-Trip Verification
 
-Round-trip verification checks whether DBWarden can extract a database schema, represent it as models, generate SQL from those models, and arrive back at the same schema.
+Round-trip verification checks whether dbwarden can extract a database schema, represent it as models, generate SQL from those models, and arrive back at the same schema.
 
 It is a consistency check between extractors, model metadata, diffing, and emitters.
 
@@ -61,7 +61,7 @@ ClickHouse examples:
 - Dictionaries
 - RBAC objects
 
-Round-trip verification proves that DBWarden does not lose those details when moving between database state, model state, and SQL.
+Round-trip verification proves that dbwarden does not lose those details when moving between database state, model state, and SQL.
 
 ## It Is Not a Full Mathematical Proof
 
@@ -92,7 +92,7 @@ CREATE INDEX idx_accounts_tenant_email
     ON accounts USING btree (tenant_id, email);
 ```
 
-DBWarden extracts the schema:
+dbwarden extracts the schema:
 
 ```bash
 dbwarden generate-models --database primary --output generated_models.py
@@ -129,7 +129,7 @@ dbwarden migrate --database primary
 dbwarden diff --database primary --out table
 ```
 
-The expected diff is empty. If DBWarden emits a migration every time from the generated model, some part of extraction, canonicalization, or emission is losing information.
+The expected diff is empty. If dbwarden emits a migration every time from the generated model, some part of extraction, canonicalization, or emission is losing information.
 
 ## ClickHouse Example
 

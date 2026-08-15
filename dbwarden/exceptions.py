@@ -1,5 +1,5 @@
 class DBWardenError(Exception):
-    """Base exception for DBWarden errors."""
+    """Base exception for dbwarden errors."""
 
     pass
 
@@ -17,7 +17,7 @@ class ConfigurationError(DBWardenError):
 
 
 class DBWardenConfigError(ConfigurationError):
-    """Raised when DBWarden-specific model/config metadata is invalid."""
+    """Raised when dbwarden-specific model/config metadata is invalid."""
 
     pass
 

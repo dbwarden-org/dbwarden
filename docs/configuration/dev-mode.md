@@ -198,7 +198,7 @@ Some PostgreSQL features aren't available in SQLite:
 
 ### Translation
 
-DBWarden **doesn't translate** SQL between databases. Your migrations should work on both SQLite and PostgreSQL.
+dbwarden **doesn't translate** SQL between databases. Your migrations should work on both SQLite and PostgreSQL.
 
 **Approach 1:** Write portable SQL
 

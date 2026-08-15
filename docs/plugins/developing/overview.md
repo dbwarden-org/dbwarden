@@ -1,17 +1,17 @@
 ---
-description: Overview of DBWarden plugin development.
+description: Overview of dbwarden plugin development.
 ---
 
 # Plugin Development Overview
 
-A DBWarden plugin is a Python package with one entry point in the `dbwarden.plugins` group. The entry point points to a `setup(registry)` callable that registers hooks or object handlers.
+A dbwarden plugin is a Python package with one entry point in the `dbwarden.plugins` group. The entry point points to a `setup(registry)` callable that registers hooks or object handlers.
 
 ```toml
 [project.entry-points."dbwarden.plugins"]
 example = "dbwarden_example:setup"
 ```
 
-`setup` is defined in the package's `__init__.py`, so the entry point is `dbwarden_example:setup` (not `...plugin:setup`). Hook functions live at module top level, and heavy or DBWarden-specific imports go inside the function body so importing the package stays side-effect-free:
+`setup` is defined in the package's `__init__.py`, so the entry point is `dbwarden_example:setup` (not `...plugin:setup`). Hook functions live at module top level, and heavy or dbwarden-specific imports go inside the function body so importing the package stays side-effect-free:
 
 ```python
 # src/dbwarden_example/__init__.py
@@ -42,12 +42,12 @@ A single package may register both.
 
 ## Lifecycle
 
-1. DBWarden discovers entry-point metadata (name, version, value) without importing your code.
-2. DBWarden classifies the distribution into a trust tier by name.
-3. If trust rules allow loading, DBWarden imports the entry point and calls `setup(registry)`.
+1. dbwarden discovers entry-point metadata (name, version, value) without importing your code.
+2. dbwarden classifies the distribution into a trust tier by name.
+3. If trust rules allow loading, dbwarden imports the entry point and calls `setup(registry)`.
 4. `setup(registry)` registers value hooks and/or object handlers.
 
-The `registry` argument is a `PluginRegistrar` bound to your distribution name, so DBWarden attributes every hook to your plugin (used for conflict reporting and `plugin list`).
+The `registry` argument is a `PluginRegistrar` bound to your distribution name, so dbwarden attributes every hook to your plugin (used for conflict reporting and `plugin list`).
 
 ## Naming Conventions
 
@@ -89,5 +89,5 @@ dbwarden-example/
 ## Rules
 
 - **No import-time side effects.** Registering a hook must happen inside `setup()`, never at module import. Importing your package should register nothing.
-- **Defer heavy imports to call time.** Value hooks import their DBWarden internals (and optional deps like FastAPI or drivers) inside the hook function body; object plugins import their `handler` module inside `setup()`. That way merely importing the package pulls in nothing heavy.
+- **Defer heavy imports to call time.** Value hooks import their dbwarden internals (and optional deps like FastAPI or drivers) inside the hook function body; object plugins import their `handler` module inside `setup()`. That way merely importing the package pulls in nothing heavy.
 - Match documented hook signatures exactly; see the [hook catalog](../reference/hook-catalog.md).

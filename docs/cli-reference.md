@@ -1,6 +1,6 @@
 # CLI Reference
 
-Pure command lookup for DBWarden CLI.
+Pure command lookup for dbwarden CLI.
 
 ## Syntax
 

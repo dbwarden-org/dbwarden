@@ -1,5 +1,5 @@
 ---
-description: Use DBWarden locally with dev mode, SQLite translation, reverse-engineering,
+description: Use dbwarden locally with dev mode, SQLite translation, reverse-engineering,
   diffing, safety checks, and offline migrations.
 ---
 
@@ -40,7 +40,7 @@ Migration applied successfully
 
 ## SQLite Translation
 
-Using SQLite in dev mode is common, but not every type or default translates perfectly from server databases. DBWarden handles this by translating backend-specific types and warning when fidelity is reduced.
+Using SQLite in dev mode is common, but not every type or default translates perfectly from server databases. dbwarden handles this by translating backend-specific types and warning when fidelity is reduced.
 
 If you want those warnings to become hard failures, use:
 

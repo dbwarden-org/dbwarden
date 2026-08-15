@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 
-# Community plugins that passed DBWarden's verified-plugin review standard.
+# Community plugins that passed dbwarden's verified-plugin review standard.
 # Values are minimum verified versions. Future releases may extend this schema
 # with upper bounds or explicit exclusions if verification needs tighter pinning.
 #
@@ -17,7 +17,7 @@ VERIFIED_PLUGINS: dict[str, str] = {}
 class VerifiedMetadata:
     """What verification recorded about a plugin beyond its version floor.
 
-    ``deep_imports`` is the plugin's declared use of DBWarden modules outside the
+    ``deep_imports`` is the plugin's declared use of dbwarden modules outside the
     stable surface (`dbwarden.plugin`, `dbwarden.exceptions`,
     `dbwarden.engine.core`), taken from the verification issue. Plugins may import
     anything, so this is not a restriction: it is the record that makes the

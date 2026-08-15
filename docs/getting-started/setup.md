@@ -1,11 +1,11 @@
 ---
-description: Set up DBWarden in your project, install dependencies, initialize the project,
+description: Set up dbwarden in your project, install dependencies, initialize the project,
   define your first database, and verify that the configuration loads correctly.
 ---
 
 # Setup
 
-This guide shows the initial project setup for DBWarden. By the end, you will have DBWarden installed, a project-local config file, and one verified database entry.
+This guide shows the initial project setup for dbwarden. By the end, you will have dbwarden installed, a project-local config file, and one verified database entry.
 
 ## Requirements
 
@@ -13,7 +13,7 @@ This guide shows the initial project setup for DBWarden. By the end, you will ha
 - A project that uses SQLAlchemy models, or plans to
 - A supported backend: PostgreSQL, MySQL, MariaDB, SQLite, or ClickHouse
 
-## Install DBWarden
+## Install dbwarden
 
 Install the base package:
 
@@ -39,12 +39,12 @@ uv add "dbwarden[fastapi,metrics,sandbox]"
 
 ```text
 $ dbwarden init
-Initialized DBWarden project structure
+Initialized dbwarden project structure
 Created migrations directory
 Created dbwarden.py
 ```
 
-`init` creates the local migration layout and a declarative config scaffold. It is safe to run again, DBWarden will not destroy existing `database_config(...)` definitions.
+`init` creates the local migration layout and a declarative config scaffold. It is safe to run again, dbwarden will not destroy existing `database_config(...)` definitions.
 
 ## Create the Configuration File
 
@@ -129,7 +129,7 @@ If your application also uses async SQLAlchemy sessions, you can define an async
 database_url_async="postgresql+asyncpg://user:password@localhost:5432/main"
 ```
 
-DBWarden keeps sync and async URLs separate so the CLI and FastAPI runtime can share one config source without forcing a single driver choice.
+dbwarden keeps sync and async URLs separate so the CLI and FastAPI runtime can share one config source without forcing a single driver choice.
 
 ### Step 6: Point to your models
 
@@ -137,7 +137,7 @@ DBWarden keeps sync and async URLs separate so the CLI and FastAPI runtime can s
 model_paths=["app.models"]
 ```
 
-This tells DBWarden where to discover SQLAlchemy models. In multi-database projects, explicit `model_paths` are required.
+This tells dbwarden where to discover SQLAlchemy models. In multi-database projects, explicit `model_paths` are required.
 
 ### Step 7: Filter tables for this database
 
@@ -145,7 +145,7 @@ This tells DBWarden where to discover SQLAlchemy models. In multi-database proje
 model_tables=["users", "posts", "comments"]
 ```
 
-Optional. When set, DBWarden only includes the listed tables from the discovered models. All other discovered tables are ignored.
+Optional. When set, dbwarden only includes the listed tables from the discovered models. All other discovered tables are ignored.
 
 This is useful when multiple databases share the same `model_paths` but own different subsets of tables:
 
@@ -200,13 +200,13 @@ Dev database type: sqlite
 Dev database URL: sqlite:///./development.db
 ```
 
-If this command works, DBWarden can resolve and validate your config.
+If this command works, dbwarden can resolve and validate your config.
 
 ## Common Problems
 
 ### `No configuration found`
 
-DBWarden could not locate a config source. Make sure your project contains at least one discovered file with a concrete `DbwardenDatabase` subclass or a `database_config(...)` call. `dbwarden.py` is the default convention, but it does not have to be the only location.
+dbwarden could not locate a config source. Make sure your project contains at least one discovered file with a concrete `DbwardenDatabase` subclass or a `database_config(...)` call. `dbwarden.py` is the default convention, but it does not have to be the only location.
 
 ### `Exactly one default=True required`
 

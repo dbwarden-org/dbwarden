@@ -45,7 +45,7 @@ PLUGIN_GROUP = "dbwarden.plugins"
 CONSENT_PATH = Path(".dbwarden") / "consent.toml"
 LOCK_PATH = Path(".dbwarden") / "plugins.lock"
 
-# The plugin contract's own version, independent of DBWarden's release version.
+# The plugin contract's own version, independent of dbwarden's release version.
 # Bump it when a change would make an existing plugin behave incorrectly rather
 # than fail loudly: a hook signature change, different semantics for a registered
 # handler, a rename on the stable surface.
@@ -60,9 +60,9 @@ PLUGIN_API_ATTR = "DBWARDEN_PLUGIN_API"
 class PluginApiMismatchError(RuntimeError):
     def __init__(self, dist_name: str, declared: Any) -> None:
         super().__init__(
-            f"Plugin '{dist_name}' targets DBWarden plugin API version {declared}, "
-            f"but this DBWarden provides version {PLUGIN_API_VERSION}. "
-            f"Upgrade the plugin, or pin DBWarden to a version that provides "
+            f"Plugin '{dist_name}' targets dbwarden plugin API version {declared}, "
+            f"but this dbwarden provides version {PLUGIN_API_VERSION}. "
+            f"Upgrade the plugin, or pin dbwarden to a version that provides "
             f"API {declared}."
         )
         self.dist_name = dist_name
@@ -953,7 +953,7 @@ def _load_plugin_entry_point(ep: EntryPoint, dist_name: str) -> None:
 # install and provenance machinery the CLI drives (`add_plugin`,
 # `verify_official_provenance`, the consent and lockfile helpers); those stay
 # importable but carry no stability promise, because promising them would mean
-# freezing how DBWarden installs things.
+# freezing how dbwarden installs things.
 #
 # tests/test_plugin_api_surface.py asserts this list exactly. Adding a name here
 # is a promise; removing one is a breaking change.

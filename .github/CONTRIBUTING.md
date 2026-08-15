@@ -1,6 +1,6 @@
-# Contributing to DBWarden
+# Contributing to dbwarden
 
-Thank you for your interest in contributing to DBWarden! This guide outlines the process for contributing to the project.
+Thank you for your interest in contributing to dbwarden! This guide outlines the process for contributing to the project.
 
 ## Table of Contents
 
@@ -307,7 +307,7 @@ Instances of abusive, harassing, or otherwise unacceptable behavior may be repor
 
 ## License
 
-By contributing to DBWarden, you agree that your contributions will be licensed under the project's MIT License.
+By contributing to dbwarden, you agree that your contributions will be licensed under the project's MIT License.
 
 ---
 

@@ -1,10 +1,10 @@
 ---
-description: Public ordering anchors for DBWarden object plugins.
+description: Public ordering anchors for dbwarden object plugins.
 ---
 
 # Ordering Anchors
 
-Object plugins position their SQL using public **anchors**, not private statement-order integers. At registration, DBWarden validates your `OrderingConstraint` and derives the internal `statement_order` from the anchors for you.
+Object plugins position their SQL using public **anchors**, not private statement-order integers. At registration, dbwarden validates your `OrderingConstraint` and derives the internal `statement_order` from the anchors for you.
 
 ## The `Anchor` Enum
 
@@ -31,7 +31,7 @@ class OrderingConstraint:
 ```
 
 - `after` / `before` place the handler relative to core milestones.
-- `after_object` / `before_object` place it relative to other object handlers by their `object_type`, forming a DAG that DBWarden topologically sorts.
+- `after_object` / `before_object` place it relative to other object handlers by their `object_type`, forming a DAG that dbwarden topologically sorts.
 
 ## Examples
 
@@ -67,7 +67,7 @@ ordering = OrderingConstraint(after_object=("role",))
 
 ## Failure Modes
 
-DBWarden rejects invalid ordering at registration or run time by raising `OrderingError`:
+dbwarden rejects invalid ordering at registration or run time by raising `OrderingError`:
 
 - **Impossible anchor pair**, `after` an anchor that comes at or after `before`:
 
@@ -92,4 +92,4 @@ DBWarden rejects invalid ordering at registration or run time by raising `Orderi
 
 ## Why `StatementOrder` Is Private
 
-The internal `StatementOrder` integers (and their exact values) are an implementation detail and are renumbered as core evolves. Anchors are the **public, stable contract**. Never read or set `statement_order` yourself; declare `ordering` with anchors and let DBWarden compute the rest.
+The internal `StatementOrder` integers (and their exact values) are an implementation detail and are renumbered as core evolves. Anchors are the **public, stable contract**. Never read or set `statement_order` yourself; declare `ordering` with anchors and let dbwarden compute the rest.

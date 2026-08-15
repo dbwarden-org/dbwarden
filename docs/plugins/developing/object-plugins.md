@@ -1,14 +1,14 @@
 ---
-description: Build DBWarden object plugins that participate in schema diffing.
+description: Build dbwarden object plugins that participate in schema diffing.
 ---
 
 # Object Plugins
 
-An object plugin adds a database object **type** to DBWarden's schema convergence pipeline. Core drives your handler through the same extract → canonicalize → diff → emit flow it uses for tables, so the object is diffed against the live database and emitted in the right SQL order.
+An object plugin adds a database object **type** to dbwarden's schema convergence pipeline. Core drives your handler through the same extract → canonicalize → diff → emit flow it uses for tables, so the object is diffed against the live database and emitted in the right SQL order.
 
 ## Scope Test
 
-An object plugin is the right tool when the feature is **database state declared by the model (or config) and converged by DBWarden**, not a one-off script. Good candidates: extensions, roles, grants, policies, triggers, functions, sequences, and backend-specific declarative objects. If the thing you want isn't schema state DBWarden should diff and emit, use a value hook or a migration instead.
+An object plugin is the right tool when the feature is **database state declared by the model (or config) and converged by dbwarden**, not a one-off script. Good candidates: extensions, roles, grants, policies, triggers, functions, sequences, and backend-specific declarative objects. If the thing you want isn't schema state dbwarden should diff and emit, use a value hook or a migration instead.
 
 ## The `ObjectHandler` Contract
 
@@ -100,7 +100,7 @@ class PgExtensionHandler:
 
 ### 6. Emit SQL
 
-`emit` turns each `Op` into ordered SQL, branching on `op.object_type`. Use `self.statement_order`, which DBWarden sets from your `ordering` anchors (see below):
+`emit` turns each `Op` into ordered SQL, branching on `op.object_type`. Use `self.statement_order`, which dbwarden sets from your `ordering` anchors (see below):
 
 ```python
     def emit(self, op, db_name=None, **kwargs):
@@ -165,9 +165,9 @@ To stay loadable against cores that predate the config-key registry, guard the c
 
 ## Ordering And The DAG
 
-DBWarden orders all object handlers into a single directed acyclic graph, then emits their statements in that order.
+dbwarden orders all object handlers into a single directed acyclic graph, then emits their statements in that order.
 
-- **Anchors** place a handler relative to core milestones. At registration, DBWarden validates your `OrderingConstraint` and derives a private `statement_order` from the anchors: you never touch the integers.
+- **Anchors** place a handler relative to core milestones. At registration, dbwarden validates your `OrderingConstraint` and derives a private `statement_order` from the anchors: you never touch the integers.
 - **Object-to-object** constraints (`after_object`, `before_object`) place your handler relative to *other* handlers by `object_type`:
 
 ```python
@@ -195,12 +195,12 @@ The module sits under `dbwarden.engine.core`, so importing from it satisfies the
 
 `object_type` is the registration key. Two *different* plugins registering the same `object_type` raises `ObjectHandlerConflictError`. A plugin handler and a core handler with the same type is allowed: the plugin handler overrides core, which is how official plugins replace built-in fallbacks (e.g. the core `CREATE EXTENSION` preamble).
 
-Overriding is a real transfer of responsibility, so DBWarden announces it rather than swapping silently:
+Overriding is a real transfer of responsibility, so dbwarden announces it rather than swapping silently:
 
 ```
 WARNING  dbwarden.registry - Plugin 'dbwarden-pgsql-rbac' overrides the built-in
 handler for object type 'role'. Migration SQL for 'role' now comes from the
-plugin, not DBWarden core.
+plugin, not dbwarden core.
 ```
 
 The warning is emitted once per plugin and object type per run. If you see one you did not expect, a plugin has taken over DDL generation for that object type, and the SQL in your migrations for it is the plugin's, not core's. Plugins requesting the Verified tier must declare their overrides in the verification issue.

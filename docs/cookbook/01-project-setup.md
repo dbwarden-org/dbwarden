@@ -2,7 +2,7 @@
 
 ## What You'll Learn
 
-- How to initialize a DBWarden project with `dbwarden init`
+- How to initialize a dbwarden project with `dbwarden init`
 - How configuration is structured via `DbwardenDatabase` classes
 - How to inspect your loaded configuration
 
@@ -18,7 +18,7 @@ cd examples/core/
 bash scripts/01-setup.sh
 ```
 
-The `dbwarden init` command creates the directory structure DBWarden expects:
+The `dbwarden init` command creates the directory structure dbwarden expects:
 
 ```
 migrations/
@@ -69,14 +69,14 @@ Configuration:
       Migrations Dir: migrations/primary
 ```
 
-This confirms DBWarden has discovered and loaded your configuration. The `(default)` marker means `--database` can be omitted when targeting this database.
+This confirms dbwarden has discovered and loaded your configuration. The `(default)` marker means `--database` can be omitted when targeting this database.
 
 ## What Happens Under the Hood
 
 When you import `dbwarden` and define a concrete `DbwardenDatabase` subclass:
 
-1. The concrete class is registered in DBWarden's internal registry
-2. On first CLI command, DBWarden discovers `dbwarden.py` via AST scanning
+1. The concrete class is registered in dbwarden's internal registry
+2. On first CLI command, dbwarden discovers `dbwarden.py` via AST scanning
 3. It imports the module and registers each concrete database class
 4. It validates uniqueness, default rules, and model path resolution
 5. The resolved configuration is cached for the session
@@ -84,7 +84,7 @@ When you import `dbwarden` and define a concrete `DbwardenDatabase` subclass:
 ## Key Takeaways
 
 - `dbwarden init` creates the directory skeleton: run it once per project
-- `dbwarden config` shows what DBWarden actually resolved (useful for debugging)
+- `dbwarden config` shows what dbwarden actually resolved (useful for debugging)
 - `DbwardenDatabase` is the default configuration API; `database_config()` remains a supported function alternative
 - `model_paths` controls which Python modules are scanned for models
 - We chose SQLite here so the example runs with zero external services

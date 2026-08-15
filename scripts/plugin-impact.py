@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Ask which plugins depend on a DBWarden module before you change it.
+"""Ask which plugins depend on a dbwarden module before you change it.
 
 Usage:
     python scripts/plugin-impact.py dbwarden.output

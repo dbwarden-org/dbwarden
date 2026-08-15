@@ -25,7 +25,7 @@ bash scripts/03-apply-inspect.sh
 $ dbwarden migrate --database primary
 ```
 
-When you run `migrate`, DBWarden:
+When you run `migrate`, dbwarden:
 
 1. Creates the metadata table (`_dbwarden_migrations`) if it doesn't exist
 2. Creates the lock table (`_dbwarden_lock`) if it doesn't exist
@@ -37,9 +37,9 @@ When you run `migrate`, DBWarden:
 8. Releases the lock
 
 ```
-[DBWarden] Applying primary__0001_create_core_tables...
-[DBWarden] Migration applied successfully (42ms)
-[DBWarden] All migrations applied. Pending: 0
+[dbwarden] Applying primary__0001_create_core_tables...
+[dbwarden] Migration applied successfully (42ms)
+[dbwarden] All migrations applied. Pending: 0
 ```
 
 ### Verify Status
@@ -81,8 +81,8 @@ $ dbwarden rollback --database primary --count 1
 Rollback executes the `-- rollback` section of the most recently applied migration. After rollback:
 
 ```
-[DBWarden] Rolling back primary__0001_create_core_tables...
-[DBWarden] Rollback complete
+[dbwarden] Rolling back primary__0001_create_core_tables...
+[dbwarden] Rollback complete
 ```
 
 ```bash
@@ -120,8 +120,8 @@ $ dbwarden downgrade --to 0000 --database primary
 `downgrade` is a bulk rollback: it rolls back all migrations down to (but not including) the target version. `--to 0000` rolls back everything.
 
 ```
-[DBWarden] Rolling back primary__0001_create_core_tables...
-[DBWarden] Downgrade complete. At version: 0000
+[dbwarden] Rolling back primary__0001_create_core_tables...
+[dbwarden] Downgrade complete. At version: 0000
 ```
 
 ### migrate vs rollback vs downgrade

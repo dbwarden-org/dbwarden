@@ -4,7 +4,7 @@
 
 PostgreSQL supports table-level and index-level storage parameters that control physical storage behaviour, autovacuum tuning, and performance characteristics.
 
-DBWarden tracks storage parameters through the `with_params` field on `PgIndexSpec` and table-level handlers.
+dbwarden tracks storage parameters through the `with_params` field on `PgIndexSpec` and table-level handlers.
 
 ## Table Storage Parameters
 

@@ -1,6 +1,6 @@
 # MySQL & MariaDB
 
-DBWarden treats MySQL (and its fork MariaDB) as **first-class backends**: every natively supported feature is reverse-engineered, diffed, and emitted as correct DDL.
+dbwarden treats MySQL (and its fork MariaDB) as **first-class backends**: every natively supported feature is reverse-engineered, diffed, and emitted as correct DDL.
 
 Database declarations use `DbwardenDatabase` subclasses by default. The
 equivalent `database_config(...)` function API remains supported for existing
@@ -273,7 +273,7 @@ MySQL and MariaDB DDL is **non-transactional**: each DDL statement implicitly co
 
 ### Column Type Changes
 
-Emits `ALTER TABLE t MODIFY COLUMN c newtype`. Unlike PostgreSQL, MySQL requires the full column definition on every `MODIFY COLUMN`. DBWarden handles this by re-emitting all column attributes (type, unsigned, nullable, default, comment, charset, collate, auto_increment) in a single statement:
+Emits `ALTER TABLE t MODIFY COLUMN c newtype`. Unlike PostgreSQL, MySQL requires the full column definition on every `MODIFY COLUMN`. dbwarden handles this by re-emitting all column attributes (type, unsigned, nullable, default, comment, charset, collate, auto_increment) in a single statement:
 
 ```sql
 ALTER TABLE users MODIFY COLUMN email VARCHAR(255) NOT NULL COMMENT 'User email';
@@ -285,7 +285,7 @@ Emits `ALTER TABLE t MODIFY COLUMN c type [NULL | NOT NULL]`, again with the ful
 
 ### Column Meta Changes
 
-When MySQL-specific column metadata changes (unsigned, charset, collate, on_update), DBWarden generates a full `MODIFY COLUMN` that preserves the column's type, nullable, default, comment, and autoincrement state:
+When MySQL-specific column metadata changes (unsigned, charset, collate, on_update), dbwarden generates a full `MODIFY COLUMN` that preserves the column's type, nullable, default, comment, and autoincrement state:
 
 ```sql
 ALTER TABLE users MODIFY COLUMN id INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Primary key';
@@ -305,7 +305,7 @@ MySQL table-level option changes generate individual `ALTER TABLE` statements:
 
 ### Auto-increment Lifecycle
 
-DBWarden supports toggling auto-increment on integer primary key columns. The `autoincrement` field in your model controls whether a column uses auto-increment:
+dbwarden supports toggling auto-increment on integer primary key columns. The `autoincrement` field in your model controls whether a column uses auto-increment:
 
 ```python
 class User(Base):
@@ -338,7 +338,7 @@ class User(Base):
 
 ### Comments
 
-Unlike PostgreSQL, MySQL has no `COMMENT ON` syntax. DBWarden generates the correct MySQL syntax:
+Unlike PostgreSQL, MySQL has no `COMMENT ON` syntax. dbwarden generates the correct MySQL syntax:
 
 ```sql
 -- Table comment
@@ -437,7 +437,7 @@ Generated output includes automatic detection of:
 
 ## Safety Classification
 
-DBWarden classifies migration changes using the `Safety` enum:
+dbwarden classifies migration changes using the `Safety` enum:
 
 ```python
 from dbwarden.engine.safety import Safety

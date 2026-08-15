@@ -9,7 +9,7 @@ Base = declarative_base()
 # ClickHouse-specific table metadata.  Controls the MergeTree
 # engine configuration, partitioning, ordering, TTL, projections,
 # and skip indexes, all of which are ClickHouse-native DDL
-# concepts that DBWarden translates into CREATE TABLE statements.
+# concepts that dbwarden translates into CREATE TABLE statements.
 #
 # ChEngineSpec     : MergeTree, ReplicatedMergeTree, etc.
 # ChIndexSpec      : skip indexes (bloom_filter, minmax, etc.)

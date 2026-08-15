@@ -53,7 +53,7 @@ def _ensure_settings_file(settings_path: Path, db_name: str) -> None:
 
 def init_cmd(database: str | None = None) -> None:
     """
-    Initialize DBWarden in current directory.
+    Initialize dbwarden in current directory.
 
     Creates the migrations directory and a Python settings config scaffold.
 
@@ -76,9 +76,9 @@ def init_cmd(database: str | None = None) -> None:
     logger.info(f"Created/updated configuration file: {settings_path}")
     success(f"Created/updated configuration file: {settings_path}")
     logger.info(
-        f"Initialized DBWarden migrations directory: {db_migrations_dir.absolute()}"
+        f"Initialized dbwarden migrations directory: {db_migrations_dir.absolute()}"
     )
-    success(f"DBWarden migrations directory created: {db_migrations_dir.absolute()}")
+    success(f"dbwarden migrations directory created: {db_migrations_dir.absolute()}")
 
     success_panel(
         "Next steps",

@@ -39,7 +39,7 @@ dependencies = [
 [project.urls]
 Homepage = "https://dbwarden.org/"
 Repository = "https://github.com/dbwarden-org/dbwarden"
-Documentation = "https://dbwarden.org/"
+Documentation = "https://docs.dbwarden.org/"
 "Bug Tracker" = "https://github.com/dbwarden-org/dbwarden/issues"
 
 [project.scripts]

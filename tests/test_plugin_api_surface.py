@@ -1,4 +1,4 @@
-"""Snapshot of the surface DBWarden promises to plugins.
+"""Snapshot of the surface dbwarden promises to plugins.
 
 Plugins may import anything from core, but only these names carry a stability
 promise: they change on a major version, with a deprecation cycle, and never by
@@ -175,7 +175,7 @@ def test_plugin_all_matches_snapshot() -> None:
 
     The module also holds the CLI's install and provenance machinery, which stays
     importable but is deliberately absent from `__all__`: promising it would mean
-    freezing how DBWarden installs plugins.
+    freezing how dbwarden installs plugins.
     """
     assert set(plugin.__all__) == set(PLUGIN_NAMES)
 

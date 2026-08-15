@@ -1,6 +1,6 @@
-# DBWarden Examples
+# dbwarden Examples
 
-Runnable example projects demonstrating DBWarden workflows.
+Runnable example projects demonstrating dbwarden workflows.
 Each directory maps to one or more sections in the cookbook docs
 at [`docs/cookbook/`](../docs/cookbook/index.md).
 

@@ -1,6 +1,6 @@
 # Observability
 
-DBWarden provides Prometheus metrics and structured JSON logging for monitoring and debugging.
+dbwarden provides Prometheus metrics and structured JSON logging for monitoring and debugging.
 
 ## Prometheus metrics
 
@@ -22,7 +22,7 @@ Set the `DBWARDEN_METRICS` environment variable to `true`:
 export DBWARDEN_METRICS=true
 ```
 
-When enabled, DBWarden instruments the `migrate` and `seed apply` commands with Prometheus metric recording. When disabled (or when `prometheus_client` is not installed), all metric functions are safe no-ops.
+When enabled, dbwarden instruments the `migrate` and `seed apply` commands with Prometheus metric recording. When disabled (or when `prometheus_client` is not installed), all metric functions are safe no-ops.
 
 ### Available metrics
 
@@ -77,7 +77,7 @@ The middleware also records HTTP request duration via the migration duration his
 
 ## JSON logging
 
-DBWarden supports structured JSON logging for integration with log aggregation systems (ELK, Loki, Datadog, etc.).
+dbwarden supports structured JSON logging for integration with log aggregation systems (ELK, Loki, Datadog, etc.).
 
 ### Enabling JSON logging
 
@@ -94,7 +94,7 @@ command's log output (and also switches display commands to JSON):
 dbwarden --json migrate --database primary
 ```
 
-When enabled, all DBWarden log output uses newline-delimited JSON format:
+When enabled, all dbwarden log output uses newline-delimited JSON format:
 
 ```json
 {"timestamp": "2025-06-01T10:00:00.123456", "level": "INFO", "logger": "dbwarden", "message": "Applying migration 0003", "db_name": "primary", "db_type": "postgresql"}

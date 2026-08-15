@@ -1,6 +1,6 @@
 # Migration Safety
 
-DBWarden classifies migration changes using the `Safety` enum:
+dbwarden classifies migration changes using the `Safety` enum:
 
 ```python
 from dbwarden.engine.safety import Safety

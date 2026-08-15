@@ -372,7 +372,7 @@ except Exception as e:
     print(f"Connection failed: {e}")
 ```
 
-### Test with DBWarden
+### Test with dbwarden
 
 ```bash
 # Check configuration

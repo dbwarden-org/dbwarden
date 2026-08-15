@@ -1,6 +1,6 @@
 # PostgreSQL
 
-DBWarden treats PostgreSQL as a **first-class backend**: every natively supported feature is reverse-engineered, diffed, and emitted as correct DDL.
+dbwarden treats PostgreSQL as a **first-class backend**: every natively supported feature is reverse-engineered, diffed, and emitted as correct DDL.
 
 "First-class" means the round-trip is verified: reverse-engineer a live database with `generate-models`, feed the output back into `make-migrations`, and get **zero diff**.
 

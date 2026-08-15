@@ -1,6 +1,6 @@
 # Migrate from TOML
 
-If your project currently uses `warden.toml` for DBWarden configuration, this guide walks through transitioning to Python-based configuration with the default `DbwardenDatabase` API. The equivalent `database_config(...)` function remains supported.
+If your project currently uses `warden.toml` for dbwarden configuration, this guide walks through transitioning to Python-based configuration with the default `DbwardenDatabase` API. The equivalent `database_config(...)` function remains supported.
 
 ## Why migrate
 
@@ -71,7 +71,7 @@ Typical options:
 
 - `dbwarden.py` (recommended for new projects)
 - `app/core/config.py` (if you already have one)
-- Any Python file that DBWarden can discover
+- Any Python file that dbwarden can discover
 
 ### Step 3: Map each database entry
 
@@ -126,7 +126,7 @@ Once verified, delete your old `warden.toml`:
 rm warden.toml
 ```
 
-DBWarden now uses only your Python configuration source.
+dbwarden now uses only your Python configuration source.
 
 ## Advanced migration patterns
 
@@ -242,6 +242,6 @@ $ dbwarden --dev status --database <name>
 If migration causes issues, you can always:
 
 1. Recreate `warden.toml` with the original configuration
-2. Run DBWarden version that supports TOML (pre-0.5)
+2. Run dbwarden version that supports TOML (pre-0.5)
 
 However, the Python-based approach is the recommended direction (0.9+) and offers significant benefits.

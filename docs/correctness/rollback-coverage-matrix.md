@@ -88,7 +88,7 @@ ClickHouse table recreation uses a detect-and-refuse rollback policy. Unknown me
 | `add_exclude_constraint` | real | Rollback drops exclusion constraint. |
 | `drop_exclude_constraint` | real | Rollback recreates exclusion constraint. |
 | `alter_column_statistics` | real | Restores prior statistics target or resets to the PostgreSQL default target with `SET STATISTICS -1`. |
-| `alter_pg_partition` | irreversible | Partition strategy changes require a table rebuild or a hand-authored migration. DBWarden refuses to claim automatic rollback. |
+| `alter_pg_partition` | irreversible | Partition strategy changes require a table rebuild or a hand-authored migration. dbwarden refuses to claim automatic rollback. |
 | `attach_partition` | real | Rollback detaches partition. |
 | `detach_partition` | real | Rollback attaches partition with saved bound. |
 | `rename_table` | conditional | Delegates to rename SQL helper. |
@@ -138,11 +138,11 @@ ClickHouse table recreation uses a detect-and-refuse rollback policy. Unknown me
 
 ## Manual and Irreversible Boundaries
 
-These cases are not open rollback gaps. They are explicit policy boundaries where DBWarden either emits no rollback because no schema state changes, requires authored SQL, or marks the operation irreversible.
+These cases are not open rollback gaps. They are explicit policy boundaries where dbwarden either emits no rollback because no schema state changes, requires authored SQL, or marks the operation irreversible.
 
 | Case | Policy |
 | --- | --- |
-| PostgreSQL partition strategy changes | Require a table rebuild or hand-authored migration. DBWarden refuses automatic rollback because changing partition strategy is not a metadata-only inverse. |
+| PostgreSQL partition strategy changes | Require a table rebuild or hand-authored migration. dbwarden refuses automatic rollback because changing partition strategy is not a metadata-only inverse. |
 | PostgreSQL `REFRESH MATERIALIZED VIEW` | Rollback is intentionally no-op because refresh does not change schema definition. |
 | PostgreSQL enum value additions | Irreversible in PostgreSQL because enum values cannot be removed directly. |
 | ClickHouse data operations | Require authored rollback SQL when a reverse data operation exists; otherwise they remain explicitly irreversible. |

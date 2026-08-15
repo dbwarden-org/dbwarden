@@ -1,11 +1,11 @@
 # Rollback Generation
 
-DBWarden generates rollback SQL at the same time it generates upgrade SQL. Rollback is not a separate best-effort file that developers maintain by hand after the fact.
+dbwarden generates rollback SQL at the same time it generates upgrade SQL. Rollback is not a separate best-effort file that developers maintain by hand after the fact.
 
 The current rollback system uses a strict contract:
 
 - Executable rollback SQL is accepted.
-- Conditional rollback is accepted only when DBWarden has captured enough prior state.
+- Conditional rollback is accepted only when dbwarden has captured enough prior state.
 - Irreversible operations must be explicitly acknowledged.
 - Placeholder rollback is refused by default.
 
@@ -57,7 +57,7 @@ This rollback removes the column introduced by the upgrade. If the upgrade is ap
 
 ## Conditional Rollback
 
-Some operations are reversible only if DBWarden captured previous state.
+Some operations are reversible only if dbwarden captured previous state.
 
 Example: changing a PostgreSQL column default.
 
@@ -69,7 +69,7 @@ ALTER TABLE users ALTER COLUMN status SET DEFAULT 'active';
 ALTER TABLE users ALTER COLUMN status SET DEFAULT 'pending';
 ```
 
-The rollback is correct only if DBWarden knows the previous default was `'pending'`. If the previous default was unknown, DBWarden must not invent one.
+The rollback is correct only if dbwarden knows the previous default was `'pending'`. If the previous default was unknown, dbwarden must not invent one.
 
 Conditional rollback appears in operations such as:
 
@@ -89,9 +89,9 @@ Example:
 ALTER TABLE users DROP COLUMN legacy_code;
 ```
 
-DBWarden can add `legacy_code` back if it knows the column definition, but it cannot reconstruct the deleted values. That means a structural rollback is not the same as data recovery.
+dbwarden can add `legacy_code` back if it knows the column definition, but it cannot reconstruct the deleted values. That means a structural rollback is not the same as data recovery.
 
-For generated migrations, DBWarden refuses placeholder rollback by default. If a migration is intentionally irreversible, it must be explicit.
+For generated migrations, dbwarden refuses placeholder rollback by default. If a migration is intentionally irreversible, it must be explicit.
 
 Use the committed migration annotation:
 
@@ -157,7 +157,7 @@ Why this rollback order is correct:
 
 ## Manual SQL and Data Changes
 
-DBWarden can generate rollback for schema operations it understands. It cannot infer the inverse of arbitrary manual data changes.
+dbwarden can generate rollback for schema operations it understands. It cannot infer the inverse of arbitrary manual data changes.
 
 Example:
 
@@ -193,6 +193,6 @@ This does not prove that dropped data can be recovered. It proves that rollback 
 
 Hand-written rollback sections drift. A developer changes an upgrade statement and forgets to update the rollback. A reviewer checks the upgrade and misses the reverse path.
 
-DBWarden avoids that by computing both directions from the same operation model. When rollback cannot be computed safely, the generator refuses placeholder rollback rather than producing a misleading comment.
+dbwarden avoids that by computing both directions from the same operation model. When rollback cannot be computed safely, the generator refuses placeholder rollback rather than producing a misleading comment.
 
-The result is stricter than convenience-oriented migration tools: either DBWarden emits executable rollback SQL, or the migration explicitly declares why automatic rollback is not available.
+The result is stricter than convenience-oriented migration tools: either dbwarden emits executable rollback SQL, or the migration explicitly declares why automatic rollback is not available.

@@ -30,7 +30,7 @@ $ dbwarden init
 
 **Cause 2: Wrong directory**
 
-DBWarden looks in current directory and parents.
+dbwarden looks in current directory and parents.
 
 **Solution:** Navigate to project root:
 

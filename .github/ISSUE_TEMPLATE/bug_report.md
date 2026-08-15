@@ -1,6 +1,6 @@
 ---
 name: Bug Report
-about: Report a bug in DBWarden
+about: Report a bug in dbwarden
 labels: bug
 ---
 
@@ -27,10 +27,10 @@ labels: bug
 ## Environment
 
 <!-- Copy the output of: dbwarden version -->
-- OS: 
-- Python version: 
-- DBWarden version: 
-- Database type and version: 
+- OS:
+- Python version:
+- dbwarden version:
+- Database type and version:
 
 ## Additional Context
 

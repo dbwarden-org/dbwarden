@@ -1,12 +1,12 @@
 ---
-description: 'Learn how to configure DBWarden for single and multi-database setups: connection
+description: 'Learn how to configure dbwarden for single and multi-database setups: connection
   URLs, model discovery, dev mode with SQLite translation, credential management, and production
   patterns.'
 ---
 
 # Configuration
 
-DBWarden uses Python-based configuration with declarative `DbwardenDatabase`
+dbwarden uses Python-based configuration with declarative `DbwardenDatabase`
 classes as the default method. The equivalent `database_config()` function
 alternative remains supported, and some plugins use it in their examples.
 
@@ -39,7 +39,7 @@ $ dbwarden migrate
 
 ## Learning Path
 
-### New to DBWarden?
+### New to dbwarden?
 Start here to understand configuration basics:
 
 1. **[Quick Start](quick-start.md)** - Your first configuration in 2 minutes
@@ -49,7 +49,7 @@ Start here to understand configuration basics:
 ### Building Your Configuration
 Learn specific features:
 
-- **[Model Discovery](model-discovery.md)** - How DBWarden finds your SQLAlchemy models
+- **[Model Discovery](model-discovery.md)** - How dbwarden finds your SQLAlchemy models
 - **[Dev Mode](dev-mode.md)** - Local development with SQLite
 - **[Multi-Database](multi-database.md)** - Configure multiple databases
 
@@ -141,7 +141,7 @@ primary = database_config(
 
 ###  Validation
 
-DBWarden validates your configuration:
+dbwarden validates your configuration:
 
 -  Exactly one `default=True`
 -  Unique database names
@@ -151,7 +151,7 @@ DBWarden validates your configuration:
 
 ## Configuration Loading
 
-DBWarden discovers your configuration automatically:
+dbwarden discovers your configuration automatically:
 
 1. **Looks for `dbwarden.py`** in current directory or parents
 2. **Checks `DBWARDEN_CONFIG_MODULE`** environment variable

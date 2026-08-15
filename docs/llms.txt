@@ -1,110 +1,110 @@
-# DBWarden Documentation
-> DBWarden is a SQL-first database migration system for Python and SQLAlchemy projects. Generate reviewable SQL migrations, validate them before production, and operate multiple databases from one config source.
+# dbwarden Documentation
+> dbwarden is a SQL-first database migration system for Python and SQLAlchemy projects. Generate reviewable SQL migrations, validate them before production, and operate multiple databases from one config source.
 
 ## Overview
-- [DBWarden](https://dbwarden.org/): The SQL-first database toolkit for SQLAlchemy
-- [Features](https://dbwarden.org/features/): Overview of DBWarden features with short examples for migrations, safety checks, multi-database configs, FastAPI integration, seed management, and more
-- [Installation](https://dbwarden.org/installation/): Installing DBWarden in your project and verifying it works correctly
+- [dbwarden](https://docs.dbwarden.org/): The SQL-first database toolkit for SQLAlchemy
+- [Features](https://docs.dbwarden.org/features/): Overview of dbwarden features with short examples for migrations, safety checks, multi-database configs, FastAPI integration, seed management, and more
+- [Installation](https://docs.dbwarden.org/installation/): Installing dbwarden in your project and verifying it works correctly
 
 ## Get Started
-- [Setup](https://dbwarden.org/getting-started/setup/): Initial project setup - install, initialize, define a database, verify configuration
-- [Modeling Guide](https://dbwarden.org/getting-started/modeling/): Defining SQLAlchemy models that DBWarden can read to generate migration SQL
-- [Your First Migration](https://dbwarden.org/getting-started/first-migration/): Core workflow - define models, generate SQL, apply, inspect, roll back
-- [Developing Locally](https://dbwarden.org/getting-started/developing-locally/): Local development workflow with dev databases, safe diffs, and offline migrations
-- [Workflows](https://dbwarden.org/getting-started/workflows/): Day-to-day workflows for multi-database projects, CI patterns, sandbox validation
+- [Setup](https://docs.dbwarden.org/getting-started/setup/): Initial project setup - install, initialize, define a database, verify configuration
+- [Modeling Guide](https://docs.dbwarden.org/getting-started/modeling/): Defining SQLAlchemy models that dbwarden can read to generate migration SQL
+- [Your First Migration](https://docs.dbwarden.org/getting-started/first-migration/): Core workflow - define models, generate SQL, apply, inspect, roll back
+- [Developing Locally](https://docs.dbwarden.org/getting-started/developing-locally/): Local development workflow with dev databases, safe diffs, and offline migrations
+- [Workflows](https://docs.dbwarden.org/getting-started/workflows/): Day-to-day workflows for multi-database projects, CI patterns, sandbox validation
 
 ## Cookbook & Examples
-- [Overview](https://dbwarden.org/cookbook/): Practical, runnable examples from project setup through advanced observability patterns
-- [1. Project Setup](https://dbwarden.org/cookbook/01-project-setup/): Initialize a project with `dbwarden init`, configure via `database_config()`
-- [2. Models & Migrations](https://dbwarden.org/cookbook/02-models-and-migrations/): Define SQLAlchemy models with `class Meta`, generate SQL from model changes
-- [3. Apply & Inspect](https://dbwarden.org/cookbook/03-apply-and-inspect/): Apply pending SQL, roll back, downgrade, inspect history and status
-- [4. Offline & CI](https://dbwarden.org/cookbook/04-offline-ci/): Export model state to JSON, generate migrations without a live database, CI/CD pipelines
-- [5. Schema Inspection](https://dbwarden.org/cookbook/05-schema-inspection/): Compare models against live DB, capture DDL snapshots, reverse-engineer models
-- [6. Safety & Impact](https://dbwarden.org/cookbook/06-safety-impact/): Classify operations by danger level, find affected code references before deploy
-- [7. Seeds](https://dbwarden.org/cookbook/07-seeds/): Define code seeds, create and apply file-based SQL/Python seeds, auto-apply after migrations
-- [8. Multi-Database](https://dbwarden.org/cookbook/08-multi-database/): Manage multiple databases with mixed backends in a single project
-- [9. FastAPI Integration](https://dbwarden.org/cookbook/09-fastapi-integration/): Wire DBWarden into FastAPI lifecycle, async sessions, health and migration endpoints
-- [10. Auto Schemas](https://dbwarden.org/cookbook/10-auto-schemas/): Auto-generate Pydantic schemas from model annotations with `@auto_schema`
-- [11. Observability](https://dbwarden.org/cookbook/11-observability/): Prometheus metrics, structured JSON logging, query tracing, connection pool monitoring
+- [Overview](https://docs.dbwarden.org/cookbook/): Practical, runnable examples from project setup through advanced observability patterns
+- [1. Project Setup](https://docs.dbwarden.org/cookbook/01-project-setup/): Initialize a project with `dbwarden init`, configure via `database_config()`
+- [2. Models & Migrations](https://docs.dbwarden.org/cookbook/02-models-and-migrations/): Define SQLAlchemy models with `class Meta`, generate SQL from model changes
+- [3. Apply & Inspect](https://docs.dbwarden.org/cookbook/03-apply-and-inspect/): Apply pending SQL, roll back, downgrade, inspect history and status
+- [4. Offline & CI](https://docs.dbwarden.org/cookbook/04-offline-ci/): Export model state to JSON, generate migrations without a live database, CI/CD pipelines
+- [5. Schema Inspection](https://docs.dbwarden.org/cookbook/05-schema-inspection/): Compare models against live DB, capture DDL snapshots, reverse-engineer models
+- [6. Safety & Impact](https://docs.dbwarden.org/cookbook/06-safety-impact/): Classify operations by danger level, find affected code references before deploy
+- [7. Seeds](https://docs.dbwarden.org/cookbook/07-seeds/): Define code seeds, create and apply file-based SQL/Python seeds, auto-apply after migrations
+- [8. Multi-Database](https://docs.dbwarden.org/cookbook/08-multi-database/): Manage multiple databases with mixed backends in a single project
+- [9. FastAPI Integration](https://docs.dbwarden.org/cookbook/09-fastapi-integration/): Wire dbwarden into FastAPI lifecycle, async sessions, health and migration endpoints
+- [10. Auto Schemas](https://docs.dbwarden.org/cookbook/10-auto-schemas/): Auto-generate Pydantic schemas from model annotations with `@auto_schema`
+- [11. Observability](https://docs.dbwarden.org/cookbook/11-observability/): Prometheus metrics, structured JSON logging, query tracing, connection pool monitoring
 
 ## Configuration
-- [Overview](https://dbwarden.org/configuration/): Python-based configuration with `database_config()` - one source for migrations, CLI, and runtime
-- [Quick Start](https://dbwarden.org/configuration/quick-start/): Configure your first database in 2 minutes
-- [Concepts](https://dbwarden.org/configuration/concepts/): How configuration works under the hood - type safety, runtime flexibility, IDE support
-- [Connection URLs](https://dbwarden.org/configuration/connection-urls/): Complete reference for database connection URL formats across all backends
-- [Model Discovery](https://dbwarden.org/configuration/model-discovery/): How DBWarden discovers SQLAlchemy models for migration generation
-- [Multi-Database](https://dbwarden.org/configuration/multi-database/): Configure multiple databases for microservices, read/write split, multi-tenancy
-- [Dev Mode](https://dbwarden.org/configuration/dev-mode/): Use SQLite locally and PostgreSQL in production with the same codebase
-- [Credentials and Secrets](https://dbwarden.org/configuration/credentials/): Inject secrets safely with env vars, .env files, secret managers, Docker secrets
-- [Production Patterns](https://dbwarden.org/configuration/production-patterns/): Real-world patterns for SSL/TLS, connection pooling, environment variables
-- [Troubleshooting](https://dbwarden.org/configuration/troubleshooting/): Solutions to common configuration issues
+- [Overview](https://docs.dbwarden.org/configuration/): Python-based configuration with `database_config()` - one source for migrations, CLI, and runtime
+- [Quick Start](https://docs.dbwarden.org/configuration/quick-start/): Configure your first database in 2 minutes
+- [Concepts](https://docs.dbwarden.org/configuration/concepts/): How configuration works under the hood - type safety, runtime flexibility, IDE support
+- [Connection URLs](https://docs.dbwarden.org/configuration/connection-urls/): Complete reference for database connection URL formats across all backends
+- [Model Discovery](https://docs.dbwarden.org/configuration/model-discovery/): How dbwarden discovers SQLAlchemy models for migration generation
+- [Multi-Database](https://docs.dbwarden.org/configuration/multi-database/): Configure multiple databases for microservices, read/write split, multi-tenancy
+- [Dev Mode](https://docs.dbwarden.org/configuration/dev-mode/): Use SQLite locally and PostgreSQL in production with the same codebase
+- [Credentials and Secrets](https://docs.dbwarden.org/configuration/credentials/): Inject secrets safely with env vars, .env files, secret managers, Docker secrets
+- [Production Patterns](https://docs.dbwarden.org/configuration/production-patterns/): Real-world patterns for SSL/TLS, connection pooling, environment variables
+- [Troubleshooting](https://docs.dbwarden.org/configuration/troubleshooting/): Solutions to common configuration issues
 
 ## Core Concepts
-- [Migration File Format](https://dbwarden.org/migration-files/): Execution contract - explicit SQL files that can be reviewed, tested, and rolled back
-- [SQLAlchemy Models Reference](https://dbwarden.org/models/): Complete reference for all supported Meta attributes across every backend
-- [Seed Management](https://dbwarden.org/seeds/): Built-in seed data management with code seeds and file-based SQL/Python seeds
-- [SQL Translation](https://dbwarden.org/sql-translation/): SQL translation layer for dev workflows with different databases than production
-- [Observability](https://dbwarden.org/observability/): Prometheus metrics and structured JSON logging for monitoring and debugging
-- [Architecture](https://dbwarden.org/architecture-deep-dive/): Internals for contributors - layered architecture from CLI through database layers
+- [Migration File Format](https://docs.dbwarden.org/migration-files/): Execution contract - explicit SQL files that can be reviewed, tested, and rolled back
+- [SQLAlchemy Models Reference](https://docs.dbwarden.org/models/): Complete reference for all supported Meta attributes across every backend
+- [Seed Management](https://docs.dbwarden.org/seeds/): Built-in seed data management with code seeds and file-based SQL/Python seeds
+- [SQL Translation](https://docs.dbwarden.org/sql-translation/): SQL translation layer for dev workflows with different databases than production
+- [Observability](https://docs.dbwarden.org/observability/): Prometheus metrics and structured JSON logging for monitoring and debugging
+- [Architecture](https://docs.dbwarden.org/architecture-deep-dive/): Internals for contributors - layered architecture from CLI through database layers
 
 ## Databases
-- [Overview](https://dbwarden.org/databases/): Supported backends - PostgreSQL, MySQL, MariaDB, SQLite, ClickHouse
-- [Round Trip Support](https://dbwarden.org/databases/round-trip/): Backends that support both reading and writing schema
-- [SQL Databases](https://dbwarden.org/databases/sql-databases/): Backend-specific syntax, limitations, and edge cases
-- [PostgreSQL](https://dbwarden.org/databases/postgresql/): First-class backend - full round-trip verification
-- [MySQL & MariaDB](https://dbwarden.org/databases/mysql/): First-class backends - reverse-engineered, diffed, emitted as correct DDL
-- [ClickHouse](https://dbwarden.org/databases/clickhouse/): First-class backend - full round-trip support
+- [Overview](https://docs.dbwarden.org/databases/): Supported backends - PostgreSQL, MySQL, MariaDB, SQLite, ClickHouse
+- [Round Trip Support](https://docs.dbwarden.org/databases/round-trip/): Backends that support both reading and writing schema
+- [SQL Databases](https://docs.dbwarden.org/databases/sql-databases/): Backend-specific syntax, limitations, and edge cases
+- [PostgreSQL](https://docs.dbwarden.org/databases/postgresql/): First-class backend - full round-trip verification
+- [MySQL & MariaDB](https://docs.dbwarden.org/databases/mysql/): First-class backends - reverse-engineered, diffed, emitted as correct DDL
+- [ClickHouse](https://docs.dbwarden.org/databases/clickhouse/): First-class backend - full round-trip support
 
 ## FastAPI Integration
-- [Overview](https://dbwarden.org/fastapi/): First-class FastAPI integration for sessions, health checks, migration management
-- [Concepts](https://dbwarden.org/fastapi/concepts/): How the FastAPI integration solves split-configuration problems
-- [Tutorial: First Steps](https://dbwarden.org/fastapi/tutorial/first-steps/): Create a FastAPI app with DBWarden in 2 minutes
-- [Tutorial: Session Dependency](https://dbwarden.org/fastapi/tutorial/session-dependency/): Get database sessions in routes via `.async_session`
-- [Tutorial: Startup Checks](https://dbwarden.org/fastapi/tutorial/startup-checks/): Validate database before accepting traffic
-- [Tutorial: Health Endpoints](https://dbwarden.org/fastapi/tutorial/health-endpoints/): Kubernetes probes, Prometheus metrics, connection pool health
-- [Tutorial: Complete Application](https://dbwarden.org/fastapi/tutorial/complete-application/): Full production-ready FastAPI + DBWarden application
-- [Advanced: Engine Lifecycle](https://dbwarden.org/fastapi/advanced/engine-lifecycle/): Lazy engine creation, caching, session factories, lifecycle hooks
-- [Advanced: Transaction Management](https://dbwarden.org/fastapi/advanced/transaction-management/): Automatic transactions, manual commit/rollback, retry patterns
-- [Advanced: Testing](https://dbwarden.org/fastapi/advanced/testing/): Test DBWarden FastAPI apps with SQLite in-memory and dependency overrides
-- [Advanced: Multi-Database](https://dbwarden.org/fastapi/advanced/multi-database/): Work with multiple databases in FastAPI - primary + analytics, multi-tenancy
-- [Advanced: Production Patterns](https://dbwarden.org/fastapi/advanced/production-patterns/): Pre-deploy migrations, connection pooling, logging, readiness probes
-- [API Reference](https://dbwarden.org/fastapi/reference/): Complete API docs for FastAPI integration utilities
+- [Overview](https://docs.dbwarden.org/fastapi/): First-class FastAPI integration for sessions, health checks, migration management
+- [Concepts](https://docs.dbwarden.org/fastapi/concepts/): How the FastAPI integration solves split-configuration problems
+- [Tutorial: First Steps](https://docs.dbwarden.org/fastapi/tutorial/first-steps/): Create a FastAPI app with dbwarden in 2 minutes
+- [Tutorial: Session Dependency](https://docs.dbwarden.org/fastapi/tutorial/session-dependency/): Get database sessions in routes via `.async_session`
+- [Tutorial: Startup Checks](https://docs.dbwarden.org/fastapi/tutorial/startup-checks/): Validate database before accepting traffic
+- [Tutorial: Health Endpoints](https://docs.dbwarden.org/fastapi/tutorial/health-endpoints/): Kubernetes probes, Prometheus metrics, connection pool health
+- [Tutorial: Complete Application](https://docs.dbwarden.org/fastapi/tutorial/complete-application/): Full production-ready FastAPI + dbwarden application
+- [Advanced: Engine Lifecycle](https://docs.dbwarden.org/fastapi/advanced/engine-lifecycle/): Lazy engine creation, caching, session factories, lifecycle hooks
+- [Advanced: Transaction Management](https://docs.dbwarden.org/fastapi/advanced/transaction-management/): Automatic transactions, manual commit/rollback, retry patterns
+- [Advanced: Testing](https://docs.dbwarden.org/fastapi/advanced/testing/): Test dbwarden FastAPI apps with SQLite in-memory and dependency overrides
+- [Advanced: Multi-Database](https://docs.dbwarden.org/fastapi/advanced/multi-database/): Work with multiple databases in FastAPI - primary + analytics, multi-tenancy
+- [Advanced: Production Patterns](https://docs.dbwarden.org/fastapi/advanced/production-patterns/): Pre-deploy migrations, connection pooling, logging, readiness probes
+- [API Reference](https://docs.dbwarden.org/fastapi/reference/): Complete API docs for FastAPI integration utilities
 
 ## CLI Reference
-- [Overview](https://dbwarden.org/cli-reference/): Command lookup for the DBWarden CLI
-- [init](https://dbwarden.org/commands/init/): Initialize project scaffolding
-- [make-migrations](https://dbwarden.org/commands/make-migrations/): Generate SQL migration files from model diffs
-- [migrate](https://dbwarden.org/commands/migrate/): Apply pending migrations to a database
-- [downgrade](https://dbwarden.org/commands/downgrade/): Revert applied migrations to a target version
-- [rollback](https://dbwarden.org/commands/rollback/): Rollback applied migrations using -- rollback sections
-- [make-rollback](https://dbwarden.org/commands/make-rollback/): Auto-generate rollback SQL from upgrade SQL
-- [generate-models](https://dbwarden.org/commands/generate-models/): Reverse-engineer SQLAlchemy models from a live database
-- [snapshot](https://dbwarden.org/commands/snapshot/): Output DDL schema of a specific table
-- [schema-snapshots](https://dbwarden.org/commands/schema-snapshots/): JSON snapshots for offline migration generation and rename detection
-- [status](https://dbwarden.org/commands/status/): Show applied vs pending migration status
-- [check](https://dbwarden.org/commands/check/): Analyze schema differences classified by danger level
-- [check-db](https://dbwarden.org/commands/check-db/): Inspect live database schema in txt/json/yaml/sql formats
-- [diff](https://dbwarden.org/commands/diff/): Show structural differences between models and live database
-- [history](https://dbwarden.org/commands/history/): Migration execution history for audit and incident analysis
-- [new](https://dbwarden.org/commands/new/): Create manual migration files (versioned, runs-always, runs-on-change)
-- [lock-status/unlock](https://dbwarden.org/commands/lock/): Inspect and recover migration lock state
-- [seed](https://dbwarden.org/commands/seed/): Manage seed data - create, apply, list, roll back, export
-- [settings](https://dbwarden.org/commands/settings/): View current DBWarden configuration
-- [database](https://dbwarden.org/commands/database/): Display configured databases
-- [version](https://dbwarden.org/commands/version/): Show installed DBWarden version
+- [Overview](https://docs.dbwarden.org/cli-reference/): Command lookup for the dbwarden CLI
+- [init](https://docs.dbwarden.org/commands/init/): Initialize project scaffolding
+- [make-migrations](https://docs.dbwarden.org/commands/make-migrations/): Generate SQL migration files from model diffs
+- [migrate](https://docs.dbwarden.org/commands/migrate/): Apply pending migrations to a database
+- [downgrade](https://docs.dbwarden.org/commands/downgrade/): Revert applied migrations to a target version
+- [rollback](https://docs.dbwarden.org/commands/rollback/): Rollback applied migrations using -- rollback sections
+- [make-rollback](https://docs.dbwarden.org/commands/make-rollback/): Auto-generate rollback SQL from upgrade SQL
+- [generate-models](https://docs.dbwarden.org/commands/generate-models/): Reverse-engineer SQLAlchemy models from a live database
+- [snapshot](https://docs.dbwarden.org/commands/snapshot/): Output DDL schema of a specific table
+- [schema-snapshots](https://docs.dbwarden.org/commands/schema-snapshots/): JSON snapshots for offline migration generation and rename detection
+- [status](https://docs.dbwarden.org/commands/status/): Show applied vs pending migration status
+- [check](https://docs.dbwarden.org/commands/check/): Analyze schema differences classified by danger level
+- [check-db](https://docs.dbwarden.org/commands/check-db/): Inspect live database schema in txt/json/yaml/sql formats
+- [diff](https://docs.dbwarden.org/commands/diff/): Show structural differences between models and live database
+- [history](https://docs.dbwarden.org/commands/history/): Migration execution history for audit and incident analysis
+- [new](https://docs.dbwarden.org/commands/new/): Create manual migration files (versioned, runs-always, runs-on-change)
+- [lock-status/unlock](https://docs.dbwarden.org/commands/lock/): Inspect and recover migration lock state
+- [seed](https://docs.dbwarden.org/commands/seed/): Manage seed data - create, apply, list, roll back, export
+- [settings](https://docs.dbwarden.org/commands/settings/): View current dbwarden configuration
+- [database](https://docs.dbwarden.org/commands/database/): Display configured databases
+- [version](https://docs.dbwarden.org/commands/version/): Show installed dbwarden version
 
 ## Advanced
-- [Migration Locking](https://dbwarden.org/advanced/migration-locking/): Database-level lock to prevent concurrent schema mutation
-- [Checksum Integrity](https://dbwarden.org/advanced/checksum-integrity/): SHA-256 checksums to detect file tampering or accidental edits
-- [Safe Deployment](https://dbwarden.org/advanced/safe-deployment/): Pre-flight checks, impact analysis, sandbox validation, rollback planning
-- [CI/CD Patterns](https://dbwarden.org/advanced/ci-cd-patterns/): GitHub Actions and GitLab CI patterns for automated migrations
+- [Migration Locking](https://docs.dbwarden.org/advanced/migration-locking/): Database-level lock to prevent concurrent schema mutation
+- [Checksum Integrity](https://docs.dbwarden.org/advanced/checksum-integrity/): SHA-256 checksums to detect file tampering or accidental edits
+- [Safe Deployment](https://docs.dbwarden.org/advanced/safe-deployment/): Pre-flight checks, impact analysis, sandbox validation, rollback planning
+- [CI/CD Patterns](https://docs.dbwarden.org/advanced/ci-cd-patterns/): GitHub Actions and GitLab CI patterns for automated migrations
 
 ## Reference
-- [Configuration API](https://dbwarden.org/reference/configuration-api/): Complete reference for `database_config()` parameters
-- [Migrate from TOML](https://dbwarden.org/reference/migrate-from-toml/): Transition from `warden.toml` to Python-based configuration
+- [Configuration API](https://docs.dbwarden.org/reference/configuration-api/): Complete reference for `database_config()` parameters
+- [Migrate from TOML](https://docs.dbwarden.org/reference/migrate-from-toml/): Transition from `warden.toml` to Python-based configuration
 
 ## Additional
-- [Glossary](https://dbwarden.org/glossary/): Key terms and concepts in DBWarden
-- [Codebase Organization](https://dbwarden.org/codebase/): How the DBWarden source code is organized
+- [Glossary](https://docs.dbwarden.org/glossary/): Key terms and concepts in dbwarden
+- [Codebase Organization](https://docs.dbwarden.org/codebase/): How the dbwarden source code is organized
 
-For the full documentation in a single file, see [llms-full.txt](https://dbwarden.org/llms-full.txt).
+For the full documentation in a single file, see [llms-full.txt](https://docs.dbwarden.org/llms-full.txt).

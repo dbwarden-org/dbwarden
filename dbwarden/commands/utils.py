@@ -4,7 +4,7 @@ from dbwarden.output import emit_json, info, json_mode, kv_table, render, sectio
 
 
 def config_cmd() -> None:
-    """Display current DBWarden configuration."""
+    """Display current dbwarden configuration."""
     config = get_multi_db_config()
 
     payload: dict = {"default": config.default, "databases": {}}
@@ -37,7 +37,7 @@ def config_cmd() -> None:
         emit_json(payload)
         return
 
-    section("DBWarden Configuration")
+    section("dbwarden Configuration")
     success(f"default: {config.default}")
     for name, db in config.databases.items():
         marker = " (default)" if name == config.default else ""
@@ -86,7 +86,7 @@ def _mask_password(url: str) -> str:
 
 
 def version_cmd() -> None:
-    """Display DBWarden version."""
+    """Display dbwarden version."""
     if json_mode():
         emit_json({"version": DBWARDEN_VERSION})
         return

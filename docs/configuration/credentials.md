@@ -38,7 +38,7 @@ primary = database_config(
 )
 ```
 
-`secure_values=True` tells DBWarden to redact the URL in CLI output and logs.
+`secure_values=True` tells dbwarden to redact the URL in CLI output and logs.
 
 ### Fail fast on missing env var
 
@@ -199,7 +199,7 @@ primary = database_config(
 
 ## `secure_values=True`
 
-When set, DBWarden redacts the connection URL in:
+When set, dbwarden redacts the connection URL in:
 
 - `dbwarden settings show` output
 - `dbwarden settings show` output

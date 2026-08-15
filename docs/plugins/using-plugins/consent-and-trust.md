@@ -4,7 +4,7 @@ description: Understand plugin consent, trust tiers, and loading safety.
 
 # Consent And Trust
 
-DBWarden classifies every plugin entry point **before importing any plugin code**. Classification is by distribution name, so a plugin's tier is known without running it.
+dbwarden classifies every plugin entry point **before importing any plugin code**. Classification is by distribution name, so a plugin's tier is known without running it.
 
 ## The Three Tiers
 
@@ -16,15 +16,15 @@ DBWarden classifies every plugin entry point **before importing any plugin code*
 
 ### Official
 
-Official plugins are DBWarden-maintained. `plugin add` verifies provenance and **fails closed** when verification is unavailable or invalid. They load without consent.
+Official plugins are dbwarden-maintained. `plugin add` verifies provenance and **fails closed** when verification is unavailable or invalid. They load without consent.
 
 ### Verified
 
-Verified plugins are community-maintained but reviewed against the DBWarden plugin standard. They load **without consent** only when the installed version is at or above the verified minimum recorded in `dbwarden/_verified.py`. If the installed version is below the floor, DBWarden logs a warning and treats the plugin as **Community** (consent required).
+Verified plugins are community-maintained but reviewed against the dbwarden plugin standard. They load **without consent** only when the installed version is at or above the verified minimum recorded in `dbwarden/_verified.py`. If the installed version is below the floor, dbwarden logs a warning and treats the plugin as **Community** (consent required).
 
 ### Community
 
-Community plugins require explicit consent before loading. In an interactive terminal, DBWarden prompts on first use:
+Community plugins require explicit consent before loading. In an interactive terminal, dbwarden prompts on first use:
 
 ```text
 Enable community plugin 'dbwarden-example' version 0.1.0? [y/N]:

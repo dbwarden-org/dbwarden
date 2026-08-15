@@ -1,5 +1,5 @@
 ---
-description: Organize larger DBWarden workflows, including multi-database projects, CI patterns,
+description: Organize larger dbwarden workflows, including multi-database projects, CI patterns,
   sandbox validation, and command conventions across environments.
 ---
 
@@ -9,7 +9,7 @@ This guide covers larger day-to-day workflows once the basics are in place.
 
 ## Multi-Database Projects
 
-DBWarden can manage more than one database from one config source.
+dbwarden can manage more than one database from one config source.
 
 ```python
 from dbwarden import DbwardenDatabase
@@ -49,7 +49,7 @@ $ dbwarden status --all
 
 ## Separate Model Sets
 
-Each database should usually own a distinct model set through `model_paths`. When databases share the same models package, use `model_tables` to split ownership by table name. DBWarden validates overlapping paths unless `overlap_models=True` is set explicitly.
+Each database should usually own a distinct model set through `model_paths`. When databases share the same models package, use `model_tables` to split ownership by table name. dbwarden validates overlapping paths unless `overlap_models=True` is set explicitly.
 
 This prevents one model tree from being interpreted as belonging to multiple databases by accident.
 
@@ -81,7 +81,7 @@ See the [Architecture Deep Dive](../architecture-deep-dive.md) for a thorough ex
 
 ## Baselines and Partial Applies
 
-When integrating DBWarden into an existing environment, or when applying only part of a migration sequence, these patterns are common:
+When integrating dbwarden into an existing environment, or when applying only part of a migration sequence, these patterns are common:
 
 - `--baseline` marks the target migration as already applied without actually running it, useful for onboarding an existing database.
 - `--partial` (via `--count` or `--to-version`) applies a subset of pending migrations instead of all of them.

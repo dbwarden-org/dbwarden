@@ -1,11 +1,11 @@
 ---
 title: Changelog
-description: Release notes for DBWarden, newest first. Tracks features, fixes, and breaking changes across all published versions.
+description: Release notes for dbwarden, newest first. Tracks features, fixes, and breaking changes across all published versions.
 ---
 
 # Changelog
 
-All notable changes to DBWarden, newest first. Versions follow semantic versioning and are tagged in the repository.
+All notable changes to dbwarden, newest first. Versions follow semantic versioning and are tagged in the repository.
 
 ## [Unreleased]
 
@@ -101,7 +101,7 @@ All notable changes to DBWarden, newest first. Versions follow semantic versioni
 
 ### Added
 
-- **Plugin system with trust tiers, consent, and provenance verification.** DBWarden now discovers plugins through the `dbwarden.plugins` entry point group and classifies each distribution into official, verified, or community tiers. Plugin code from unverified sources is not imported until the operator explicitly consents to that exact version. See the [Plugins](plugins/) section for the trust model.
+- **Plugin system with trust tiers, consent, and provenance verification.** dbwarden now discovers plugins through the `dbwarden.plugins` entry point group and classifies each distribution into official, verified, or community tiers. Plugin code from unverified sources is not imported until the operator explicitly consents to that exact version. See the [Plugins](plugins/) section for the trust model.
 - **`recover-model-state` command.** Model state is now stored in the database as well as on disk, and `dbwarden recover-model-state` restores it when the on-disk file is lost or corrupt.
 - **GPG-signed commit requirement.** Contribution guidelines now require GPG-signed commits.
 
@@ -121,7 +121,7 @@ All notable changes to DBWarden, newest first. Versions follow semantic versioni
 ### Added
 
 - **Strict rollback contracts.** Every generated migration now has a declared rollback contract: executable rollback when it is safe, placeholder refusal by default, and an explicit irreversible declaration when rollback cannot be produced. See [Rollback Generation](correctness/rollback-generation.md).
-- **Irreversible rollback annotations.** An operator can annotate a migration as irreversible, which DBWarden records and respects.
+- **Irreversible rollback annotations.** An operator can annotate a migration as irreversible, which dbwarden records and respects.
 - **Rollback round-trip integration harness.** A test harness applies upgrade and rollback in sequence and verifies the schema lands back where it started. See [Round Trip Verification](correctness/round-trip-verification.md).
 - **ObjectHandler protocol documented.**
 

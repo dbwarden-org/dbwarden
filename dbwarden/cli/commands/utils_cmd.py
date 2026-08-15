@@ -32,5 +32,5 @@ def config():
 
 @app.command()
 def version():
-    """Display DBWarden version and compatibility information."""
+    """Display dbwarden version and compatibility information."""
     handle_version()

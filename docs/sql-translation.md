@@ -1,6 +1,6 @@
 # SQL Translation
 
-DBWarden includes a SQL translation layer to support development workflows where your primary database differs from your development database.
+dbwarden includes a SQL translation layer to support development workflows where your primary database differs from your development database.
 
 The most common case is:
 
@@ -15,7 +15,7 @@ SQLite does not support all backend-specific SQL types and default expressions u
 
 Without translation, generated migrations can fail in local development when they contain backend-specific types like `UUID`, `JSONB`, or default expressions like `now()`.
 
-DBWarden translation solves this by adapting generated SQL for SQLite compatibility.
+dbwarden translation solves this by adapting generated SQL for SQLite compatibility.
 
 ## When translation is active
 
@@ -35,7 +35,7 @@ When you run commands in development mode and target a SQLite dev database:
 $ dbwarden --dev make-migrations "sync models" -d primary
 ```
 
-DBWarden uses this flow:
+dbwarden uses this flow:
 
 1. Loads the selected database config and resolves `dev_database_url`.
 2. Detects that the active target backend is SQLite.

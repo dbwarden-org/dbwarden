@@ -2,7 +2,7 @@
 
 ## What You'll Learn
 
-- How to enable Prometheus metrics for DBWarden
+- How to enable Prometheus metrics for dbwarden
 - How to use structured JSON logging
 - How to add query tracing middleware to FastAPI
 - How to monitor connection pool health
@@ -21,7 +21,7 @@ uv add "dbwarden[metrics]"
 dbwarden plugin add dbwarden-fastapi
 ```
 
-DBWarden exposes six Prometheus metric families:
+dbwarden exposes six Prometheus metric families:
 
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
@@ -162,7 +162,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="DBWarden Observability Example",
+    title="dbwarden Observability Example",
     lifespan=lifespan,
 )
 

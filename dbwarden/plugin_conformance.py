@@ -1,4 +1,4 @@
-"""Conformance harness for the DBWarden Verified plugin standard.
+"""Conformance harness for the dbwarden Verified plugin standard.
 
 Plugin authors call these assertions from their own pytest suite. Each function
 raises ``AssertionError`` (or ``ConformanceError``) with an explanatory message
@@ -31,7 +31,7 @@ from dbwarden.plugin import (
 
 PLUGIN_ENTRY_GROUP = PLUGIN_GROUP
 
-# Plugins may import anything from DBWarden core. The stable, documented
+# Plugins may import anything from dbwarden core. The stable, documented
 # surfaces are `dbwarden.plugin`, `dbwarden.exceptions`, and
 # `dbwarden.engine.core` (which includes `dbwarden.engine.core.plugin_api`), and
 # building on those is what keeps a plugin working across core releases. Reaching
@@ -245,7 +245,7 @@ def assert_core_imports_resolve(package: str) -> None:
             missing.append(f"{file.name}:{lineno} imports '{module}' ({exc})")
     if missing:
         raise ConformanceError(
-            "Plugin imports DBWarden modules that the installed core does not "
+            "Plugin imports dbwarden modules that the installed core does not "
             "provide:\n  " + "\n  ".join(missing)
         )
 
@@ -266,12 +266,12 @@ def assert_api_version_declared(package: str) -> None:
         raise ConformanceError(
             f"'{package}' does not declare {PLUGIN_API_ATTR}. "
             f"Set `{PLUGIN_API_ATTR} = {PLUGIN_API_VERSION}` on the package so a "
-            "mismatched DBWarden is refused at load."
+            "mismatched dbwarden is refused at load."
         )
     if declared != PLUGIN_API_VERSION:
         raise ConformanceError(
             f"'{package}' declares {PLUGIN_API_ATTR} = {declared}, but the "
-            f"installed DBWarden provides {PLUGIN_API_VERSION}. This plugin "
+            f"installed dbwarden provides {PLUGIN_API_VERSION}. This plugin "
             "would be refused at load."
         )
 

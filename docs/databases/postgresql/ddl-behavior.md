@@ -14,7 +14,7 @@ Operations that cannot run inside a transaction block:
 
 ## Index Creation
 
-DBWarden defaults to `CREATE INDEX CONCURRENTLY` to avoid table locking. Pass `--no-concurrent` when the migration must run inside a transaction block (PostgreSQL requires `CONCURRENTLY` outside a transaction).
+dbwarden defaults to `CREATE INDEX CONCURRENTLY` to avoid table locking. Pass `--no-concurrent` when the migration must run inside a transaction block (PostgreSQL requires `CONCURRENTLY` outside a transaction).
 
 ### CONCURRENTLY Behaviour
 
@@ -82,13 +82,13 @@ The `--safe-type-change` flag generates a multi-step strategy:
 
 ## Generated Columns
 
-Adding a generated column via `ALTER TABLE` is not supported by PostgreSQL. DBWarden emits a comment placeholder noting this limitation. Dropping the generation expression (`ALTER COLUMN c DROP EXPRESSION`) produces real DDL.
+Adding a generated column via `ALTER TABLE` is not supported by PostgreSQL. dbwarden emits a comment placeholder noting this limitation. Dropping the generation expression (`ALTER COLUMN c DROP EXPRESSION`) produces real DDL.
 
 PostgreSQL supports `GENERATED ALWAYS AS (expr) STORED` only. Virtual generated columns are not supported.
 
 ## Auto-increment Lifecycle
 
-DBWarden supports toggling auto-increment on integer primary key columns:
+dbwarden supports toggling auto-increment on integer primary key columns:
 
 ```python
 class User(Base):
@@ -122,7 +122,7 @@ Override for `ALWAYS`: `INSERT OVERRIDING SYSTEM VALUE`.
 
 ### Detection from live databases
 
-DBWarden detects autoincrement by:
+dbwarden detects autoincrement by:
 1. SERIAL/BIGSERIAL column types
 2. SQLAlchemy's `.autoincrement` attribute
 3. `nextval(...)` default patterns

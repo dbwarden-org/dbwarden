@@ -1,6 +1,6 @@
 # SQL Generation
 
-SQL generation is the stage where DBWarden turns a typed diff into a plain SQL migration file. The generated file contains backend-native SQL and is meant to be reviewed by humans.
+SQL generation is the stage where dbwarden turns a typed diff into a plain SQL migration file. The generated file contains backend-native SQL and is meant to be reviewed by humans.
 
 There is no hidden runtime library inside the migration. Once generated, the migration is SQL.
 
@@ -67,7 +67,7 @@ The exact internal representation may include backend-specific metadata, but the
 
 ## 2. Operation Ordering
 
-Not every valid operation order is safe. DBWarden uses statement ordering to make generated migrations executable.
+Not every valid operation order is safe. dbwarden uses statement ordering to make generated migrations executable.
 
 Examples:
 
@@ -203,7 +203,7 @@ DROP INDEX IF EXISTS idx_users_display_name;
 ALTER TABLE users DROP COLUMN display_name;
 ```
 
-This file is self-contained. Applying it does not require importing DBWarden code inside the database. DBWarden is the generator and executor. The migration artifact is plain SQL.
+This file is self-contained. Applying it does not require importing dbwarden code inside the database. dbwarden is the generator and executor. The migration artifact is plain SQL.
 
 ## Why Emitters Are Trustworthy
 
@@ -215,7 +215,7 @@ The trust comes from separation and tests:
 - Backend handlers render native SQL for one backend and object family.
 - Tests cover handler output, ordering, rollback metadata, and round-trip behavior.
 
-A generic SQL generator would need to understand every backend rule at once. DBWarden instead gives each backend handler a focused responsibility.
+A generic SQL generator would need to understand every backend rule at once. dbwarden instead gives each backend handler a focused responsibility.
 
 ## Link to Deterministic Diff
 

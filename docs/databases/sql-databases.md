@@ -1,6 +1,6 @@
 # SQL Databases
 
-DBWarden supports PostgreSQL, MySQL, MariaDB, and SQLite. While all four share standard SQL DDL, each backend has distinct behaviors that affect generated migrations. This page documents backend-specific syntax, limitations, and edge cases.
+dbwarden supports PostgreSQL, MySQL, MariaDB, and SQLite. While all four share standard SQL DDL, each backend has distinct behaviors that affect generated migrations. This page documents backend-specific syntax, limitations, and edge cases.
 
 ## DDL Transactional Behavior
 
@@ -16,7 +16,7 @@ PostgreSQL is also a **first-class backend** with full support for identity colu
 
 **MySQL / MariaDB**: DDL statements auto-commit immediately. If a 5-statement migration fails on the 4th statement, the first 3 are already committed and cannot be rolled back. Manual inspection and recovery may be needed. Always test MySQL/MariaDB migrations in a staging environment first.
 
-**SQLite**: DDL is transactional only within explicit `BEGIN/COMMIT` blocks. DBWarden migration files are executed with each statement as a separate implicit transaction. This means SQLite is similar to MySQL in practice; partial failure is possible.
+**SQLite**: DDL is transactional only within explicit `BEGIN/COMMIT` blocks. dbwarden migration files are executed with each statement as a separate implicit transaction. This means SQLite is similar to MySQL in practice; partial failure is possible.
 
 ## Column Rename
 
@@ -27,7 +27,7 @@ PostgreSQL is also a **first-class backend** with full support for identity colu
 | MySQL | `ALTER TABLE t CHANGE old new type` | Workaround needed |
 | MariaDB | `ALTER TABLE t CHANGE old new type` | Workaround needed |
 
-PostgreSQL and SQLite (3.25+) support `RENAME COLUMN` natively. DBWarden emits the standard form for all backends. If you need a backend that does not support native column rename (e.g., MySQL < 8.0, MariaDB), you must write a manual migration or verify the generated SQL.
+PostgreSQL and SQLite (3.25+) support `RENAME COLUMN` natively. dbwarden emits the standard form for all backends. If you need a backend that does not support native column rename (e.g., MySQL < 8.0, MariaDB), you must write a manual migration or verify the generated SQL.
 
 ## Column Type Change
 
@@ -39,9 +39,9 @@ PostgreSQL and SQLite (3.25+) support `RENAME COLUMN` natively. DBWarden emits t
 
 **PostgreSQL**: Emits `ALTER TABLE t ALTER COLUMN c TYPE newtype` with a commented-out `-- USING col::newtype` line. Pass `--postgres-auto-using` on `make-migrations` to emit an active `USING` clause.
 
-**MySQL / MariaDB**: Emits `ALTER TABLE t MODIFY COLUMN c newtype`. Note that `MODIFY COLUMN` requires specifying the entire column definition, not just the type. DBWarden includes only the type in the `MODIFY` statement; if you need additional attributes (e.g., `NOT NULL`, `DEFAULT`), add them manually.
+**MySQL / MariaDB**: Emits `ALTER TABLE t MODIFY COLUMN c newtype`. Note that `MODIFY COLUMN` requires specifying the entire column definition, not just the type. dbwarden includes only the type in the `MODIFY` statement; if you need additional attributes (e.g., `NOT NULL`, `DEFAULT`), add them manually.
 
-**SQLite**: `ALTER COLUMN TYPE` is not supported. DBWarden emits a comment:
+**SQLite**: `ALTER COLUMN TYPE` is not supported. dbwarden emits a comment:
 
 ```sql
 -- SQLite does not support ALTER COLUMN TYPE.
@@ -61,7 +61,7 @@ Table recreation is required to change a column's type in SQLite.
 
 **PostgreSQL**: Uses `SET NOT NULL` / `DROP NOT NULL`. No column type needed.
 
-**MySQL / MariaDB**: Uses `MODIFY COLUMN` which requires the full column type. DBWarden includes the type from the model column definition. If the type is not available, nullable changes for MySQL/MariaDB may produce incomplete SQL.
+**MySQL / MariaDB**: Uses `MODIFY COLUMN` which requires the full column type. dbwarden includes the type from the model column definition. If the type is not available, nullable changes for MySQL/MariaDB may produce incomplete SQL.
 
 **SQLite**: Not supported. A comment is emitted:
 
@@ -85,7 +85,7 @@ All four backends support `ALTER TABLE t ALTER COLUMN c SET DEFAULT value` and `
 
 **PostgreSQL FK options**: `ON DELETE`, `ON UPDATE`, and `DEFERRABLE INITIALLY DEFERRED` are fully supported. See [PostgreSQL Deep Dive](postgresql/index.md).
 
-**Validation**: Before emitting `ADD FOREIGN KEY`, DBWarden verifies that the referenced table and columns exist in the snapshot. If they don't, the FK is silently skipped to avoid generating broken SQL. This can happen when the referenced table is added in the same migration batch. If an FK is unexpectedly missing from generated SQL, check whether the referenced table exists in the snapshot.
+**Validation**: Before emitting `ADD FOREIGN KEY`, dbwarden verifies that the referenced table and columns exist in the snapshot. If they don't, the FK is silently skipped to avoid generating broken SQL. This can happen when the referenced table is added in the same migration batch. If an FK is unexpectedly missing from generated SQL, check whether the referenced table exists in the snapshot.
 
 **Content-based comparison**: FKs are compared by a 6-tuple signature `(columns, ref_table, ref_columns, on_delete, on_update, deferrable)`, not by constraint name. Renaming an FK constraint or changing options produces a drop+add.
 
@@ -99,7 +99,7 @@ All four backends support `ALTER TABLE t ALTER COLUMN c SET DEFAULT value` and `
 
 **PostgreSQL advanced parameters**: all are supported in `_build_index_sql`. See [PostgreSQL Deep Dive](postgresql/index.md) for full coverage.
 
-**PostgreSQL `CONCURRENTLY`**: DBWarden defaults to `CREATE INDEX CONCURRENTLY` to avoid table locking. Pass `--no-concurrent` when the migration must run inside a transaction block (PostgreSQL requires `CONCURRENTLY` outside a transaction).
+**PostgreSQL `CONCURRENTLY`**: dbwarden defaults to `CREATE INDEX CONCURRENTLY` to avoid table locking. Pass `--no-concurrent` when the migration must run inside a transaction block (PostgreSQL requires `CONCURRENTLY` outside a transaction).
 
 **Full-content comparison**: Indexes are compared by **all** attributes (using, unique, where, include, with_params, tablespace, nulls_not_distinct, column_sorting, concurrently), not just columns + name. Any difference produces a drop+add; ALTER INDEX is not used.
 
@@ -184,7 +184,7 @@ The plan JSON `resolved_from` field indicates how a rename was confirmed:
 ### PostgreSQL
 - `USING` clause for type casts is not auto-generated (write a manual migration)
 - `CREATE INDEX CONCURRENTLY` may not work within multi-statement transactions
-- `ALTER COLUMN ADD GENERATED ... AS (expr) STORED` is not supported by PostgreSQL; DBWarden emits a comment placeholder
+- `ALTER COLUMN ADD GENERATED ... AS (expr) STORED` is not supported by PostgreSQL; dbwarden emits a comment placeholder
 
 ### MySQL / MariaDB
 - DDL is not transactional; partial failure leaves schema inconsistent
