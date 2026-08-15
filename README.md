@@ -26,7 +26,7 @@
 </p>
 
 <p align="center">
-  <strong><a href="https://dbwarden.emiliano-go.com/">Full documentation</a></strong>
+  <strong><a href="https://dbwarden.org/">Full documentation</a></strong>
   &nbsp;|&nbsp;
   <strong><a href="https://github.com/dbwarden-org/dbwarden">Source Code</a></strong>
 </p>
@@ -368,17 +368,17 @@ DBWarden features a plugin system with three trust tiers (official, verified, co
 | `dbwarden-sandbox` | [`dbwarden-sandbox`](https://pypi.org/p/dbwarden-sandbox) | Testcontainers sandbox providers for safe migration replay |
 | `dbwarden-seeds` | [`dbwarden-seeds`](https://pypi.org/p/dbwarden-seeds) | Seed data management with code seeds and file-based SQL/Python seeds |
 
-See the [plugin documentation](https://dbwarden.emiliano-go.com/plugins/) for installation, development guides, and the full Verified standard.
+See the [plugin documentation](https://dbwarden.org/plugins/) for installation, development guides, and the full Verified standard.
 
 ---
 
 ## Next steps
 
-- Start with [Features](https://dbwarden.emiliano-go.com/features/)
-- Follow the guides in [Get Started](https://dbwarden.emiliano-go.com/getting-started/setup/)
-- Explore [Cookbook & Examples](https://dbwarden.emiliano-go.com/cookbook/)
-- Browse [Plugins](https://dbwarden.emiliano-go.com/plugins/)
-- Use the [CLI Reference](https://dbwarden.emiliano-go.com/cli-reference/)
+- Start with [Features](https://dbwarden.org/features/)
+- Follow the guides in [Get Started](https://dbwarden.org/getting-started/setup/)
+- Explore [Cookbook & Examples](https://dbwarden.org/cookbook/)
+- Browse [Plugins](https://dbwarden.org/plugins/)
+- Use the [CLI Reference](https://dbwarden.org/cli-reference/)
 
 ---
 

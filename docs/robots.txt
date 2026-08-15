@@ -1,7 +1,7 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://dbwarden.emiliano-go.com/sitemap.xml
+Sitemap: https://dbwarden.org/sitemap.xml
 
 search: yes
 ai-input: yes

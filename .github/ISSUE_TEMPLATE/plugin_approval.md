@@ -9,7 +9,7 @@ Approved plugins load without per-user consent once the installed version meets
 the approved minimum, so this is a request for users to trust your code by
 default. Fill in every section; a reviewer works from this issue.
 
-Standard: https://dbwarden.emiliano-go.com/plugins/developing/approved-standard/
+Standard: https://dbwarden.org/plugins/developing/approved-standard/
 -->
 
 ## Plugin repository

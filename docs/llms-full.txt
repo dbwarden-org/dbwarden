@@ -1,10 +1,10 @@
 # DBWarden Documentation
 > Full documentation for DBWarden - a SQL-first database migration system
-> Source: https://dbwarden.emiliano-go.com
-> Pages: 132
+> Source: https://dbwarden.org
+> Pages: 133
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/advanced/checksum-integrity/
+PAGE: https://dbwarden.org/advanced/checksum-integrity/
 ========================================================================
 
 # Checksum Integrity
@@ -137,7 +137,7 @@ $ dbwarden check --database primary
 See also: [Migration Locking](migration-locking.md) | [Migration Files](../migration-files.md) | [Cookbook: Schema Inspection](../cookbook/05-schema-inspection.md)
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/advanced/ci-cd-patterns/
+PAGE: https://dbwarden.org/advanced/ci-cd-patterns/
 ========================================================================
 
 # CI/CD Patterns
@@ -370,7 +370,7 @@ CI pipelines treat non-zero as job failure by default. No extra configuration ne
 See also: [Safe Deployment](safe-deployment.md) | [Credentials and Secrets](../configuration/credentials.md) | [Migration Locking](migration-locking.md) | [Cookbook: Offline & CI](../cookbook/04-offline-ci.md)
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/advanced/migration-locking/
+PAGE: https://dbwarden.org/advanced/migration-locking/
 ========================================================================
 
 # Migration Locking
@@ -570,7 +570,7 @@ See also: [Safe Deployment](safe-deployment.md) | [CI/CD Patterns](ci-cd-pattern
 The FastAPI lifespan helper lives in the `dbwarden-fastapi` plugin rather than core: [dbwarden-fastapi](https://github.com/dbwarden-org/dbwarden-fastapi).
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/advanced/safe-deployment/
+PAGE: https://dbwarden.org/advanced/safe-deployment/
 ========================================================================
 
 # Safe Deployment
@@ -710,7 +710,7 @@ $ dbwarden check-db --database primary
 See also: [Migration Locking](migration-locking.md) | [CI/CD Patterns](ci-cd-patterns.md) | [`rollback` command](../commands/rollback.md) | [Cookbook: Safety & Impact](../cookbook/06-safety-impact.md)
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/architecture-deep-dive/
+PAGE: https://dbwarden.org/architecture-deep-dive/
 ========================================================================
 
 # Architecture
@@ -741,7 +741,7 @@ When runtime config is requested:
 
 1. discover one config source (`dbwarden.py` or single callsite)
 2. fallback to `DBWARDEN_CONFIG_MODULE` when configured
-3. import source and execute `database_config(...)` calls
+3. import source and register concrete `DbwardenDatabase` classes or execute `database_config(...)` calls
 4. validate uniqueness/default/model-path rules
 5. resolve selected database and apply `--dev` swap when enabled
 
@@ -899,7 +899,495 @@ Translation happens during SQL generation, not by mutating existing migration fi
 - lock release is guarded in cleanup paths
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/cli-reference/
+PAGE: https://dbwarden.org/changelog/
+========================================================================
+
+# Changelog
+
+All notable changes to DBWarden, newest first. Versions follow semantic versioning and are tagged in the repository.
+
+## [Unreleased]
+
+### Changed
+
+- **Declarative configuration parity.** `DbwardenDatabase` now supports the complete `database_config(...)` field and default surface, inherited and direct plugin configuration, equivalent handles and validation, and aliased or indirect class discovery.
+- **Generated files use atomic replacement.** Migration files, model state, generated models, rollback files, plugin state, and exported configuration now avoid leaving truncated files after an interrupted write.
+- **Database settings mask URLs through SQLAlchemy URL parsing.** Settings and config output now handle encoded credentials and IPv6 hosts without exposing passwords.
+
+### Fixed
+
+- **Unsafe SQL identifiers are quoted or rejected.** Backend-generated schema, table, column, statistics, and drop-object SQL now protects reserved words and embedded identifier quotes.
+- **Live command disconnects no longer report success.** Explicit `check` and `snapshot` operations propagate connection failures after retries.
+- **Configuration and impact scans reject symlink escapes.** Workspace discovery no longer imports or scans symlinked files and directories outside the intended root.
+- **Plugin provenance is HTTPS-only and size-bounded.** Plugin lock and consent TOML serialization escapes structural characters, and installer/provenance inputs are validated.
+- **Migration SQL splitting respects quoted strings and comments.** Semicolons inside SQL literals and comments no longer split statements incorrectly.
+
+## [0.17.0] - 2026-08-13
+
+### Added
+
+- **Global `--json` flag.** `dbwarden --json <command>` switches display commands (`status`, `history`, `database list`, `settings show`, `config`, `version`, `lock-status`) to structured JSON output and also routes the command's log output through JSON formatting (the same effect as `DBWARDEN_LOG_JSON=true`). Commands that already support JSON output (`check`, `check-db`, `check-impact`, `diff`, `plugin list`, `plugin info`) honor the global flag too.
+- **TRACE log level.** A `trace` level (numeric `5`) is available via `--debug-level trace` and logs per-statement SQL during `migrate`, `rollback`, and `downgrade`.
+- **`--perf` flag for migration commands.** `migrate`, `rollback`, `downgrade`, and `make-migrations` accept `--perf` to add per-SQL-statement timing breakdowns on top of the always-on phase timings (lock acquisition, snapshot write, model state write, and SQL statement durations).
+- **Optional database availability handling.** Database entries support `skip_if_missing=True` for optional databases in multi-database operations. Use the global `--disable-skip` flag to force configured optional databases to fail normally.
+- **Declarative database configuration.** Concrete subclasses of `DbwardenDatabase` are automatically registered and support inherited configuration, while the existing `database_config(...)` API remains supported.
+- **Partial-success results.** Multi-database migration, status, and seed commands report skipped databases and use exit code `3` when the operation completes with optional databases unavailable.
+
+### Fixed
+
+- **ClickHouse DDL generation for fresh migrations.** `make-migrations` now emits ClickHouse DDL that applies cleanly to a fresh ClickHouse 24.x database: column comments are emitted before `CODEC(...)`, `Nullable` is nested inside `LowCardinality(...)` rather than the invalid reverse, and columns used in `ORDER BY` / `PRIMARY KEY` / `PARTITION BY` / `SAMPLE BY` are rendered as non-nullable.
+- **Plugin list table rendering.** The `plugin list` table no longer wraps or truncates plugin distribution names in narrow terminals.
+- **Rollback warning test stability.** The irreversible-rollback warning test now asserts against the log record instead of Rich console wrapping.
+
+## [0.16.5] - 2026-08-05
+
+### Added
+
+- **Plugin-declared configuration keys.** Plugins can now register their own config keys and have them surface through the standard configuration path, so an installed plugin ships its settings surface instead of relying on loose user-side keys.
+
+### Changed
+
+- **`settings` output masks secret values.** The `settings` command now redacts values it recognises as credentials, so dumping configuration for a support ticket no longer prints a database password or API token.
+
+### Fixed
+
+- **MySQL diff for newly created tables.** A newly added table in a MySQL database no longer produces an empty or broken diff; the new-table path now emits the full create statement.
+- **Publish and CI workflows hardened.** Release publishing and the CI pipeline were tightened to fail fast on the conditions that previously produced partial artifacts.
+
+## [0.16.4] - 2026-08-05
+
+### Added
+
+- **`--debug` and `--debug-level` CLI flags.** Both flags enable per-file scan logging, so a slow or misbehaving `make-migrations` run can be traced down to the individual model file that caused it.
+
+### Fixed
+
+- **Config cache miss no longer rescans the whole workspace.** A config cache miss previously triggered a repeated full-workspace rescan; the cache now reloads in place.
+- **Offline rollback no longer double-reverses.** The offline rollback path was reversing the same operation twice; the reversal is now applied exactly once, and agg-target key types resolve through the cascade chain.
+
+## [0.16.3] - 2026-08-03
+
+### Fixed
+
+- **Materialized view drops use `DROP_VIEW` ordering.** Drops for cascading materialized views are emitted in `DROP_VIEW` order, matching how the views depend on one another.
+- **`ch_raw` group-by column types resolve through the cascade chain.** A `ch_raw` view whose group-by keys come from an upstream view now resolves the types transitively instead of falling back to an unresolved state.
+
+## [0.16.2] - 2026-07-29
+
+### Fixed
+
+- **Cascade materialized views resolve string forward references.** Cascading MVs that reference an upstream view by a forward string now resolve through the registry rather than failing at snapshot time.
+- **Group-by key types fixed in cascading views.**
+- **`ch_meta.ch_type` populated regardless of backend.** The `ch_type` metadata is now filled in even when the diff is running under a non-ClickHouse backend.
+- **Config fallback now warns.** Falling back to a default backend or schema when a config value is missing now emits a warning instead of silently proceeding.
+
+## [0.16.1] - 2026-07-28
+
+### Added
+
+- **Container test for cascade combinator correctness.** A live-ClickHouse test now verifies that cascading aggregate views emit the correct combinator.
+
+### Changed
+
+- **Cascading aggregate views use the `MergeState` combinator.** Cascades no longer emit `Sum` for upstream aggregate state; they use `MergeState` so the aggregate survives the cascade correctly.
+- **`schemap` and `@auto_schema` moved to the `dbwarden-fastapi` plugin.** The schema-map integration is no longer part of core; install `dbwarden-fastapi` to keep using `@auto_schema`.
+
+### Fixed
+
+- **Three agg-target DDL bugs.** Aggregation target handling in the DDL layer emitted incorrect SQL in three edge cases.
+
+## [0.16.0] - 2026-07-24
+
+### Added
+
+- **Plugin system with trust tiers, consent, and provenance verification.** DBWarden now discovers plugins through the `dbwarden.plugins` entry point group and classifies each distribution into official, verified, or community tiers. Plugin code from unverified sources is not imported until the operator explicitly consents to that exact version. See the [Plugins](plugins/) section for the trust model.
+- **`recover-model-state` command.** Model state is now stored in the database as well as on disk, and `dbwarden recover-model-state` restores it when the on-disk file is lost or corrupt.
+- **GPG-signed commit requirement.** Contribution guidelines now require GPG-signed commits.
+
+### Changed
+
+- **Remaining sandbox and five PostgreSQL extension handlers extracted to plugins.** Core no longer ships the sandbox provider or the PostgreSQL extensions, event triggers, functions, triggers, and storage-parameter handlers; they live in `dbwarden-sandbox` and `dbwarden-pgsql-extensions`.
+- **Plugin-duplicated code stripped from core.** Every handler that now lives in a plugin was removed from core so there is a single implementation.
+- **Normalized live snapshot diff.** Live-database snapshots now diff against the same normalized representation as stored snapshots.
+- **PostgreSQL round-trip diff stabilized.**
+
+### Fixed
+
+- **Generated model metadata preserved.** Reverse-engineered models keep their detected backend metadata instead of dropping it during regeneration.
+
+## [0.15.0] - 2026-07-21
+
+### Added
+
+- **Strict rollback contracts.** Every generated migration now has a declared rollback contract: executable rollback when it is safe, placeholder refusal by default, and an explicit irreversible declaration when rollback cannot be produced. See [Rollback Generation](correctness/rollback-generation.md).
+- **Irreversible rollback annotations.** An operator can annotate a migration as irreversible, which DBWarden records and respects.
+- **Rollback round-trip integration harness.** A test harness applies upgrade and rollback in sequence and verifies the schema lands back where it started. See [Round Trip Verification](correctness/round-trip-verification.md).
+- **ObjectHandler protocol documented.**
+
+### Changed
+
+- **Rollback metadata preserved across diff pipelines.** Rollback information survives the snapshot, diff, and emission stages instead of being regenerated per stage.
+- **Rollback state restored for ClickHouse and PostgreSQL.** RBAC, collection, profile, and policy rollback are restored for ClickHouse; PostgreSQL rollback state is restored as well.
+
+## [0.14.3] - 2026-07-21
+
+### Added
+
+- **`recover-model-state` command.** Restores model state from the database when the on-disk state is missing or stale.
+
+## [0.14.2] - 2026-07-21
+
+### Fixed
+
+- **`clickhouse_options` normalized to `ch_options`.** The snapshot pipeline now uses a single dict key, `ch_options`, so diffs no longer churn on naming alone.
+- **TTL expression query conditional for ClickHouse before 24.4.** The `ttl_expression` query only runs against versions that expose the column, preventing failures on older servers.
+- **Dead `ChRbacHandler` removed.**
+- **Mobile sidebar drawer fixed.** The Zensical modern theme now uses a class-based drawer instead of `:has()`, and the viewport meta tag is present.
+
+## [0.14.1] - 2026-07-20
+
+### Changed
+
+- **Docs aligned to the API.** Reference pages now match the exported surface, including the missing aggregation methods and RBAC class exports.
+
+## [0.14.0] - 2026-07-20
+
+### Changed
+
+- **Core refactored to a single registry-driven protocol.** The twin registries were collapsed into one, the five backends were extracted into `dbwarden/databases/`, and every handler now speaks one protocol with `**kwargs` propagation and a `cluster_ctx` on the driver.
+- **Config, commands, and FastAPI extracted into packages.** `config/`, `commands/`, and the FastAPI extension now live as packages rather than modules, which is the groundwork for the plugin system.
+- **ClickHouse view API rewritten.** `ChView`, `MaterializedView`, and `AggregatingView` are now registry-backed non-SQLAlchemy base classes, with builder signatures (`to` instead of `to_table`), `_resolve_source`, and `AggregatingViewSpec` for correctness.
+- **ClickHouse RBAC, named collections, and data operations.** New handlers and spec classes cover roles, users, grants, policies, quotas, settings profiles, named collections, partition operations, mutations, and `OPTIMIZE` via a `DataOp` type.
+- **`render_expr()` and compiled-expression acceptance.** Expression sites now accept SQLAlchemy `ColumnElement` objects and render them through `render_expr()`.
+
+### Added
+
+- **`p0` and `integration` pytest markers.** `p0` marks the two-cycle convergence gate that must never regress; `integration` marks tests that need a live ClickHouse container.
+- **Convergence-audit and ClickHouse integration CI jobs.**
+- **ClickHouse documentation split into a multi-page reference** with dedicated pages for RBAC, views, dictionaries, and data operations.
+
+## [0.13.0] - 2026-07-06
+
+### Added
+
+- **PyPI publishing workflow.** A `v*` tag now publishes the package to PyPI automatically.
+- **SEO integration via seoslug 2.0.1.** The docs site generates canonical URLs, OG images, and schema-aware frontmatter through the inline Zensical extension.
+- **Favicon, OG image, and robots.txt content-signal directives.**
+
+### Fixed
+
+- **Nine SQL generation bugs resolved** across the PostgreSQL expansion.
+- **Schema package re-exports removed** so imports resolve against the single canonical path.
+
+## [0.12.5] - 2026-07-01
+
+### Changed
+
+- **README version badge updated** and the publishing workflow prepared for the PyPI release.
+
+## [0.12.4] - 2026-06-24
+
+### Changed
+
+- **`_write_model_state` skipped when no migrations applied.** Startup no longer burns CPU rewriting model state that did not change; this removes a multi-minute stall on every startup with nothing pending.
+
+### Fixed
+
+- **MySQL metadata preserved in generated models.**
+- **Config and model caches refreshed** when the underlying files change.
+- **Docs lint issues fixed.**
+
+## [0.12.3] - 2026-06-23
+
+### Fixed
+
+- **`make-migrations` output deduplicated.**
+- **MySQL DDL savepoint destruction handled** so a failed statement does not invalidate the transaction.
+- **Primary key inferred for tables missing one**, and MySQL DDL translation improved.
+- **Generated SQLite databases ignored** by version control.
+
+## [0.12.1] - 2026-06-17
+
+### Added
+
+- **`--base` flag documented.** `dbwarden generate-models --base app.database:Base` imports a project base instead of declaring a new one.
+- **Graceful database disconnection.** Connection failures now trigger retry logic and a clear error instead of a bare traceback.
+
+### Changed
+
+- **Schema backends moved to `dbwarden/databases/`.**
+- **Safe SQL quoting and config cache fixes.** Duplicate model loads are avoided and default serialization is stable.
+
+### Fixed
+
+- **Live snapshot taken when no cached snapshot exists** for `make-migrations`.
+- **Unique module name computed per file** in the sandbox loader, so two files with the same basename no longer collide.
+
+## [0.12.0] - 2026-06-13
+
+### Added
+
+- **MySQL round-trip support.** MySQL schema classes, model discovery, a round-trip engine, and comprehensive test coverage, alongside the MySQL dependency group. See [MySQL](databases/mysql.md).
+- **Seed export command.** `dbwarden export` writes code seeds to ROC SQL files.
+
+### Changed
+
+- **ClickHouse `ForeignKey` prohibited.** A foreign key on a ClickHouse table is now an error rather than silently unsupported SQL.
+- **Snapshots moved to `.dbwarden/`**, and model state is synced online.
+- **Auto-generated SQL for previously manual operations.** ClickHouse rename, nullable, `LowCardinality`, and projection changes, plus the PostgreSQL `USING` clause, are now emitted automatically.
+- **Generated models emit `pg.field()` and `ch.field()` spec objects** instead of flat backend attributes.
+
+## [0.11.2] - 2026-06-12
+
+### Added
+
+- **In-code seed engine.** `@seed_data`, `SeedRow`, and `DBWardenSeed` define seeds in Python; a tracking table records what has been applied.
+- **`auto_apply_seeds` config** wired into `migrate`.
+- **Checksum drift detection and seed pruning.**
+
+### Fixed
+
+- **Offline migration first run generates SQL for all tables**, not an empty set.
+- **Seed types moved to the `dbwarden.seed` module** so the CLI and engine share one definition.
+
+## [0.11.0] - 2026-06-11
+
+### Added
+
+- **Typed Meta system.** A `_MetaValidator` metaclass validates every attribute on `class Meta` at import time; a typo now raises `DBWardenConfigError` instead of silently producing wrong DDL. Per-backend field factories produce spec objects.
+- **Offline v2 state format.** ClickHouse engine recreate and column rename flags are captured in the offline state.
+
+### Changed
+
+- **`requires-python` relaxed to `>=3.12`** and the upper bound removed, so Python 3.14 is supported.
+
+## [0.10.2] - 2026-06-11
+
+### Added
+
+- **`model_tables` per-database filter** with overlap validation, so one model file set can be partitioned across databases with ownership checks.
+
+## [0.10.1] - 2026-06-11
+
+### Fixed
+
+- **Config sandbox classification for in-package and `src/` layout projects.** Model files discovered inside the package directory or under `src/` are now classified correctly.
+
+## [0.10.0] - 2026-06-09
+
+### Added
+
+- **PostgreSQL auto-increment lifecycle support.** Serial, identity, and sequence lifecycle are handled end to end, including rename and rollback.
+- **`--type` flag for repeatable migrations.**
+
+### Changed
+
+- **Real `diff` implemented**, replacing the placeholder, and obsolete CLI commands removed.
+- **Lock system overhauled.** Migration locking, connection safety, and sandbox fixes landed as a mass bug-fix pass (38+ fixes).
+
+### Fixed
+
+- **`alter_column_type` rollback and `drop_table` placeholder fixed**, with the full rollback cycle verified.
+- **Rollback SQL for ClickHouse indexes and foreign key constraints fixed**, and the `make-rollback` regex corrected.
+- **System tables excluded from diffs** and rollback counts corrected.
+- **Offline migration engine fixed** for compatible operations and a wrong import, with 35 comprehensive tests; 26 edge-case tests added, and the crash on corrupted state resolved.
+
+## [0.9.5] - 2026-06-09
+
+### Added
+
+- **`--type` flag for repeatable migrations.**
+
+### Changed
+
+- **Documentation updated** for the new flag and related CLI changes.
+
+## [0.9.4] - 2026-06-09
+
+### Added
+
+- **Cookbook docs, examples, and an integration test suite.**
+
+### Fixed
+
+- **Six bugs fixed.**
+- **Missing import in `rollback.py` fixed** (`get_database`).
+- **Comments added to every example.**
+
+## [0.9.0] - 2026-06-09
+
+### Fixed
+
+- **Offline migration engine fixed** for compatible operations and the wrong import path, with 35 comprehensive tests.
+
+### Changed
+
+- **Docs restructured.** Index and introduction merged, models/modeling split into separate references, squashing folded into the squash page, and the navigation rebuilt.
+
+## [0.8.0] - 2026-04-26 through 2026-06-09
+
+This window aggregated the 0.8 and 0.9 development lines into core; the version was not bumped per feature.
+
+### Added
+
+- **Schema snapshots for rename detection.** A checksummed JSON snapshot is written after every migration and powers rename detection without querying the live database. See [Deterministic Diff](correctness/deterministic-diff.md).
+- **Column-level diff with `StatementOrder` and `--safe-type-change`.** Type, nullability, default, and comment changes produce precise `ALTER COLUMN` statements, and type changes require the flag.
+- **Table and column rename detection** with an interactive prompt and a rename flag.
+- **Richer index metadata.** Partial and covering indexes, `USING` access methods, `WITH` storage parameters, `WHERE`, `TABLESPACE`, `NULLS NOT DISTINCT`, per-column sort order, and ClickHouse skip indexes, plus a `--concurrent` flag.
+- **`DatabaseHandle`** returned by `database_config()`, with `database_url_sync` and `database_url_async` split into separate settings and a unified async engine dispatcher.
+- **Sandbox providers and `--dry-run`.** `dbwarden migrate --dry-run --sandbox` replays migrations against SQLite or a testcontainers provider.
+- **ClickHouse materialized views, projections, and a safety analyzer**, wired into the new `check` command.
+- **ClickHouse replicated engines and external dictionaries.**
+- **Versioned seed management** with CLI commands and a configurable tracking table.
+- **Prometheus metrics and JSON logging**, plus FastAPI Redis lock, status, and migrate endpoints and a `dbwarden_lifespan` context manager. See [Observability](observability.md).
+- **Migration impact analysis** with the `check-impact` command, using AST analysis with a grep fallback.
+- **Offline migrations.** `export-models` dumps model state; `make-migrations --offline` generates SQL with no database connection. See [Offline Integrity](correctness/offline-integrity.md).
+- **In-code seed definitions** (`@seed_data`, `SeedRow`, `DBWardenSeed`).
+- **Class Meta metadata foundation**, with `IndexSpec`, `CheckSpec`, `UniqueSpec` dataclasses and factory functions.
+- **PostgreSQL first-class support with zero-diff round-trip**, including unlogged tables, `no_inherit`, deferred uniques, `tsvector`, `enum ADD VALUE`, partitioning, and the typed `@auto_schema` wrapper.
+- **ClickHouse first-class Meta** with `ChEngineSpec`, `ChIndexSpec`, and spec serialization.
+
+## [0.7] - 2026-04-26
+
+### Added
+
+- **Auto-generated migration names** when no description is provided, with descriptive names derived from the change.
+- **Migration plan output** and configurable migration tracking tables.
+- **Health router hardening.** Authentication via the `DBWARDEN_HEALTH_AUTH` environment variable, sanitized error responses, and validation of identifiers and paths against strict patterns.
+
+### Changed
+
+- **Migrations now use savepoints.** Any statement failure rolls back all statements in the migration.
+- **Atomic writes with backups.** Config and snapshot writes are atomic and validated before replace, with the backup directory checked first.
+
+### Fixed
+
+- **No spurious backup on initial `init`.**
+- **`RestrictedFileLoader` added** so sandboxed config loads cannot escape the project root.
+
+## [0.6] - 2026-04-24
+
+### Added
+
+- **FastAPI integration.** Session dependencies, health router, and startup helpers.
+- **`settings` command group and mutators.**
+- **Rich colorized CLI output** with command accents.
+
+### Changed
+
+- **Python-based `database_config` runtime** replaced the TOML-only config surface.
+- **Docs restructured** into Getting Started, Tutorial, Advanced, and Reference tiers.
+
+## [0.5] - 2026-04-23
+
+### Changed
+
+- **Documentation updates** across the site.
+
+## [0.4] - 2026-04-23
+
+### Added
+
+- **SQLite translation layer with strict mode support.** PostgreSQL-flavored models run against SQLite locally, with a `--strict` flag enforcing translation correctness.
+- **Global `--dev` mode** and database URL and target uniqueness validation.
+
+## [0.3.6] - 2026-04-14
+
+### Changed
+
+- **Checksum-based migration tracking.** Migrations are checked by checksum instead of version, so deployments are idempotent.
+- **Migrations table keyed by filename** (auto-increment id removed) with a UNIQUE constraint on the version column for PostgreSQL `ON CONFLICT` support.
+- **ClickHouse-specific SQL queries** for migration tracking.
+
+## [0.3.2] - 2026-04-10
+
+### Fixed
+
+- **Migration filename uses the config section name** instead of the URL.
+- **Logging and type mapping improved** across the command layer.
+
+## [0.3.1] - 2026-04-10
+
+### Fixed
+
+- **Logging and type mapping improved** across the command layer.
+
+## [0.3.0] - 2026-04-10
+
+### Added
+
+- **ClickHouse support.** URL conversion and the `clickhouse-connect` dependency.
+- **Multi-database support.** An explicit `database_type` field, a multi-database config structure, `--database` and `--all` CLI options, and a `database` management command. See [Multi-Database](configuration/multi-database.md).
+
+### Changed
+
+- **Backend-specific internal migration SQL** for PostgreSQL, MySQL, and SQLite.
+
+### Fixed
+
+- **Duplicate migrations fixed.**
+
+## [0.2.0] - 2026-03-04
+
+### Changed
+
+- **Icon and banner added**, and tests and docs updated for the rebrand.
+
+## [0.1.5] - 2026-02-27
+
+### Added
+
+- **ALTER TABLE support.**
+
+### Changed
+
+- **`.env` alternatives and async mode removed** in favour of a single sync path.
+- **Diffs compare against the database schema** instead of the migrations table.
+
+### Fixed
+
+- **Async mode detection and duplicate connection logs** in the connection layer.
+
+## [0.1.3] - 2026-02-16
+
+### Added
+
+- **`warden.toml` documented.**
+
+## [0.1.2] - 2026-02-10
+
+### Added
+
+- **Issue templates and CONTRIBUTING.md.**
+
+### Changed
+
+- **Config moved from `.env` to `warden.toml`.**
+
+### Fixed
+
+- **`CallableColumnDefault` handled** so SQLite no longer emits syntax errors for callable defaults.
+
+## [0.1.1] - 2026-02-08
+
+### Added
+
+- **Baseline migrations** and automatic backup before migration.
+- **Migration dependency support.**
+- **Colored output with SQL syntax highlighting.**
+
+### Changed
+
+- **Checksum-based deduplication** for `RA__` and `ROC__` migrations.
+- **Auto-discovery scans all subdirectories** for model files.
+
+### Fixed
+
+- **"Table already exists" errors fixed** by adding `IF NOT EXISTS` to `CREATE TABLE` statements.
+- **Migration deduplication and pending-migration detection fixed.**
+
+========================================================================
+PAGE: https://dbwarden.org/cli-reference/
 ========================================================================
 
 # CLI Reference
@@ -919,13 +1407,23 @@ $ dbwarden [GLOBAL_OPTIONS] COMMAND [ARGS] [COMMAND_OPTIONS]
 | `--dev` | Use `dev_database_url` and `dev_database_type` for selected database |
 | `--strict-translation` | Fail on unsupported/lossy dev SQLite translation |
 | `--debug` | Enable DEBUG-level logging (shows per-file model scanning on `make-migrations`) |
-| `--debug-level <LEVEL>` | Set an exact log level: `debug`, `info`, `warning`, `error`, `critical`, or `10`/`20`/`30`/`40`/`50` |
+| `--debug-level <LEVEL>` | Set an exact log level: `trace`, `debug`, `info`, `warning`, `error`, `critical`, or `5`/`10`/`20`/`30`/`40`/`50` |
+| `--json`/`-j` | Emit structured JSON for display commands and JSON-formatted logs |
 | `--help` | Show help |
 
 `--debug`/`--debug-level` set the logging severity and compose with the
 per-command `--verbose`/`-v` flag, which controls INFO-level verbosity. Use both
 (`--debug` plus `-v`) for DEBUG diagnostics with verbose INFO output. If both
-`--debug` and `--debug-level` are given, `--debug-level` wins.
+`--debug` and `--debug-level` are given, `--debug-level` wins. `trace` (or `5`)
+is below `debug` and additionally logs per-statement SQL during migration
+commands.
+
+`--json` switches display commands (`status`, `history`, `database list`,
+`settings show`, `config`, `version`, `lock-status`) to machine-readable JSON
+and also formats the command's log output as newline-delimited JSON (the same
+effect as `DBWARDEN_LOG_JSON=true`). Commands with their own format option
+(`check`, `check-db`, `check-impact`, `diff`, `plugin list`, `plugin info`)
+honor the global flag when no explicit format is given.
 
 ## Configuration
 
@@ -1284,7 +1782,7 @@ $ dbwarden version
 For worked command examples, see the [Cookbook & Examples](cookbook/index.md).
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/codebase/
+PAGE: https://dbwarden.org/codebase/
 ========================================================================
 
 # Codebase Organization
@@ -1390,7 +1888,7 @@ The orphan `__pycache__` directories under `schema/{clickhouse,mysql,pgsql,maria
 5. Do not touch files in `schema/` unless you are adding cross-database metadata fields.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/commands/check-db/
+PAGE: https://dbwarden.org/commands/check-db/
 ========================================================================
 
 # `check-db`
@@ -1418,7 +1916,7 @@ $ dbwarden check-db --database primary --out yaml
 See also: [Your First Migration](../getting-started/first-migration.md)
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/commands/check/
+PAGE: https://dbwarden.org/commands/check/
 ========================================================================
 
 # `check`
@@ -1465,12 +1963,13 @@ DBWarden runs generic safety checks for all backends, covering column type chang
 - output is based on live database inspection plus current model metadata
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/commands/database/
+PAGE: https://dbwarden.org/commands/database/
 ========================================================================
 
 # `database`
 
-Display configured databases. Config is defined in Python code via `database_config()`, so
+Display configured databases. Config is defined in Python code via declarative
+`DbwardenDatabase` classes or `database_config()`, so
 `database list` is a read-only command for viewing what's registered.
 
 ## Usage
@@ -1485,7 +1984,7 @@ $ dbwarden database list
 - [Configuration docs](../configuration/index.md)
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/commands/diff/
+PAGE: https://dbwarden.org/commands/diff/
 ========================================================================
 
 # `diff`
@@ -1557,7 +2056,7 @@ $ dbwarden diff --database primary --offline
 - [`check-db`](./check-db.md): inspect live database schema
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/commands/downgrade/
+PAGE: https://dbwarden.org/commands/downgrade/
 ========================================================================
 
 # `downgrade`
@@ -1586,7 +2085,7 @@ $ dbwarden downgrade --to 0005 --database primary
 See also: [rollback](rollback.md)
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/commands/generate-models/
+PAGE: https://dbwarden.org/commands/generate-models/
 ========================================================================
 
 # `generate-models`
@@ -1744,7 +2243,7 @@ For the complete feature reference, see [ClickHouse Deep Dive](../databases/clic
 - ClickHouse engine metadata is auto-detected; review the generated `ChEngineSpec` to ensure correctness
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/commands/history/
+PAGE: https://dbwarden.org/commands/history/
 ========================================================================
 
 # `history`
@@ -1769,7 +2268,7 @@ $ dbwarden history --database primary
 See also: [Your First Migration](../getting-started/first-migration.md)
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/commands/init/
+PAGE: https://dbwarden.org/commands/init/
 ========================================================================
 
 # `init`
@@ -1786,7 +2285,7 @@ $ dbwarden init --database primary
 ## What it does
 
 - creates `migrations/` and `migrations/<database>/` if missing
-- creates/updates config scaffold (`dbwarden.py`) if needed
+- creates/updates a declarative config scaffold (`dbwarden.py`) if needed
 - does not mutate your database schema
 
 ## Notes
@@ -1797,7 +2296,7 @@ $ dbwarden init --database primary
 See also: [Configuration](../configuration/index.md)
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/commands/lock/
+PAGE: https://dbwarden.org/commands/lock/
 ========================================================================
 
 # `lock-status` and `unlock`
@@ -1823,7 +2322,7 @@ $ dbwarden unlock --database primary
 See also: [Migration Locking](../advanced/migration-locking.md)
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/commands/make-migrations/
+PAGE: https://dbwarden.org/commands/make-migrations/
 ========================================================================
 
 # `make-migrations`
@@ -1874,6 +2373,11 @@ $ dbwarden make-migrations --database primary --safe-type-change
 ## Schema Snapshots
 
 After each migration is applied, DBWarden writes a **schema snapshot** to `.dbwarden/schemas/<migration_id>.schema.json`. These snapshots capture the full DDL state (tables, columns, types, indexes, constraints, enums) at that point in time.
+
+For long migration histories, `dbwarden migrate --defer-snapshots` writes only
+the final schema snapshot for the batch. This avoids repeated full-schema
+reflection while preserving the final state needed by convergence and offline
+diff workflows. Omit the flag when per-migration audit snapshots are required.
 
 `make-migrations` diffs your SQLAlchemy models against the **latest** snapshot instead of the live database. This means:
 
@@ -2439,7 +2943,7 @@ $ dbwarden make-migrations --database primary --plan
 See also: [Migration File Format](../migration-files.md), [Schema Snapshots](schema-snapshots.md)
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/commands/make-rollback/
+PAGE: https://dbwarden.org/commands/make-rollback/
 ========================================================================
 
 # `make-rollback`
@@ -2490,7 +2994,7 @@ With that annotation, `make-rollback` may create a rollback file that contains a
 - Do not commit placeholder rollback unless the migration is explicitly declared irreversible.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/commands/migrate/
+PAGE: https://dbwarden.org/commands/migrate/
 ========================================================================
 
 # `migrate`
@@ -2531,7 +3035,7 @@ $ dbwarden migrate --database primary --baseline --to-version 0005
 See also: [Your First Migration](../getting-started/first-migration.md)
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/commands/new/
+PAGE: https://dbwarden.org/commands/new/
 ========================================================================
 
 # `new`
@@ -2562,7 +3066,7 @@ $ dbwarden new "update view" --database primary --type roc
 See also: [Your First Migration](../getting-started/first-migration.md)
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/commands/rollback/
+PAGE: https://dbwarden.org/commands/rollback/
 ========================================================================
 
 # `rollback`
@@ -2592,7 +3096,7 @@ $ dbwarden rollback --database primary --to-version 0007
 See also: [Your First Migration](../getting-started/first-migration.md)
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/commands/schema-snapshots/
+PAGE: https://dbwarden.org/commands/schema-snapshots/
 ========================================================================
 
 # Schema Snapshots
@@ -2801,7 +3305,7 @@ This normalization is what powers the rename detection: two columns with the sam
 - **Checksum-excluded fields**: The `checksum` field itself is excluded from the hash computation, so checksum updates do not cascade.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/commands/seed/
+PAGE: https://dbwarden.org/commands/seed/
 ========================================================================
 
 # `seed`
@@ -2940,13 +3444,13 @@ Exporting requires the same dialect packages as connecting to that database. For
 - Non-deterministic `generate()` methods produce a new checksum every export
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/commands/settings/
+PAGE: https://dbwarden.org/commands/settings/
 ========================================================================
 
 # `settings`
 
 View DBWarden configuration. All database settings are defined in Python code via
-`database_config()`, so `settings show` is a read-only command for inspecting
+declarative database classes or `database_config()`, so `settings show` is a read-only command for inspecting
 the current configuration.
 
 ## `settings show`
@@ -2985,7 +3489,7 @@ Database: PRIMARY (default)
 - [Configuration docs](../configuration/index.md)
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/commands/snapshot/
+PAGE: https://dbwarden.org/commands/snapshot/
 ========================================================================
 
 # `snapshot`
@@ -3022,7 +3526,7 @@ For ClickHouse:
 - internally uses `sqlalchemy.inspect()` for generic databases
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/commands/status/
+PAGE: https://dbwarden.org/commands/status/
 ========================================================================
 
 # `status`
@@ -3049,7 +3553,7 @@ $ dbwarden status --all
 See also: [Your First Migration](../getting-started/first-migration.md)
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/commands/version/
+PAGE: https://dbwarden.org/commands/version/
 ========================================================================
 
 # `version`
@@ -3067,7 +3571,7 @@ $ dbwarden version
 - useful for support/debug and release verification
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/configuration/concepts/
+PAGE: https://dbwarden.org/configuration/concepts/
 ========================================================================
 
 # Configuration Concepts
@@ -3141,6 +3645,33 @@ for name, url in DATABASES.items():
     )
 ```
 
+## Two Equivalent APIs
+
+Use `database_config(...)` for direct, one-off declarations. Use
+`DbwardenDatabase` subclasses when several databases share settings or plugin
+configuration through inheritance:
+
+```python
+from dbwarden import DbwardenDatabase
+
+
+class Production(DbwardenDatabase):
+    __abstract__ = True
+    database_type = "postgresql"
+    model_paths = ["app.models"]
+
+
+class Primary(Production):
+    database_name = "primary"
+    database_url_sync = "postgresql://localhost/main"
+    default = True
+```
+
+Every explicit `database_config(...)` field is available as a class attribute.
+Concrete classes register on import, and their `.handle` is the same handle
+returned by the function API. Mark shared bases with `__abstract__ = True` so
+they are not registered independently.
+
 ## Configuration Loading
 
 ### Discovery Order
@@ -3152,7 +3683,7 @@ DBWarden searches for configuration in this order:
       not found
 2. dbwarden.py in parent directories
       not found
-3. Full scan for files with database_config()
+3. Full scan for files with declarative classes or database_config()
       not found
 4. DBWARDEN_CONFIG_MODULE environment variable
       not found
@@ -3171,7 +3702,7 @@ $ dbwarden history    #  Config loads here
 
 **Load process:**
 1. Python imports your config module
-2. `database_config()` calls execute
+2. Concrete `DbwardenDatabase` classes register, or `database_config()` calls execute
 3. Databases register in internal registry
 4. Validation runs
 5. Command executes with loaded config
@@ -3458,7 +3989,8 @@ Common scenarios:
 
 ### How It Works
 
-Each `database_config()` call registers an independent database:
+Each concrete `DbwardenDatabase` class registers an independent database. The
+equivalent `database_config()` calls behave the same way:
 
 ```python
 primary = database_config(
@@ -3555,7 +4087,7 @@ Shows the variable name instead of resolved value.
 ### Configuration Time
 
 When config loads:
-- `database_config()` calls execute
+- Declarative classes register, or `database_config()` calls execute
 - Validation runs
 - Internal registry populates
 - **No database connections made**
@@ -3577,12 +4109,15 @@ When commands run:
 - **[Multi-Database](multi-database.md)** - Multi-database patterns
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/configuration/connection-urls/
+PAGE: https://dbwarden.org/configuration/connection-urls/
 ========================================================================
 
 # Connection URLs
 
 Complete reference for database connection URL formats.
+
+The URL examples are API-neutral. In new configurations, assign these values
+to a `DbwardenDatabase` subclass; `database_config(...)` remains supported.
 
 ## URL Format
 
@@ -4008,12 +4543,16 @@ database_url_sync="postgresql://user:p%40ss@localhost/myapp"  # @ encoded as %40
 - **[Troubleshooting](troubleshooting.md)** - Connection issues
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/configuration/credentials/
+PAGE: https://dbwarden.org/configuration/credentials/
 ========================================================================
 
 # Credentials and Secrets
 
 Never hardcode database credentials in `dbwarden.py`. This page covers how to inject secrets safely.
+
+The default configuration style is a `DbwardenDatabase` subclass. The examples
+below use the equivalent `database_config(...)` function form where it keeps the
+credential-loading pattern concise; both APIs accept the same URL values.
 
 ## The problem
 
@@ -4219,12 +4758,16 @@ The URL is still used internally for connections. This prevents accidental crede
 See also: [Production Patterns](production-patterns.md) | [CI/CD Patterns](../advanced/ci-cd-patterns.md)
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/configuration/dev-mode/
+PAGE: https://dbwarden.org/configuration/dev-mode/
 ========================================================================
 
 # Dev Mode
 
 Use SQLite for local development and PostgreSQL in production with the same codebase.
+
+The examples below use the supported `database_config(...)` function alternative
+for compactness. New projects can declare the same fields on a
+`DbwardenDatabase` subclass.
 
 ## What Is Dev Mode?
 
@@ -4662,12 +5205,14 @@ $ dbwarden --dev migrate  #  Add --dev
 - **[Troubleshooting](troubleshooting.md)** - Common issues
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/configuration/
+PAGE: https://dbwarden.org/configuration/
 ========================================================================
 
 # Configuration
 
-DBWarden uses Python-based configuration with `database_config()` to define your databases.
+DBWarden uses Python-based configuration with declarative `DbwardenDatabase`
+classes as the default method. The equivalent `database_config()` function
+alternative remains supported, and some plugins use it in their examples.
 
 **One configuration source** for migrations, CLI tools, and runtime: no split configs.
 
@@ -4677,14 +5222,13 @@ The simplest configuration possible:
 
 ```python
 # dbwarden.py
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="sqlite",
-    database_url_sync="sqlite:///./app.db",
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "sqlite"
+    database_url_sync = "sqlite:///./app.db"
 ```
 
 That's it! **4 parameters** to get started.
@@ -4815,79 +5359,74 @@ DBWarden discovers your configuration automatically:
 
 1. **Looks for `dbwarden.py`** in current directory or parents
 2. **Checks `DBWARDEN_CONFIG_MODULE`** environment variable
-3. **Scans for `database_config()` calls** in your codebase (full project tree walk)
+3. **Scans for declarative classes and `database_config()` calls** in your codebase (full project tree walk)
 4. **Looks for `warden.toml`** as an alternative TOML-based config file
 
-`dbwarden.py` is the default convention and the file created by `dbwarden init`, but `database_config(...)` can live in any discovered Python file inside your project.
+`dbwarden.py` is the default convention and the file created by `dbwarden init`. The default class API or the supported `database_config(...)` function alternative can live in any discovered Python file inside your project.
 
 ## Common Patterns
 
 ### Single Database (Minimal)
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://localhost/myapp",
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://localhost/myapp"
 ```
 
 ### With Dev Mode (Recommended)
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://localhost/myapp",
-    dev_database_type="sqlite",
-    dev_database_url="sqlite:///./dev.db",
-    model_paths=["app.models"],
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://localhost/myapp"
+    dev_database_type = "sqlite"
+    dev_database_url = "sqlite:///./dev.db"
+    model_paths = ["app.models"]
 ```
 
 ### Multiple Databases
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
 # Primary
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://localhost/main",
-    model_paths=["app.models.primary"],
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://localhost/main"
+    model_paths = ["app.models.primary"]
 
 # Analytics
-analytics = database_config(
-    database_name="analytics",
-    database_type="postgresql",
-    database_url_sync="postgresql://localhost/analytics",
-    model_paths=["app.models.analytics"],
-)
+class Analytics(DbwardenDatabase):
+    database_name = "analytics"
+    database_type = "postgresql"
+    database_url_sync = "postgresql://localhost/analytics"
+    model_paths = ["app.models.analytics"]
 ```
 
 ### Production with Environment Variables
 
 ```python
 import os
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync=os.getenv("DATABASE_URL"),
-    model_paths=["app.models"],
-    secure_values=True,
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = os.getenv("DATABASE_URL")
+    model_paths = ["app.models"]
+    secure_values = True
 ```
 
 ## Why Python Configuration?
@@ -4921,12 +5460,16 @@ Already familiar with configuration? Jump to:
 - **[Configuration API](../reference/configuration-api.md)** - Complete reference
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/configuration/model-discovery/
+PAGE: https://dbwarden.org/configuration/model-discovery/
 ========================================================================
 
 # Model Discovery
 
 Learn how DBWarden discovers your SQLAlchemy models for migration generation.
+
+Examples use `database_config(...)` as a compact function alternative. The same
+`model_paths` and `model_tables` fields can be declared on the default
+`DbwardenDatabase` class API.
 
 ## What Is Model Discovery?
 
@@ -5406,7 +5949,7 @@ primary = database_config(
 - **[Troubleshooting](troubleshooting.md)** - Common configuration issues
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/configuration/multi-database/
+PAGE: https://dbwarden.org/configuration/multi-database/
 ========================================================================
 
 # Multi-Database
@@ -5424,37 +5967,64 @@ Common scenarios:
 
 ## Basic Setup
 
-Configure each database with `database_config()`:
+Define each database as a concrete `DbwardenDatabase` subclass:
 
 ```python
 # dbwarden.py
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
 # Primary database
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://localhost/main",
-    model_paths=["app.models.primary"],
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://localhost/main"
+    model_paths = ["app.models.primary"]
 
 # Analytics database
-analytics = database_config(
-    database_name="analytics",
-    database_type="postgresql",
-    database_url_sync="postgresql://localhost/analytics",
-    model_paths=["app.models.analytics"],
-)
+class Analytics(DbwardenDatabase):
+    database_name = "analytics"
+    database_type = "postgresql"
+    database_url_sync = "postgresql://localhost/analytics"
+    model_paths = ["app.models.analytics"]
 
 # Logging database
-logging = database_config(
-    database_name="logging",
-    database_type="postgresql",
-    database_url_sync="postgresql://localhost/logs",
-    model_paths=["app.models.logging"],
-)
+class Logging(DbwardenDatabase):
+    database_name = "logging"
+    database_type = "postgresql"
+    database_url_sync = "postgresql://localhost/logs"
+    model_paths = ["app.models.logging"]
 ```
+
+The equivalent `database_config(...)` function API remains supported, including
+for plugins and integration code that use function-style declarations.
+
+The same setup can use inherited declarative classes when databases share
+backend or model settings:
+
+```python
+from dbwarden import DbwardenDatabase
+
+
+class ServiceDatabase(DbwardenDatabase):
+    __abstract__ = True
+    database_type = "postgresql"
+    model_paths = ["app.models"]
+
+
+class Primary(ServiceDatabase):
+    database_name = "primary"
+    database_url_sync = "postgresql://localhost/main"
+    default = True
+
+
+class Analytics(ServiceDatabase):
+    database_name = "analytics"
+    database_url_sync = "postgresql://localhost/analytics"
+```
+
+Both APIs can also be mixed in one source, but database names must remain
+unique and exactly one entry must set `default=True`.
 
 ## Model Organization
 
@@ -5817,12 +6387,16 @@ $ dbwarden migrate --database analytics  # Specify database
 - **[Troubleshooting](troubleshooting.md)** - Common issues
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/configuration/production-patterns/
+PAGE: https://dbwarden.org/configuration/production-patterns/
 ========================================================================
 
 # Production Patterns
 
 Real-world configuration patterns for production deployments.
+
+The snippets use the supported `database_config(...)` function alternative to
+keep environment-variable patterns compact. The same fields work on the
+default `DbwardenDatabase` class API.
 
 ## Environment Variables
 
@@ -6346,7 +6920,7 @@ migrate:
 - **[Configuration API Reference](../reference/configuration-api.md)** - Complete parameter docs
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/configuration/quick-start/
+PAGE: https://dbwarden.org/configuration/quick-start/
 ========================================================================
 
 # Quick Start
@@ -6374,17 +6948,17 @@ This creates:
 
 ## Step 2: Your First Configuration
 
-Open `dbwarden.py` and add:
+Open `dbwarden.py` and add the default class-based configuration:
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="sqlite",
-    database_url_sync="sqlite:///./app.db",
-)
+
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "sqlite"
+    database_url_sync = "sqlite:///./app.db"
 ```
 
 That's it! **4 required parameters**:
@@ -6394,6 +6968,10 @@ That's it! **4 required parameters**:
 - `database_url_sync` - How to connect? (sync URL for CLI/migrations)
 
 Start with SQLite for the simplest setup. Switch to PostgreSQL later.
+
+The function alternative, `database_config(...)`, is also fully supported. Some
+plugins use that form in their examples or integration code, so you may see
+both configuration styles in DBWarden documentation.
 
 ## Step 3: Test the Configuration
 
@@ -6479,10 +7057,37 @@ $ dbwarden status
 
 ### `database_config` registered your database
 
-When Python loads `dbwarden.py`, it executes `database_config()` which:
+When Python loads `dbwarden.py`, it registers the concrete `DbwardenDatabase`
+class, which:
 1. Validates your parameters
 2. Registers the database in DBWarden's internal registry
 3. Sets up migration directories
+
+The supported `database_config(...)` function alternative performs the same
+registration and validation steps.
+
+### Declarative configuration
+
+For shared settings, the equivalent class-based API supports inheritance:
+
+```python
+from dbwarden import DbwardenDatabase
+
+
+class Shared(DbwardenDatabase):
+    __abstract__ = True
+    database_type = "sqlite"
+    model_paths = ["app.models"]
+
+
+class Primary(Shared):
+    database_name = "primary"
+    database_url_sync = "sqlite:///./app.db"
+    default = True
+```
+
+Concrete subclasses register automatically, and `Primary.handle` provides the
+same `DatabaseHandle` returned by `database_config(...)`.
 
 ### DBWarden Can Now Find Your Database
 
@@ -6523,15 +7128,14 @@ model_paths=["app.models"]
 
 ```python
 # dbwarden.py
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="sqlite",
-    database_url_sync="sqlite:///./app.db",
-    model_paths=["app.models"],
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "sqlite"
+    database_url_sync = "sqlite:///./app.db"
+    model_paths = ["app.models"]
 ```
 
 ## Complete Production Example
@@ -6539,19 +7143,21 @@ primary = database_config(
 ```python
 # dbwarden.py
 import os
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync=os.getenv("DATABASE_URL"),
-    dev_database_type="sqlite",
-    dev_database_url="sqlite:///./dev.db",
-    model_paths=["app.models"],
-    secure_values=True,
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = os.getenv("DATABASE_URL")
+    dev_database_type = "sqlite"
+    dev_database_url = "sqlite:///./dev.db"
+    model_paths = ["app.models"]
+    secure_values = True
 ```
+
+The `database_config(...)` function alternative remains supported and may be
+used by plugins or integration code.
 
 ## What's Next?
 
@@ -6561,12 +7167,15 @@ primary = database_config(
 - **[Production Patterns](production-patterns.md)** - Real-world examples
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/configuration/troubleshooting/
+PAGE: https://dbwarden.org/configuration/troubleshooting/
 ========================================================================
 
 # Troubleshooting
 
 Solutions to common configuration issues.
+
+Configuration sources may use either the default `DbwardenDatabase` class API
+or the supported `database_config(...)` function alternative.
 
 ## "No configuration found"
 
@@ -7150,7 +7759,7 @@ $ dbwarden check-db --database primary
 - **[Quick Start](quick-start.md)** - Start fresh with correct setup
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/cookbook/01-project-setup/
+PAGE: https://dbwarden.org/cookbook/01-project-setup/
 ========================================================================
 
 # 1. Project Setup
@@ -7158,7 +7767,7 @@ PAGE: https://dbwarden.emiliano-go.com/cookbook/01-project-setup/
 ## What You'll Learn
 
 - How to initialize a DBWarden project with `dbwarden init`
-- How configuration is structured via `database_config()`
+- How configuration is structured via `DbwardenDatabase` classes
 - How to inspect your loaded configuration
 
 ## Prerequisites
@@ -7187,16 +7796,15 @@ It also writes a starter `dbwarden.py` if one doesn't exist. In our case, we alr
 Our `examples/core/dbwarden.py`:
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="sqlite",
-    database_url_sync="sqlite:///./app.db",
-    model_paths=["app"],
-    model_tables=["users", "posts"],
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "sqlite"
+    database_url_sync = "sqlite:///./app.db"
+    model_paths = ["app"]
+    model_tables = ["users", "posts"]
 ```
 
 Each parameter has a specific role:
@@ -7210,7 +7818,7 @@ Each parameter has a specific role:
 | `model_paths` | `["app"]` | Python module paths to scan for SQLAlchemy models |
 | `model_tables` | `["users", "posts"]` | Optional table-name filter for this database |
 
-The return value `primary` is a `DatabaseHandle` object. It's also used later for FastAPI dependency injection: the same object provides `primary.async_session` and `primary.sync_session`.
+`Primary.handle` is a `DatabaseHandle` object. It's also used later for FastAPI dependency injection: the same object provides `Primary.handle.async_session` and `Primary.handle.sync_session`. The equivalent `database_config(...)` function API remains supported.
 
 ## Step 3: Viewing the Configuration
 
@@ -7229,11 +7837,11 @@ This confirms DBWarden has discovered and loaded your configuration. The `(defau
 
 ## What Happens Under the Hood
 
-When you import `dbwarden` and call `database_config()`:
+When you import `dbwarden` and define a concrete `DbwardenDatabase` subclass:
 
-1. The function call is registered in DBWarden's internal registry
+1. The concrete class is registered in DBWarden's internal registry
 2. On first CLI command, DBWarden discovers `dbwarden.py` via AST scanning
-3. It imports the module and executes each `database_config()` call
+3. It imports the module and registers each concrete database class
 4. It validates uniqueness, default rules, and model path resolution
 5. The resolved configuration is cached for the session
 
@@ -7241,7 +7849,7 @@ When you import `dbwarden` and call `database_config()`:
 
 - `dbwarden init` creates the directory skeleton: run it once per project
 - `dbwarden config` shows what DBWarden actually resolved (useful for debugging)
-- `database_config()` is the single entry point for all configuration
+- `DbwardenDatabase` is the default configuration API; `database_config()` remains a supported function alternative
 - `model_paths` controls which Python modules are scanned for models
 - We chose SQLite here so the example runs with zero external services
 
@@ -7250,7 +7858,7 @@ When you import `dbwarden` and call `database_config()`:
 [Section 2: Models & Migrations](02-models-and-migrations.md)
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/cookbook/02-models-and-migrations/
+PAGE: https://dbwarden.org/cookbook/02-models-and-migrations/
 ========================================================================
 
 # 2. Defining Models and Generating Migrations
@@ -7610,7 +8218,7 @@ This prints the rollback SQL to stdout. Useful for quickly verifying what a roll
 [Section 3: Apply & Inspect](03-apply-and-inspect.md)
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/cookbook/03-apply-and-inspect/
+PAGE: https://dbwarden.org/cookbook/03-apply-and-inspect/
 ========================================================================
 
 # 3. Applying and Inspecting Migrations
@@ -7833,7 +8441,7 @@ This confirms the database is reachable and has the expected schema.
 [Section 4: Offline & CI Workflows](04-offline-ci.md)
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/cookbook/04-offline-ci/
+PAGE: https://dbwarden.org/cookbook/04-offline-ci/
 ========================================================================
 
 # 4. Offline & CI Workflows
@@ -7963,7 +8571,7 @@ The full CI pipeline can then `dbwarden migrate` against staging/production usin
 [Section 5: Schema Inspection](05-schema-inspection.md)
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/cookbook/05-schema-inspection/
+PAGE: https://dbwarden.org/cookbook/05-schema-inspection/
 ========================================================================
 
 # 5. Schema Inspection
@@ -8111,7 +8719,7 @@ Options:
 [Section 6: Safety & Impact Analysis](06-safety-impact.md)
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/cookbook/06-safety-impact/
+PAGE: https://dbwarden.org/cookbook/06-safety-impact/
 ========================================================================
 
 # 6. Safety & Impact Analysis
@@ -8270,7 +8878,7 @@ In CI:
 [Section 7: Seeds](07-seeds.md)
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/cookbook/07-seeds/
+PAGE: https://dbwarden.org/cookbook/07-seeds/
 ========================================================================
 
 # 7. Seeds
@@ -8471,7 +9079,7 @@ $ dbwarden seed list --prune
 [Section 8: Multi-Database](08-multi-database.md)
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/cookbook/08-multi-database/
+PAGE: https://dbwarden.org/cookbook/08-multi-database/
 ========================================================================
 
 # 8. Multi-Database & Configuration
@@ -8503,31 +9111,31 @@ A project with three databases:
 ## Step 1: The Configuration
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://user:password@localhost:5432/primary",
-    database_url_async="postgresql+asyncpg://user:password@localhost:5432/primary",
-    model_paths=["app.models.primary"],
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://user:password@localhost:5432/primary"
+    database_url_async = "postgresql+asyncpg://user:password@localhost:5432/primary"
+    model_paths = ["app.models.primary"]
 
-legacy = database_config(
-    database_name="legacy",
-    database_type="mysql",
-    database_url_sync="mysql+pymysql://user:password@localhost:3306/legacy",
-    model_paths=["app.models.legacy"],
-)
+class Legacy(DbwardenDatabase):
+    database_name = "legacy"
+    database_type = "mysql"
+    database_url_sync = "mysql+pymysql://user:password@localhost:3306/legacy"
+    model_paths = ["app.models.legacy"]
 
-analytics = database_config(
-    database_name="analytics",
-    database_type="clickhouse",
-    database_url_sync="http://localhost:8123/analytics",
-    model_paths=["app.models.analytics"],
-)
+class Analytics(DbwardenDatabase):
+    database_name = "analytics"
+    database_type = "clickhouse"
+    database_url_sync = "http://localhost:8123/analytics"
+    model_paths = ["app.models.analytics"]
 ```
+
+The equivalent `database_config(...)` function API remains supported for
+function-style integrations and plugin examples.
 
 Key rules:
 - Exactly one database must have `default=True` (used when `--database` is omitted)
@@ -8709,7 +9317,7 @@ CREATE TABLE IF NOT EXISTS customers (
 
 ## Key Takeaways
 
-- Multiple `database_config()` calls create independent database targets
+- Multiple declarative classes, or `database_config()` calls, create independent database targets
 - Each database has its own migration directory, lock, and history
 - `--database` targets a specific database; `--all` targets every database
 - `default=True` controls which database is used when `--database` is omitted
@@ -8727,7 +9335,7 @@ CREATE TABLE IF NOT EXISTS customers (
 [Section 9: FastAPI Integration](09-fastapi-integration.md)
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/cookbook/09-fastapi-integration/
+PAGE: https://dbwarden.org/cookbook/09-fastapi-integration/
 ========================================================================
 
 # 9. FastAPI Integration
@@ -8747,19 +9355,18 @@ PAGE: https://dbwarden.emiliano-go.com/cookbook/09-fastapi-integration/
 ## Step 1: Configuration with Session Handles
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://user:password@localhost:5432/myapp",
-    database_url_async="postgresql+asyncpg://user:password@localhost:5432/myapp",
-    model_paths=["app.models"],
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://user:password@localhost:5432/myapp"
+    database_url_async = "postgresql+asyncpg://user:password@localhost:5432/myapp"
+    model_paths = ["app.models"]
 ```
 
-The `primary` object is a `DatabaseHandle`. It exposes `primary.async_session` and `primary.sync_session` as FastAPI-compatible dependency annotations; no separate dependency module needed.
+`Primary.handle` is a `DatabaseHandle`. It exposes `Primary.handle.async_session` and `Primary.handle.sync_session` as FastAPI-compatible dependency annotations; no separate dependency module needed. The equivalent `database_config(...)` function API returns the same handle.
 
 ## Step 2: Lifespan Hook
 
@@ -8809,7 +9416,7 @@ async def get_user(user_id: int, session: primary.async_session):
     return user
 ```
 
-`primary.async_session` is a type alias for `Annotated[AsyncSession, Depends(...)]`. FastAPI resolves it to an actual database session using the engine configured in `database_config()`.
+`primary.async_session` is a type alias for `Annotated[AsyncSession, Depends(...)]`. FastAPI resolves it to an actual database session using the engine configured by `Primary` (or the equivalent `database_config()` function).
 
 The session is automatically:
 - Opened when the route handler starts
@@ -8930,7 +9537,7 @@ curl http://localhost:8000/db/status
 
 ## Key Takeaways
 
-- `database_config()` returns a `DatabaseHandle` with built-in FastAPI dependencies
+- `Primary.handle` is a `DatabaseHandle` with built-in FastAPI dependencies; `database_config()` returns the equivalent handle
 - `dbwarden_lifespan` integrates schema validation into the app lifecycle
 - `primary.async_session` works directly as a route parameter type annotation
 - `DBWardenHealthRouter` exposes liveness, readiness, and per-database health
@@ -8947,7 +9554,7 @@ Full reference and tutorials live in the plugin's repository: [dbwarden-fastapi]
 [Section 10: Auto Schemas](10-auto-schemas.md)
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/cookbook/10-auto-schemas/
+PAGE: https://dbwarden.org/cookbook/10-auto-schemas/
 ========================================================================
 
 # 10. Auto-Generated Pydantic Schemas
@@ -9109,7 +9716,7 @@ class User(Base):
 [Section 11: Observability](11-observability.md)
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/cookbook/11-observability/
+PAGE: https://dbwarden.org/cookbook/11-observability/
 ========================================================================
 
 # 11. Observability
@@ -9194,6 +9801,34 @@ This switches from colored human-readable output to JSON:
 ```
 
 JSON logs are easier to ingest into ELK, Datadog, or other log aggregators.
+
+For CLI runs, the global `--json` flag produces the same JSON-formatted logs and
+also switches display commands to structured output:
+
+```bash
+dbwarden --json status --database primary
+dbwarden --json migrate --database primary
+```
+
+### TRACE logging
+
+`--debug-level trace` logs every SQL statement executed by `migrate`,
+`rollback`, and `downgrade`:
+
+```bash
+dbwarden --debug-level trace migrate --database primary
+```
+
+Each statement is logged as `SQL (2.1ms): CREATE TABLE ...`.
+
+### Migration phase timing
+
+Phase timings (lock acquisition, snapshot write, model state write) are logged
+at INFO by default. Add `--perf` for a per-SQL-statement breakdown:
+
+```bash
+dbwarden migrate --perf --database primary
+```
 
 ## Step 4: Query Tracing
 
@@ -9288,7 +9923,9 @@ In Grafana, add Prometheus data source (`http://prometheus:9090`) and create das
 
 - Metrics are opt-in via `uv add "dbwarden[metrics]"`
 - Six metric families cover migration, schema, and error tracking
-- `DBWARDEN_LOG_JSON=1` switches to structured JSON logging
+- `DBWARDEN_LOG_JSON=1` (or the global `--json` flag) switches to structured JSON logging
+- `--debug-level trace` logs every SQL statement during migration commands
+- `--perf` adds per-statement timing breakdowns to migration commands
 - `QueryTracingMiddleware` logs every SQL query with duration
 - `PoolMetricsCollector` monitors connection pool health
 - Metrics are compatible with standard Prometheus + Grafana setup
@@ -9300,7 +9937,7 @@ In Grafana, add Prometheus data source (`http://prometheus:9090`) and create das
 The FastAPI metrics middleware and routers are part of the `dbwarden-fastapi` plugin, documented in its own repository: [dbwarden-fastapi](https://github.com/dbwarden-org/dbwarden-fastapi).
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/cookbook/
+PAGE: https://dbwarden.org/cookbook/
 ========================================================================
 
 # Cookbook & Examples
@@ -9324,14 +9961,14 @@ examples/
 
 | # | Section | What You'll Learn | Example Dir |
 |---|---------|-------------------|-------------|
-| 1 | [Project Setup](01-project-setup.md) | `init`, `config`, understanding `database_config()` | `examples/core/` |
+| 1 | [Project Setup](01-project-setup.md) | `init`, `config`, understanding declarative configuration | `examples/core/` |
 | 2 | [Models & Migrations](02-models-and-migrations.md) | Model definitions, `make-migrations`, `new`, `make-rollback` | `examples/core/` |
 | 3 | [Apply & Inspect](03-apply-and-inspect.md) | `migrate`, `rollback`, `downgrade`, `history`, `status`, `check`, `check-db` | `examples/core/` |
 | 4 | [Offline & CI](04-offline-ci.md) | `export-models`, `make-migrations --offline` | `examples/core/` |
 | 5 | [Schema Inspection](05-schema-inspection.md) | `diff`, `snapshot`, `generate-models` | `examples/core/` |
 | 6 | [Safety & Impact](06-safety-impact.md) | `check`, `check-impact`, destructive change detection | `examples/core/` |
 | 7 | [Seeds](07-seeds.md) | `seed create/apply/rollback/list`, SQL seeds, `@seed_data` | `examples/core/` |
-| 8 | [Multi-Database](08-multi-database.md) | Multiple `database_config()`, PG + ClickHouse, `--all` flag | `examples/multi-database/` |
+| 8 | [Multi-Database](08-multi-database.md) | Multiple declarative databases, PG + ClickHouse, `--all` flag | `examples/multi-database/` |
 | 9 | [FastAPI Integration](09-fastapi-integration.md) | Lifespan hooks, health endpoints, session DI, migration endpoints | `examples/fastapi-app/` |
 | 10 | [Auto Schemas](10-auto-schemas.md) | `@auto_schema`, `CreateSchema`, `UpdateSchema`, `PublicSchema` (requires `dbwarden-fastapi` plugin) | `examples/fastapi-app/` |
 | 11 | [Observability](11-observability.md) | Prometheus metrics, structured logging, query tracing | `examples/observability/` |
@@ -9359,16 +9996,15 @@ PostgreSQL is a first-class backend with full round-trip support (read and write
 For the complete reference on PostgreSQL-specific metadata (identity columns, collation, compression, generated columns, tablespace, inheritance, exclusion constraints, deferrable FKs, advanced index options), see the [PostgreSQL Deep Dive](../databases/postgresql/index.md).
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://user:password@localhost:5432/myapp",
-    database_url_async="postgresql+asyncpg://user:password@localhost:5432/myapp",
-    model_paths=["app.models"],
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://user:password@localhost:5432/myapp"
+    database_url_async = "postgresql+asyncpg://user:password@localhost:5432/myapp"
+    model_paths = ["app.models"]
 ```
 
 ### MySQL / MariaDB
@@ -9378,14 +10014,13 @@ MySQL and MariaDB are first-class backends with full round-trip support. All MyS
 See the [MySQL Deep Dive](../databases/mysql.md) for the complete reference, including MySQL-specific model metadata via `class Meta(MyTableMeta)`.
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-legacy = database_config(
-    database_name="legacy",
-    database_type="mysql",
-    database_url_sync="mysql+pymysql://user:password@localhost:3306/legacy",
-    model_paths=["app.legacy_models"],
-)
+class Legacy(DbwardenDatabase):
+    database_name = "legacy"
+    database_type = "mysql"
+    database_url_sync = "mysql+pymysql://user:password@localhost:3306/legacy"
+    model_paths = ["app.legacy_models"]
 ```
 
 ### ClickHouse
@@ -9397,7 +10032,7 @@ See the [ClickHouse Deep Dive](../databases/clickhouse/index.md) for full detail
 ClickHouse is typically configured alongside a transactional database (see [Section 8](08-multi-database.md) for a PostgreSQL + ClickHouse example).
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/correctness/convergence-gate/
+PAGE: https://dbwarden.org/correctness/convergence-gate/
 ========================================================================
 
 # Convergence Gate
@@ -9454,13 +10089,13 @@ This applies versioned migrations and any repeatable migration behavior supporte
 
 ### 3. Check the Resulting Schema
 
-Run DBWarden's check command:
+Run DBWarden's diff command:
 
 ```bash
-dbwarden check --database primary
+dbwarden diff --database primary
 ```
 
-The check compares the database state with the model state. If the command reports differences, CI fails. Some teams also run `dbwarden diff` in table or JSON mode for diagnostic output:
+The diff compares the database state with the model state. If the command reports differences, CI fails. `dbwarden check` is a separate safety classifier, not the schema-convergence comparison. Some teams also run `dbwarden diff` in table or JSON mode for diagnostic output:
 
 ```bash
 dbwarden diff --database primary --out table
@@ -9527,15 +10162,55 @@ jobs:
       - name: Apply migrations
         run: dbwarden migrate --database primary
 
-      - name: Check convergence
-        run: dbwarden check --database primary
+       - name: Check convergence
+         run: dbwarden diff --database primary
 
       - name: Print drift diagnostics on failure
         if: failure()
         run: dbwarden diff --database primary --out table
 ```
 
-The `--health-cmd` option belongs to Docker service configuration. The DBWarden commands are the two important checks: `migrate` and `check`.
+The `--health-cmd` option belongs to Docker service configuration. The DBWarden commands are the two important convergence commands: `migrate` and `diff`.
+
+## Measured Cost
+
+The cost is dominated by replaying the migration history, not by the final
+schema diff. On 2026-08-14, the harness measured a synthetic 500-migration
+SQLite project with one table per migration:
+
+| DBWarden executable | Preparation | Full replay | Final diff | Total |
+|---|---:|---:|---:|---:|
+| Current core checkout | 2.2s | 274.1s | 6.0s | 282.3s |
+| PyPI `0.16.5` | 1.8s | 291.8s | 6.7s | 300.3s |
+
+The current core checkout also supports bulk replay with one final snapshot:
+
+```bash
+dbwarden migrate --defer-snapshots
+```
+
+The same 500-migration SQLite workload measured `10.4s` for replay and
+`18.3s` total with deferred snapshots. This preserves the final convergence
+artifact while avoiding a full schema reflection after every migration. The
+default remains per-migration snapshots for compatibility with audit workflows;
+long-history CI gates should use the deferred mode and retain the final
+snapshot as their correctness artifact.
+
+These are local reference measurements, not an SLA. Database startup,
+filesystem speed, migration complexity, indexes, plugins, and backend network
+latency can materially change the result. The benchmark is reproducible from
+the standalone harness with:
+
+```bash
+DBWARDEN_HARNESS_RUN_500_MIGRATION=1 uv run pytest \
+  suites/performance/test_convergence_500.py -s
+```
+
+The current `convergence-audit` GitHub Actions job runs `pytest -m p0`. At
+present only a handler-level ClickHouse test carries the `p0` marker, so that
+job is not equivalent to replaying a project's full migration history. A
+project that needs the stronger guarantee should run the harness's
+provider-backed convergence suite as a separate, explicitly budgeted job.
 
 ## Example Error Caught by the Gate
 
@@ -9630,7 +10305,7 @@ Prove the SQL reproduces the model state
 See [Offline Integrity](offline-integrity.md) for the first half of that workflow.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/correctness/deterministic-diff/
+PAGE: https://dbwarden.org/correctness/deterministic-diff/
 ========================================================================
 
 # Deterministic Diff
@@ -9874,7 +10549,7 @@ The canonical spec is not the final SQL. It is the stable state that the diff en
 See [SQL Generation](sql-generation.md) for the next stage in the pipeline.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/correctness/
+PAGE: https://dbwarden.org/correctness/
 ========================================================================
 
 # Correctness
@@ -9978,7 +10653,7 @@ This means rollback correctness is not an afterthought and not a manually mainta
 The pages are independent, but the trust model is cumulative. The convergence gate proves the final database shape. Deterministic diffing explains why generated changes are stable. SQL generation explains why the emitted file is backend-native and reviewable. Rollback generation explains the reverse path. Safety classification and offline integrity make the workflow suitable for CI.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/correctness/object-handler-protocol/
+PAGE: https://dbwarden.org/correctness/object-handler-protocol/
 ========================================================================
 
 # ObjectHandler Protocol
@@ -10388,7 +11063,7 @@ The handler protocol is the bridge between the abstract guarantees and the concr
 - [Rollback Generation](rollback-generation.md) - the handler's `diff` method returns paired ops that make symmetric rollbacks possible
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/correctness/offline-integrity/
+PAGE: https://dbwarden.org/correctness/offline-integrity/
 ========================================================================
 
 # Offline Integrity
@@ -10594,7 +11269,7 @@ With offline state:
 Offline integrity is not the final proof. The final proof is still a live database convergence gate. Offline integrity ensures the inputs to that gate are deterministic.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/correctness/rollback-coverage-matrix/
+PAGE: https://dbwarden.org/correctness/rollback-coverage-matrix/
 ========================================================================
 
 # Rollback Coverage Matrix
@@ -10750,7 +11425,7 @@ These cases are not open rollback gaps. They are explicit policy boundaries wher
 For ordinary generated drop and alter operations, prior state is captured at generation time from the live schema snapshot or from the baseline snapshot used by offline and squash workflows. The captured definition is serialized through `rollback_attrs`, preserved in the migration plan, and consumed by the backend handler that emits rollback SQL. If the required prior state is missing, strict generation fails instead of accepting placeholder rollback.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/correctness/rollback-generation/
+PAGE: https://dbwarden.org/correctness/rollback-generation/
 ========================================================================
 
 # Rollback Generation
@@ -10953,7 +11628,7 @@ DBWarden avoids that by computing both directions from the same operation model.
 The result is stricter than convenience-oriented migration tools: either DBWarden emits executable rollback SQL, or the migration explicitly declares why automatic rollback is not available.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/correctness/round-trip-verification/
+PAGE: https://dbwarden.org/correctness/round-trip-verification/
 ========================================================================
 
 # Round-Trip Verification
@@ -11176,7 +11851,7 @@ It also does not replace backend integration tests. For example, ClickHouse may 
 Use round-trip verification to prove schema representation fidelity. Use the [Convergence Gate](convergence-gate.md) to prove the repository history lands on the declared model state.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/correctness/safety-classifier/
+PAGE: https://dbwarden.org/correctness/safety-classifier/
 ========================================================================
 
 # Safety Classifier
@@ -11386,7 +12061,7 @@ DBWarden does not try to guess business intent. It can tell that a column drop d
 For that reason, the safety classifier makes risk visible and requires acknowledgement. It is a correctness mechanism because it prevents accidental data loss from being treated as ordinary schema drift.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/correctness/sql-generation/
+PAGE: https://dbwarden.org/correctness/sql-generation/
 ========================================================================
 
 # SQL Generation
@@ -11615,7 +12290,7 @@ SQL generation depends on deterministic diffing. If canonicalization is stable, 
 See [Deterministic Diff](deterministic-diff.md).
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/clickhouse/aggregating-views/
+PAGE: https://dbwarden.org/databases/clickhouse/aggregating-views/
 ========================================================================
 
 # Aggregating views (`AggregatingMergeTree`)
@@ -11774,7 +12449,7 @@ They contribute both the aggregating target model and the materialized view to
 the model list.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/clickhouse/columns-types/
+PAGE: https://dbwarden.org/databases/clickhouse/columns-types/
 ========================================================================
 
 # Columns and types
@@ -11942,7 +12617,7 @@ SQLAlchemy types are normalized to ClickHouse native types:
 Column changes emit inverse operations. `ADD COLUMN` rolls back as `DROP COLUMN`. A `MODIFY COLUMN` rolls back as `MODIFY COLUMN` with the previous state.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/clickhouse/conventions/
+PAGE: https://dbwarden.org/databases/clickhouse/conventions/
 ========================================================================
 
 # Conventions
@@ -12071,7 +12746,7 @@ tests/databases/clickhouse/audit/
 New ClickHouse versions are added by running the existing test suite against the new version. Zero branching in the canonicalizer means there is no per-version code path to update.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/clickhouse/data-operations/
+PAGE: https://dbwarden.org/databases/clickhouse/data-operations/
 ========================================================================
 
 # Data operations
@@ -12218,7 +12893,7 @@ data_op("ALTER NAMED COLLECTION kafka_prod UPDATE sasl_password = SECRET 'new_se
 Data operations are **not reversible** by dbwarden: they are ad-hoc mutations. Plan accordingly: test on staging, back up partitions before DROP or REPLACE.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/clickhouse/declaring-tables/
+PAGE: https://dbwarden.org/databases/clickhouse/declaring-tables/
 ========================================================================
 
 # Declaring tables
@@ -12398,7 +13073,7 @@ Every `ALTER` and `CREATE` statement has a rollback. The rollback for a CREATE i
 See [Safety](safety.md) for the full rebuild pipeline.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/clickhouse/dictionaries/
+PAGE: https://dbwarden.org/databases/clickhouse/dictionaries/
 ========================================================================
 
 # Dictionaries
@@ -12574,7 +13249,7 @@ ch_dict_lifetime = "MIN 300 MAX 600"  # Ranged
 Dictionary changes that require a recreate follow the full pipeline. See [Safety](safety.md).
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/clickhouse/engines-integration/
+PAGE: https://dbwarden.org/databases/clickhouse/engines-integration/
 ========================================================================
 
 # Integration engines
@@ -12890,7 +13565,7 @@ Every integration engine has its own `*Settings` TypedDict for arbitrary setting
 Settings changes revert via `RESET SETTING`. Named collection swaps require reversing the collection reference.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/clickhouse/engines-mergetree/
+PAGE: https://dbwarden.org/databases/clickhouse/engines-mergetree/
 ========================================================================
 
 # MergeTree engine family
@@ -13054,7 +13729,7 @@ class GraphiteMetrics(Base):
 Engine changes with `--force` trigger the full recreate pipeline. See [Safety](safety.md).
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/clickhouse/engines-special/
+PAGE: https://dbwarden.org/databases/clickhouse/engines-special/
 ========================================================================
 
 # Special engines
@@ -13212,7 +13887,7 @@ These engines have no ORDER BY, so immutability rules don't apply in the same wa
 Engine changes trigger recreate. See [Safety](safety.md) for the pipeline.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/clickhouse/immutability/
+PAGE: https://dbwarden.org/databases/clickhouse/immutability/
 ========================================================================
 
 # Immutability: what can never change
@@ -13339,12 +14014,16 @@ triggers a full table recreate (DETACH -> CREATE -> INSERT -> ATTACH).
 ```
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/clickhouse/
+PAGE: https://dbwarden.org/databases/clickhouse/
 ========================================================================
 
 # ClickHouse
 
 DBWarden treats ClickHouse as a first-class backend. Every natively supported feature is reverse-engineered, diffed, and emitted as correct DDL.
+
+Database declarations use `DbwardenDatabase` subclasses by default. The
+equivalent `database_config(...)` function API remains supported for existing
+projects and integration examples.
 
 **Before reading further:** ClickHouse's object model is fundamentally different from PostgreSQL. What is a `SET` in PG is often a `CREATE` commitment in CH. Read [Immutability](immutability.md) first.
 
@@ -13785,7 +14464,7 @@ $ dbwarden migrate -d analytics
 Always review auto-generated migrations before applying, especially for destructive changes flagged as CRITICAL.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/clickhouse/materialized-views/
+PAGE: https://dbwarden.org/databases/clickhouse/materialized-views/
 ========================================================================
 
 # Materialized views
@@ -14017,14 +14696,14 @@ MV DROP is a rollback of MV CREATE. Data created by the MV is not restored by
 rollback of the DDL: you must re-POPULATE.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/clickhouse/named-collections/
+PAGE: https://dbwarden.org/databases/clickhouse/named-collections/
 ========================================================================
 
 # Named collections
 
 **Requires the `dbwarden-ch-rbac` plugin:** `dbwarden plugin add dbwarden-ch-rbac`. The `ch_named_collection` object handler ships in that plugin, not in core.
 
-Named collections are the mechanism for declaring credentials without exposing secret values. They are declared in the config layer, referenced by name from engine and RBAC specs.
+Named collections are the mechanism for declaring credentials without exposing secret values. They are declared in the config layer, referenced by name from engine and RBAC specs. The examples use the supported `database_config(...)` function form for plugin-owned settings; new projects may declare the same plugin configuration on a `DbwardenDatabase` subclass.
 
 ## Declaration
 
@@ -14158,9 +14837,14 @@ ChUserSpec(
 ## Rollback behavior
 
 `DROP NAMED COLLECTION` rolls back as `CREATE NAMED COLLECTION`. Key changes roll back as inverse key changes.
+# Named Collections
+
+The examples use the supported `database_config(...)` function form for
+plugin-owned settings. New projects may declare the same plugin configuration
+on a `DbwardenDatabase` subclass.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/clickhouse/projections-indexes/
+PAGE: https://dbwarden.org/databases/clickhouse/projections-indexes/
 ========================================================================
 
 # Projections & indexes
@@ -14377,14 +15061,17 @@ with data_ops() as ops:
 Projections and indexes follow ALTER semantics: ADD rolls back as DROP and vice versa. MATERIALIZE is a data-op that is not structurally reversible: it is idempotent in practice.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/clickhouse/rbac/
+PAGE: https://dbwarden.org/databases/clickhouse/rbac/
 ========================================================================
 
 # RBAC (roles, users, policies, quotas, profiles, grants)
 
 **Requires the `dbwarden-ch-rbac` plugin:** `dbwarden plugin add dbwarden-ch-rbac`. The plugin owns both the `ch_*` RBAC config keys and the object handlers that emit their DDL. Core ships the spec dataclasses only, so declaring these keys without the plugin installed raises `DBWardenConfigError` when your `dbwarden.py` loads.
 
-All RBAC objects are declared in the config layer via `database_config()`.
+All RBAC objects are declared in the config layer. The examples use the
+supported `database_config()` function form for plugin-owned settings; new
+projects may declare the same plugin configuration on a `DbwardenDatabase`
+subclass.
 
 ## Config keys
 
@@ -14654,9 +15341,14 @@ This prevents accidental deactivation of users during migration runs.
 ## Rollback behavior
 
 Every RBAC CREATE has a DROP rollback and vice versa. Settings changes revert via `ALTER USER ... SETTINGS ...`.
+# ClickHouse RBAC
+
+The examples use the supported `database_config(...)` function form for
+plugin-owned settings. New projects may declare the same plugin configuration
+on a `DbwardenDatabase` subclass.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/clickhouse/safety/
+PAGE: https://dbwarden.org/databases/clickhouse/safety/
 ========================================================================
 
 # Safety classification
@@ -14809,7 +15501,7 @@ $ clickhouse-client -q "RENAME TABLE events TO events_broken, events_old TO even
 dbwarden also respects ClickHouse's server-side `allow_ddl` and `readonly` settings. If the server refuses a DDL statement, dbwarden logs the error and continues with the remaining plan items.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/
+PAGE: https://dbwarden.org/databases/
 ========================================================================
 
 # Supported Databases
@@ -14843,45 +15535,47 @@ See [Installation](../installation.md) for full details.
 
 ## Config Examples
 
+The default configuration style uses `DbwardenDatabase` subclasses. The
+equivalent `database_config(...)` function API remains supported for plugins
+and integrations.
+
 PostgreSQL:
 
 ```python
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://user:password@localhost:5432/main",
-)
+from dbwarden import DbwardenDatabase
+
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://user:password@localhost:5432/main"
 ```
 
 MySQL:
 
 ```python
-legacy = database_config(
-    database_name="legacy",
-    database_type="mysql",
-    database_url_sync="mysql://user:password@localhost:3306/legacy",
-)
+class Legacy(DbwardenDatabase):
+    database_name = "legacy"
+    database_type = "mysql"
+    database_url_sync = "mysql://user:password@localhost:3306/legacy"
 ```
 
 SQLite:
 
 ```python
-dev = database_config(
-    database_name="dev",
-    database_type="sqlite",
-    database_url_sync="sqlite:///./development.db",
-)
+class Dev(DbwardenDatabase):
+    database_name = "dev"
+    database_type = "sqlite"
+    database_url_sync = "sqlite:///./development.db"
 ```
 
 ClickHouse:
 
 ```python
-analytics = database_config(
-    database_name="analytics",
-    database_type="clickhouse",
-    database_url_sync="clickhouse://user:password@localhost:8123/analytics",
-)
+class Analytics(DbwardenDatabase):
+    database_name = "analytics"
+    database_type = "clickhouse"
+    database_url_sync = "clickhouse://user:password@localhost:8123/analytics"
 ```
 
 ## Internal Connection Handling
@@ -15015,12 +15709,16 @@ $ dbwarden status -d primary
 ```
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/mysql/
+PAGE: https://dbwarden.org/databases/mysql/
 ========================================================================
 
 # MySQL & MariaDB
 
 DBWarden treats MySQL (and its fork MariaDB) as **first-class backends**: every natively supported feature is reverse-engineered, diffed, and emitted as correct DDL.
+
+Database declarations use `DbwardenDatabase` subclasses by default. The
+equivalent `database_config(...)` function API remains supported for existing
+projects and integration examples.
 
 ## First-Class Features
 
@@ -15482,12 +16180,14 @@ assert Safety.CRITICAL == "CRITICAL"
 | Add / drop FK | `INFO` / `WARNING` | `--force` |
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/postgresql/config-keys/
+PAGE: https://dbwarden.org/databases/postgresql/config-keys/
 ========================================================================
 
 # Config Keys
 
-PostgreSQL features are configured through keys in your `database_config(...)` call. These keys live alongside the connection URL and model paths.
+PostgreSQL features are configured through keys on your `DbwardenDatabase`
+class or in the equivalent `database_config(...)` call. These keys live
+alongside the connection URL and model paths.
 
 **Most of these keys are contributed by plugins.** The plugin owns both the config key and the object handler that emits its DDL. Declaring a key whose plugin is not installed raises `DBWardenConfigError` when your `dbwarden.py` loads, naming the plugin to install. Keys that no plugin owns are rejected as unknown arguments, so typos fail immediately instead of being silently ignored.
 
@@ -15893,7 +16593,7 @@ pg_migration_lock_timeout=30
 When set, emits `SET lock_timeout = '30s'` before each migration statement.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/postgresql/constraints/
+PAGE: https://dbwarden.org/databases/postgresql/constraints/
 ========================================================================
 
 # Constraints
@@ -16086,7 +16786,7 @@ See [Indexes](indexes.md) for `PgIndexSpec` options.
 Constraints are compared by full attribute content. Any difference in signature (columns, expression, options) produces `DROP` + `ADD`. Constraint name changes are detected as a new constraint.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/postgresql/ddl-behavior/
+PAGE: https://dbwarden.org/databases/postgresql/ddl-behavior/
 ========================================================================
 
 # DDL Behavior
@@ -16238,7 +16938,7 @@ DBWarden detects autoincrement by:
 - **SET STORAGE after table creation**: Rewrites the column data; cannot be done without a table lock
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/postgresql/declaring-metadata/
+PAGE: https://dbwarden.org/databases/postgresql/declaring-metadata/
 ========================================================================
 
 # Declaring Metadata
@@ -16479,7 +17179,7 @@ Supported FK options: `ondelete`, `onupdate`, `deferrable`, `initially`, `match`
 See [Constraints](constraints.md) for FK lifecycle and deferrable behaviour.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/postgresql/event-triggers/
+PAGE: https://dbwarden.org/databases/postgresql/event-triggers/
 ========================================================================
 
 # Event Triggers
@@ -16586,7 +17286,7 @@ Event trigger functions must:
 - Use `sql_drop` with care: objects have already been removed from catalogs, so `TG_TABLE_SCHEMA` and `TG_TABLE_NAME` may be NULL for dropped objects; use `pg_event_trigger_dropped_objects()` to get the list
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/postgresql/extended-statistics/
+PAGE: https://dbwarden.org/databases/postgresql/extended-statistics/
 ========================================================================
 
 # Extended Statistics
@@ -16686,7 +17386,7 @@ Extended statistics can be scoped to a schema:
 See [Migration Safety](migration-safety.md) for the full classification table.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/postgresql/functions-and-triggers/
+PAGE: https://dbwarden.org/databases/postgresql/functions-and-triggers/
 ========================================================================
 
 # Functions & Triggers
@@ -16975,7 +17675,7 @@ pg_triggers=[{
 Arguments are passed as `TG_ARGV[0]`, `TG_ARGV[1]`, etc. in the trigger function.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/postgresql/grants-and-roles/
+PAGE: https://dbwarden.org/databases/postgresql/grants-and-roles/
 ========================================================================
 
 # Grants & Roles
@@ -17152,7 +17852,7 @@ The `BYPASSRLS` role attribute lets a role bypass Row-Level Security entirely:
 Roles without `BYPASSRLS` are subject to all RLS policies on accessed tables. See [RLS & Policies](rls-and-policies.md) for details.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/postgresql/
+PAGE: https://dbwarden.org/databases/postgresql/
 ========================================================================
 
 # PostgreSQL
@@ -17223,7 +17923,7 @@ $ dbwarden make-migrations
 - [Migration Safety](migration-safety.md) : Safety classification table
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/postgresql/indexes/
+PAGE: https://dbwarden.org/databases/postgresql/indexes/
 ========================================================================
 
 # Indexes
@@ -17417,7 +18117,7 @@ See [Constraints](constraints.md#uniquespec-vs-uniquetrue-on-pgindexspec) for th
 See [Migration Safety](migration-safety.md) for the full classification table.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/postgresql/migration-safety/
+PAGE: https://dbwarden.org/databases/postgresql/migration-safety/
 ========================================================================
 
 # Migration Safety
@@ -17631,7 +18331,7 @@ assert Safety.CRITICAL == "CRITICAL"
 | Converting from `SETOF`/`TABLE` return type | Schema breakage |
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/postgresql/partitioning/
+PAGE: https://dbwarden.org/databases/postgresql/partitioning/
 ========================================================================
 
 # Partitioning
@@ -17805,7 +18505,7 @@ Partitioning vs Inheritance:
 | Sub-partitioning | Supported | Not supported |
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/postgresql/rls-and-policies/
+PAGE: https://dbwarden.org/databases/postgresql/rls-and-policies/
 ========================================================================
 
 # RLS & Policies
@@ -17961,7 +18661,7 @@ Foreign key constraints are enforced server-side regardless of RLS. A user may n
 See [Migration Safety](migration-safety.md) for the full classification table.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/postgresql/schemas/
+PAGE: https://dbwarden.org/databases/postgresql/schemas/
 ========================================================================
 
 # Schemas
@@ -18068,7 +18768,7 @@ Generated DDL: `CREATE EXTENSION IF NOT EXISTS "uuid-ossp";`
 Code seeds automatically qualify the table name with the model's `pg_schema`. If `User` has `pg_schema = "app"`, the seed INSERT becomes `INSERT INTO app.users (...) VALUES (...)`.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/postgresql/sequences/
+PAGE: https://dbwarden.org/databases/postgresql/sequences/
 ========================================================================
 
 # Sequences
@@ -18212,7 +18912,7 @@ Sequence values are not intended to be gap-free. Gaps can occur from:
 See [Migration Safety](migration-safety.md) for the full classification table.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/postgresql/storage-params/
+PAGE: https://dbwarden.org/databases/postgresql/storage-params/
 ========================================================================
 
 # Storage Parameters
@@ -18340,7 +19040,7 @@ Storage parameter changes are detected during the DIFF phase. Parameter changes 
 See [Migration Safety](migration-safety.md) for the full classification table.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/postgresql/tables-and-columns/
+PAGE: https://dbwarden.org/databases/postgresql/tables-and-columns/
 ========================================================================
 
 # Tables & Columns
@@ -18594,7 +19294,7 @@ class Event(Base):
 ```
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/postgresql/type-mapping/
+PAGE: https://dbwarden.org/databases/postgresql/type-mapping/
 ========================================================================
 
 # Type Mapping
@@ -18731,7 +19431,7 @@ SQLAlchemy `Enum` types with `create_constraint=True` are extracted as `CREATE T
 When a column uses a domain type (e.g., `us_postal_code`), DBWarden preserves the domain type name in the snapshot rather than expanding to the base type. See [Types](types.md#domains) for domain lifecycle.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/postgresql/types/
+PAGE: https://dbwarden.org/databases/postgresql/types/
 ========================================================================
 
 # Types
@@ -18893,7 +19593,7 @@ Range type bounds are canonicalized as `[lower, upper)` (inclusive lower, exclus
 See [Type Mapping](type-mapping.md) for the complete SQLAlchemy-to-PostgreSQL type normalization reference.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/postgresql/views/
+PAGE: https://dbwarden.org/databases/postgresql/views/
 ========================================================================
 
 # Views
@@ -19108,7 +19808,7 @@ See [Functions & Triggers](functions-and-triggers.md) for trigger configuration.
 | Drop | `DROP VIEW IF EXISTS name CASCADE;` / `DROP MATERIALIZED VIEW IF EXISTS name CASCADE;` |
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/round-trip/
+PAGE: https://dbwarden.org/databases/round-trip/
 ========================================================================
 
 # Round Trip Support
@@ -19158,7 +19858,7 @@ SQLite is supported for **development workflows only** (`--dev` flag). It uses t
 MariaDB is supported as a separate `database_type` (`mariadb`), but it does **not** have round-trip support. You can use MariaDB as a target database for migrations, but `generate-models` and full schema introspection are not available. Use `make-migrations` to write migrations manually.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/databases/sql-databases/
+PAGE: https://dbwarden.org/databases/sql-databases/
 ========================================================================
 
 # SQL Databases
@@ -19365,7 +20065,7 @@ The plan JSON `resolved_from` field indicates how a rename was confirmed:
 - Limited to single-writer; no concurrent writes
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/features/
+PAGE: https://dbwarden.org/features/
 ========================================================================
 
 # Features
@@ -19391,31 +20091,31 @@ This keeps schema changes reviewable in code review and runnable without hidden 
 
 ## Typed Database Configuration
 
-Configure one or many databases with explicit `database_config(...)` calls.
+Configure one or many databases with explicit `DbwardenDatabase` subclasses.
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://user:password@localhost:5432/main",
-    model_paths=["app.models"],
-    model_tables=["users", "posts", "comments"],
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://user:password@localhost:5432/main"
+    model_paths = ["app.models"]
+    model_tables = ["users", "posts", "comments"]
 
-analytics = database_config(
-    database_name="analytics",
-    database_type="clickhouse",
-    database_url_sync="clickhouse://default:@localhost:8123/analytics",
-    model_paths=["app.analytics_models"],
-    model_tables=["events", "page_views"],
-)
+class Analytics(DbwardenDatabase):
+    database_name = "analytics"
+    database_type = "clickhouse"
+    database_url_sync = "clickhouse://default:@localhost:8123/analytics"
+    model_paths = ["app.analytics_models"]
+    model_tables = ["events", "page_views"]
 ```
 
 Each entry is validated before use, including database names, table names, `model_paths`, `model_tables`, and duplicate target detection.
+The supported `database_config(...)` function alternative is useful when a
+plugin or integration supplies function-style configuration.
 
 ## Model-Driven Migration Generation
 
@@ -19625,7 +20325,7 @@ These commands make the migration lifecycle inspectable and reversible.
 - Use [CLI Reference](cli-reference.md) for command lookup
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/getting-started/developing-locally/
+PAGE: https://dbwarden.org/getting-started/developing-locally/
 ========================================================================
 
 # Developing Locally
@@ -19639,19 +20339,18 @@ Dev mode swaps the configured database target for `dev_database_url` and `dev_da
 Configuration example:
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://user:password@localhost:5432/main",
-    model_paths=["app.models"],
-    model_tables=["users", "posts", "comments"],
-    dev_database_type="sqlite",
-    dev_database_url="sqlite:///./development.db",
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://user:password@localhost:5432/main"
+    model_paths = ["app.models"]
+    model_tables = ["users", "posts", "comments"]
+    dev_database_type = "sqlite"
+    dev_database_url = "sqlite:///./development.db"
 ```
 
 Run local commands against the development target:
@@ -19728,7 +20427,7 @@ This keeps feedback fast while still using the same toolchain you use in product
 Next, continue with [Workflows](workflows.md).
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/getting-started/first-migration/
+PAGE: https://dbwarden.org/getting-started/first-migration/
 ========================================================================
 
 # Your First Migration
@@ -19959,7 +20658,7 @@ DBWarden will track these files the same way it tracks generated migrations.
 Next, continue with [Developing Locally](developing-locally.md).
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/getting-started/first-steps/
+PAGE: https://dbwarden.org/getting-started/first-steps/
 ========================================================================
 
 # First Steps
@@ -19977,27 +20676,26 @@ $ dbwarden init
 This creates:
 
 - a migrations directory structure
-- a Python configuration scaffold (`dbwarden.py`)
+- a declarative Python configuration scaffold (`dbwarden.py`)
 
 Why it matters: DBWarden expects a project-local migration layout and config source so migration behavior is deterministic per repository.
 
 ## Step 2: Define one explicit database entry
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://user:password@localhost:5432/main",
-    model_paths=["app.models"],
-    model_tables=["users"],
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://user:password@localhost:5432/main"
+    model_paths = ["app.models"]
+    model_tables = ["users"]
 ```
 
-Why it matters: DBWarden resolves migration targets from explicit typed entries, not inferred environment state.
+Why it matters: DBWarden resolves migration targets from explicit typed entries, not inferred environment state. The equivalent `database_config(...)` function API remains supported and may appear in plugin integrations.
 
 ## Step 3: Add SQLAlchemy models
 
@@ -20070,7 +20768,7 @@ Use status to confirm pending/applied counts and history to confirm execution or
 
 ## Common first-run issues
 
-- `No configuration found`: ensure your project has one discovered config source with `database_config(...)`
+- `No configuration found`: ensure your project has one discovered config source with a concrete `DbwardenDatabase` subclass or a `database_config(...)` call
 - `Database '<name>' not found`: ensure `--database` matches configured `database_name`
 - `No SQLAlchemy models found`: set `model_paths` explicitly in config
 
@@ -20081,7 +20779,7 @@ Use status to confirm pending/applied counts and history to confirm execution or
 - [Developing Locally](developing-locally.md)
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/getting-started/migrating-from-alembic/
+PAGE: https://dbwarden.org/getting-started/migrating-from-alembic/
 ========================================================================
 
 # Migrating from Alembic
@@ -20129,16 +20827,18 @@ uv add dbwarden
 Create `dbwarden.py` in your project root. This replaces `alembic.ini` and `env.py`:
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://user:pass@localhost:5432/myapp",
-    database_url_async="postgresql+asyncpg://user:pass@localhost:5432/myapp",
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://user:pass@localhost:5432/myapp"
+    database_url_async = "postgresql+asyncpg://user:pass@localhost:5432/myapp"
 ```
+
+The existing `database_config(...)` function API is also supported if your
+project or a plugin already uses that form.
 
 Model discovery is automatic. If you want explicit control over which modules are scanned, pass `model_paths`. See [Setup](setup.md) and [Model Discovery](../configuration/model-discovery.md).
 
@@ -20217,7 +20917,7 @@ If you prefer a transition period, both tools can coexist: they track state in s
 - **Destructive changes can be checked first.** `dbwarden check-impact` reports which code still references a column or table you are about to drop. Make it part of review for destructive migrations.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/getting-started/modeling/
+PAGE: https://dbwarden.org/getting-started/modeling/
 ========================================================================
 
 # Modeling Guide
@@ -20458,7 +21158,7 @@ See also: [Cookbook: Models & Migrations](../cookbook/02-models-and-migrations.m
 Next, continue with [Your First Migration](first-migration.md).
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/getting-started/setup/
+PAGE: https://dbwarden.org/getting-started/setup/
 ========================================================================
 
 # Setup
@@ -20502,41 +21202,40 @@ Created migrations directory
 Created dbwarden.py
 ```
 
-`init` creates the local migration layout and a config scaffold. It is safe to run again, DBWarden will not destroy existing `database_config(...)` definitions.
+`init` creates the local migration layout and a declarative config scaffold. It is safe to run again, DBWarden will not destroy existing `database_config(...)` definitions.
 
 ## Create the Configuration File
 
-By default, `dbwarden init` creates `dbwarden.py`, and that is the simplest place to start. However, `database_config(...)` can live in any discovered Python file inside your project.
+By default, `dbwarden init` creates `dbwarden.py` with a `DbwardenDatabase` subclass, and that is the simplest place to start. The function alternative, `database_config(...)`, can also live in any discovered Python file inside your project.
 
 The simplest `dbwarden.py` looks like this:
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://user:password@localhost:5432/main",
-    model_paths=["app.models"],
-    model_tables=["users", "posts", "comments"],
-    dev_database_type="sqlite",
-    dev_database_url="sqlite:///./development.db",
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://user:password@localhost:5432/main"
+    model_paths = ["app.models"]
+    model_tables = ["users", "posts", "comments"]
+    dev_database_type = "sqlite"
+    dev_database_url = "sqlite:///./development.db"
 ```
 
-Copy this into `dbwarden.py`, or another discovered Python module in your project, then adjust the URLs, `model_paths`, and `model_tables` for your project.
+Copy this into `dbwarden.py`, or use `database_config(...)` in another discovered Python module, then adjust the URLs, `model_paths`, and `model_tables` for your project.
 
 ## Step by Step
 
-### Step 1: Import `database_config`
+### Step 1: Import `DbwardenDatabase`
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 ```
 
-`database_config(...)` is the entry point for defining databases. Every configured database becomes part of the validated runtime config.
+Define each concrete `DbwardenDatabase` subclass with a unique name and URL. Every configured database becomes part of the validated runtime config. The equivalent `database_config(...)` function API remains supported, including for plugin examples and integrations.
 
 ### Step 2: Define `database_name`
 
@@ -20609,30 +21308,27 @@ Optional. When set, DBWarden only includes the listed tables from the discovered
 This is useful when multiple databases share the same `model_paths` but own different subsets of tables:
 
 ```python
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://user:password@localhost:5432/main",
-    model_paths=["app.models"],
-    model_tables=["users", "posts", "comments"],
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://user:password@localhost:5432/main"
+    model_paths = ["app.models"]
+    model_tables = ["users", "posts", "comments"]
 
-analytics = database_config(
-    database_name="analytics",
-    database_type="clickhouse",
-    database_url_sync="clickhouse://default:@localhost:8123/analytics",
-    model_paths=["app.models"],
-    model_tables=["events", "page_views"],
-)
+class Analytics(DbwardenDatabase):
+    database_name = "analytics"
+    database_type = "clickhouse"
+    database_url_sync = "clickhouse://default:@localhost:8123/analytics"
+    model_paths = ["app.models"]
+    model_tables = ["events", "page_views"]
 
-logs = database_config(
-    database_name="logs",
-    database_type="mysql",
-    database_url_sync="mysql+pymysql://user:password@localhost:3306/logs",
-    model_paths=["app.models"],
-    model_tables=["audit_log", "error_log"],
-)
+class Logs(DbwardenDatabase):
+    database_name = "logs"
+    database_type = "mysql"
+    database_url_sync = "mysql+pymysql://user:password@localhost:3306/logs"
+    model_paths = ["app.models"]
+    model_tables = ["audit_log", "error_log"]
 ```
 
 If `model_tables` is not set, all discovered tables in `model_paths` belong to that database.
@@ -20668,7 +21364,7 @@ If this command works, DBWarden can resolve and validate your config.
 
 ### `No configuration found`
 
-DBWarden could not locate a config source. Make sure your project contains at least one discovered file with a `database_config(...)` call. `dbwarden.py` is the default convention, but it does not have to be the only location.
+DBWarden could not locate a config source. Make sure your project contains at least one discovered file with a concrete `DbwardenDatabase` subclass or a `database_config(...)` call. `dbwarden.py` is the default convention, but it does not have to be the only location.
 
 ### `Exactly one default=True required`
 
@@ -20681,7 +21377,7 @@ In multi-database setups, each database must declare the models that belong to i
 Next, continue with [Modeling](modeling.md).
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/getting-started/workflows/
+PAGE: https://dbwarden.org/getting-started/workflows/
 ========================================================================
 
 # Workflows
@@ -20693,26 +21389,27 @@ This guide covers larger day-to-day workflows once the basics are in place.
 DBWarden can manage more than one database from one config source.
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://user:password@localhost:5432/main",
-    model_paths=["app.models"],
-    model_tables=["users", "posts", "comments"],
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://user:password@localhost:5432/main"
+    model_paths = ["app.models"]
+    model_tables = ["users", "posts", "comments"]
 
-analytics = database_config(
-    database_name="analytics",
-    database_type="clickhouse",
-    database_url_sync="clickhouse://default:@localhost:8123/analytics",
-    model_paths=["app.analytics_models"],
-    model_tables=["events", "page_views"],
-)
+class Analytics(DbwardenDatabase):
+    database_name = "analytics"
+    database_type = "clickhouse"
+    database_url_sync = "clickhouse://default:@localhost:8123/analytics"
+    model_paths = ["app.analytics_models"]
+    model_tables = ["events", "page_views"]
 ```
+
+The equivalent `database_config(...)` function form remains supported and is
+used by some plugins and integration examples.
 
 Apply migrations per database:
 
@@ -20807,7 +21504,7 @@ This verifies both directions of the migration before a release depends on them.
 - Use [CLI Reference](../cli-reference.md) for command details
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/glossary/
+PAGE: https://dbwarden.org/glossary/
 ========================================================================
 
 # Glossary
@@ -20837,12 +21534,12 @@ PAGE: https://dbwarden.emiliano-go.com/glossary/
 : A seed defined as a Python class extending `Seed`, with `run()` and optional `rollback()` methods. The recommended way to manage seed data.
 
 **Configuration (dbwarden.py)**
-: DBWarden uses a Python file (`dbwarden.py`) with `database_config()` calls, providing type safety, runtime flexibility, and IDE support for configuring databases.
+: DBWarden uses a Python file (`dbwarden.py`) with concrete `DbwardenDatabase` classes by default. The equivalent `database_config()` function API is also supported, providing type safety, runtime flexibility, and IDE support for configuring databases.
 
 ## D
 
 **Database Config**
-: A single `database_config()` call that defines one database. Each config includes the database name, type, connection URL, model paths, and optional dev mode settings.
+: A concrete `DbwardenDatabase` class, or equivalent `database_config()` call, that defines one database. Each config includes the database name, type, connection URL, model paths, and optional dev mode settings.
 
 **Dev Mode**
 : Using a different database type (typically SQLite) for local development while targeting a production database (e.g., PostgreSQL) in deployment, enabled via the `dev_database_type` and `dev_database_url` config options.
@@ -20856,7 +21553,7 @@ PAGE: https://dbwarden.emiliano-go.com/glossary/
 ## F
 
 **FastAPI Integration**
-: DBWarden's built-in support for FastAPI including async sessions, health endpoints, migration endpoints, Prometheus metrics, and distributed locking. Configured once via `database_config()`.
+: DBWarden's built-in support for FastAPI including async sessions, health endpoints, migration endpoints, Prometheus metrics, and distributed locking. Configured once via a `DbwardenDatabase` class or the equivalent `database_config()` function.
 
 ## G
 
@@ -20959,7 +21656,7 @@ PAGE: https://dbwarden.emiliano-go.com/glossary/
 : The `dbwarden unlock` command to recover from a stale migration lock when no migration is actually running and the lock was not released properly.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/
+PAGE: https://dbwarden.org/
 ========================================================================
 
 <p align="center">
@@ -20990,7 +21687,7 @@ PAGE: https://dbwarden.emiliano-go.com/
 </p>
 
 <p align="center">
-  <strong><a href="https://dbwarden.emiliano-go.com/">Full documentation</a></strong>
+  <strong><a href="https://dbwarden.org/">Full documentation</a></strong>
   &nbsp;|&nbsp;
   <strong><a href="https://github.com/dbwarden-org/dbwarden">Source Code</a></strong>
 </p>
@@ -21075,16 +21772,18 @@ Optional dependency groups:
 Create a file named `dbwarden.py` in your project root:
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://user:pass@localhost:5432/myapp",
-    database_url_async="postgresql+asyncpg://user:pass@localhost:5432/myapp",
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://user:pass@localhost:5432/myapp"
+    database_url_async = "postgresql+asyncpg://user:pass@localhost:5432/myapp"
 ```
+
+The function alternative, `database_config(...)`, remains supported. Some
+plugins use it in examples or integration code.
 
 ### 2. Define your models
 
@@ -21352,7 +22051,7 @@ DBWarden is built for teams that want declarative, reviewable, reproducible data
 - Use [CLI Reference](cli-reference.md) as command lookup
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/installation/
+PAGE: https://dbwarden.org/installation/
 ========================================================================
 
 # Installation
@@ -21455,30 +22154,31 @@ This creates:
 When you run `init`, DBWarden:
 
 1. Creates `migrations/` if missing
-2. Creates `dbwarden.py` (or updates existing config source) with import scaffolding
+2. Creates `dbwarden.py` (or updates existing config source) with declarative class scaffolding
 3. Does not overwrite existing `database_config(...)` definitions you have added
 
 You can run `init` safely on an existing project - it is idempotent.
 
 ## Quick configuration
 
-After init, configure your first database by editing `dbwarden.py` (or your existing config file that contains `database_config(...)` calls):
+After init, configure your first database by editing `dbwarden.py` (or your existing config file):
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://user:password@localhost:5432/mydb",
-    dev_database_type="sqlite",
-    dev_database_url="sqlite:///./development.db",
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://user:password@localhost:5432/mydb"
+    dev_database_type = "sqlite"
+    dev_database_url = "sqlite:///./development.db"
 ```
 
 The `dev_database_*` fields are optional but recommended - they enable fast local iterations with `--dev`.
+The function alternative, `database_config(...)`, remains supported, and some
+plugins use it in examples or integration code.
 
 ## Verify configuration loads
 
@@ -21520,7 +22220,7 @@ poetry update dbwarden
 Check the release notes when upgrading major versions - there may be configuration or workflow changes.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/migration-files/
+PAGE: https://dbwarden.org/migration-files/
 ========================================================================
 
 # Migration File Format
@@ -21730,24 +22430,27 @@ $ dbwarden migrate --database primary
 ```
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/models/
+PAGE: https://dbwarden.org/models/
 ========================================================================
 
 # SQLAlchemy Models Reference
 
 This page is the **reference** for all supported Meta attributes across every backend. For a step-by-step walkthrough of defining models, see the [Modeling Guide](getting-started/modeling.md).
 
-DBWarden reads SQLAlchemy model metadata to generate migration SQL. Use `model_paths` in your `database_config(...)` entries to control discovery.
+DBWarden reads SQLAlchemy model metadata to generate migration SQL. Use
+`model_paths` on your `DbwardenDatabase` classes, or in equivalent
+`database_config(...)` entries, to control discovery.
 
 ```python
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://user:pass@localhost:5432/main",
-    model_paths=["app.models"],
-    model_tables=["users", "posts", "comments"],
-)
+from dbwarden import DbwardenDatabase
+
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://user:pass@localhost:5432/main"
+    model_paths = ["app.models"]
+    model_tables = ["users", "posts", "comments"]
 ```
 
 ## Common Meta Attributes
@@ -22307,7 +23010,7 @@ Cross-backend column attributes (`comment`, `public`) are set directly on the in
 See [Type Mapping](databases/postgresql/type-mapping.md) for the full SQLAlchemy-to-PostgreSQL type normalization table.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/observability/
+PAGE: https://dbwarden.org/observability/
 ========================================================================
 
 # Observability
@@ -22399,6 +23102,13 @@ Set the `DBWARDEN_LOG_JSON` environment variable to `true`:
 export DBWARDEN_LOG_JSON=true
 ```
 
+For one-off CLI runs, the global `--json` flag has the same effect on the
+command's log output (and also switches display commands to JSON):
+
+```bash
+dbwarden --json migrate --database primary
+```
+
 When enabled, all DBWarden log output uses newline-delimited JSON format:
 
 ```json
@@ -22418,6 +23128,33 @@ When enabled, all DBWarden log output uses newline-delimited JSON format:
 | `db_type` | Database type (when applicable) |
 | `exception` | Exception traceback (when applicable) |
 
+## TRACE logging
+
+The `trace` level (numeric `5`, below `debug`) is enabled with
+`--debug-level trace` and logs every SQL statement as it executes during
+`migrate`, `rollback`, and `downgrade`:
+
+```bash
+dbwarden --debug-level trace migrate --database primary
+```
+
+Each statement is logged as `SQL (2.1ms): CREATE TABLE ...` and respects the
+current log format (plain text or JSON).
+
+## Migration phase timing
+
+Migration commands always log phase timings at INFO level: lock acquisition,
+schema snapshot write, and model state write. Add `--perf` to also log each
+individual SQL statement with its duration:
+
+```bash
+dbwarden migrate --perf --database primary
+```
+
+```bash
+dbwarden make-migrations "add column" --perf
+```
+
 ## Environment variables reference
 
 | Variable | Value | Effect |
@@ -22430,7 +23167,7 @@ When enabled, all DBWarden log output uses newline-delimited JSON format:
 See also: [Cookbook: Observability](../cookbook/11-observability.md)
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/plugins/developing/object-plugins/
+PAGE: https://dbwarden.org/plugins/developing/object-plugins/
 ========================================================================
 
 # Object Plugins
@@ -22644,7 +23381,7 @@ Object plugins run the value-plugin conformance checks plus two handler-specific
 - `test_ordering_constraint_satisfiable`: `assert_ordering_constraint_satisfiable(handler)` confirms the constraint is not statically impossible (no impossible anchor pair; no unknown/cyclic object references).
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/plugins/developing/overview/
+PAGE: https://dbwarden.org/plugins/developing/overview/
 ========================================================================
 
 # Plugin Development Overview
@@ -22738,7 +23475,7 @@ dbwarden-example/
 - Match documented hook signatures exactly; see the [hook catalog](../reference/hook-catalog.md).
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/plugins/developing/publishing/
+PAGE: https://dbwarden.org/plugins/developing/publishing/
 ========================================================================
 
 # Publishing Plugins
@@ -22853,7 +23590,7 @@ Link a green run of this workflow when you [submit for verification](verified-st
 Official DBWarden plugins use provenance-backed publishing (PyPI Trusted Publishing via GitHub Actions OIDC), which is what `dbwarden plugin add` verifies at install time. Community plugins can (and should) adopt Trusted Publishing too, but on its own it does not make a plugin Official: the Official tier is the curated list in `dbwarden/_official.py`.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/plugins/developing/value-plugins/
+PAGE: https://dbwarden.org/plugins/developing/value-plugins/
 ========================================================================
 
 # Value Plugins
@@ -22966,7 +23703,7 @@ def test_setup_registers_hooks() -> None:
 ```
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/plugins/developing/verified-standard/
+PAGE: https://dbwarden.org/plugins/developing/verified-standard/
 ========================================================================
 
 # Verified Plugin Standard
@@ -23060,7 +23797,7 @@ To be Verified, the plugin must run the conformance suite in public CI (GitHub A
 The verified minimum is a **floor**: patch and minor releases above it load automatically. A **new major version** (or any release that changes hooks, signatures, or object semantics) must request re-verification, and the floor in `dbwarden/_verified.py` is updated accordingly. Until then, a version below the recorded floor is treated as **Community** and requires consent.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/plugins/faq/
+PAGE: https://dbwarden.org/plugins/faq/
 ========================================================================
 
 # Plugin FAQ
@@ -23098,7 +23835,7 @@ Follow the [Verified Plugin Standard](developing/verified-standard.md): pass the
 Consent is version-specific. After upgrading, the recorded consent no longer matches the new version, so the plugin is treated as unconsented until you run `dbwarden plugin trust <name>` again.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/plugins/
+PAGE: https://dbwarden.org/plugins/
 ========================================================================
 
 # DBWarden Plugins
@@ -23147,7 +23884,7 @@ Then use the integration exposed by the plugin according to its documentation.
 - Build your first plugin with the [developer overview](developing/overview.md).
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/plugins/quickstart/
+PAGE: https://dbwarden.org/plugins/quickstart/
 ========================================================================
 
 # Quickstart: Add FastAPI Support
@@ -23256,7 +23993,7 @@ async def users(session: AsyncSession = Depends(get_session("primary"))):
 - [Plugin CLI reference](reference/plugin-cli.md)
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/plugins/reference/hook-catalog/
+PAGE: https://dbwarden.org/plugins/reference/hook-catalog/
 ========================================================================
 
 # Hook Catalog
@@ -23311,7 +24048,7 @@ routers = HookRegistry.execute_all("health_routes", auth_mode="open")
 Plugin authors do not call these; they are shown here so you can see exactly how and with what arguments core will invoke your callable.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/plugins/reference/ordering-anchors/
+PAGE: https://dbwarden.org/plugins/reference/ordering-anchors/
 ========================================================================
 
 # Ordering Anchors
@@ -23407,7 +24144,7 @@ DBWarden rejects invalid ordering at registration or run time by raising `Orderi
 The internal `StatementOrder` integers (and their exact values) are an implementation detail and are renumbered as core evolves. Anchors are the **public, stable contract**. Never read or set `statement_order` yourself; declare `ordering` with anchors and let DBWarden compute the rest.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/plugins/reference/plugin-cli/
+PAGE: https://dbwarden.org/plugins/reference/plugin-cli/
 ========================================================================
 
 # Plugin CLI
@@ -23523,7 +24260,7 @@ installed_at = "2026-07-22T14:05:40.001122+00:00"
 Commit both files so teammates and CI inherit your trust and provenance decisions.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/plugins/using-plugins/consent-and-trust/
+PAGE: https://dbwarden.org/plugins/using-plugins/consent-and-trust/
 ========================================================================
 
 # Consent And Trust
@@ -23590,7 +24327,7 @@ Classify-before-load ensures untrusted community plugin code is **not imported**
 Verified and Official tiers exist to reduce how often you must make that trust decision manually, not to make loading arbitrary code safe.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/plugins/using-plugins/finding-plugins/
+PAGE: https://dbwarden.org/plugins/using-plugins/finding-plugins/
 ========================================================================
 
 # Finding Plugins
@@ -23638,7 +24375,7 @@ Verification is not a security audit. See [consent and trust](consent-and-trust.
 Any other package with a `dbwarden.plugins` entry point is treated as **Community**. Community plugins require explicit consent before loading. A community-curated index may be maintained as a Markdown page in the DBWarden repository; until then, discover them via PyPI search and review the source before trusting.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/plugins/using-plugins/installing/
+PAGE: https://dbwarden.org/plugins/using-plugins/installing/
 ========================================================================
 
 # Installing Plugins
@@ -23730,7 +24467,7 @@ dbwarden plugin remove <distribution-name>
 This uninstalls the distribution and removes its consent entry and lockfile record. Use `--dry-run` to preview or `--uv` to uninstall via `uv remove`.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/plugins/using-plugins/plugin-list-and-info/
+PAGE: https://dbwarden.org/plugins/using-plugins/plugin-list-and-info/
 ========================================================================
 
 # Plugin List And Info
@@ -23822,12 +24559,13 @@ Plugin Info
 Both `plugin list` and `plugin info` report the hooks and object handlers registered **after load**. If a plugin is discovered but skipped (untrusted) or failed during `setup`, those columns are empty and, for failures, the **Error** row explains why.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/reference/configuration-api/
+PAGE: https://dbwarden.org/reference/configuration-api/
 ========================================================================
 
 # Configuration API Reference
 
-Complete reference for the `database_config()` function.
+Complete reference for the `database_config()` function and the equivalent
+`DbwardenDatabase` declarative API.
 
 This is a reference page. For step-by-step guides, see
 [Quick Start](../configuration/quick-start.md), [Concepts](../configuration/concepts.md),
@@ -23879,6 +24617,45 @@ Both fire when your `dbwarden.py` is loaded, not at migration time.
 | `ch_named_collections`, `ch_roles`, `ch_users`, `ch_row_policies`, `ch_quotas`, `ch_settings_profiles`, `ch_grants` | `dbwarden-ch-rbac` |
 
 Install with `dbwarden plugin add <name>`. `pg_schema` and `pg_migration_lock_timeout` are core and need no plugin.
+
+## Declarative API
+
+For configuration that benefits from inheritance, define a concrete subclass of
+`DbwardenDatabase`. Every explicit `database_config()` field is available as a
+class attribute, and concrete subclasses register automatically when imported.
+
+```python
+from dbwarden import DbwardenDatabase
+
+
+class Shared(DbwardenDatabase):
+    __abstract__ = True
+    database_type = "postgresql"
+    model_paths = ["app.models"]
+    plugin_config = {
+        "pg_roles": ["app_owner"],
+    }
+
+
+class Primary(Shared):
+    database_name = "primary"
+    database_url_sync = "postgresql://user:pass@localhost/myapp"
+    default = True
+```
+
+Plugin keys may also be declared directly as class attributes:
+
+```python
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    database_url_sync = "postgresql://user:pass@localhost/myapp"
+    pg_roles = ["app_owner"]
+```
+
+`Primary.handle` is the `DatabaseHandle` returned by the function API. Mutable
+values such as `model_paths`, `model_tables`, and `plugin_config` are copied for
+each registered subclass, so child classes can override them without mutating
+their base class.
 
 ## Required arguments
 
@@ -24388,12 +25165,12 @@ analytics = database_config(
 - [Troubleshooting](../configuration/troubleshooting.md) - Common issues
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/reference/migrate-from-toml/
+PAGE: https://dbwarden.org/reference/migrate-from-toml/
 ========================================================================
 
 # Migrate from TOML
 
-If your project currently uses `warden.toml` for DBWarden configuration, this guide walks through transitioning to the Python-based `database_config(...)` approach.
+If your project currently uses `warden.toml` for DBWarden configuration, this guide walks through transitioning to Python-based configuration with the default `DbwardenDatabase` API. The equivalent `database_config(...)` function remains supported.
 
 ## Why migrate
 
@@ -24640,7 +25417,7 @@ If migration causes issues, you can always:
 However, the Python-based approach is the recommended direction (0.9+) and offers significant benefits.
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/seeds/
+PAGE: https://dbwarden.org/seeds/
 ========================================================================
 
 # Seed Management
@@ -24694,7 +25471,7 @@ Key advantages over the old decorator approach:
 
 | Attribute | Default | Description |
 |-----------|---------|-------------|
-| `__seed_database__` | `"default"` | Routes the seed to the named database handle configured in `database_config(...)`. |
+| `__seed_database__` | `"default"` | Routes the seed to the named database handle configured by a `DbwardenDatabase` class or `database_config(...)`. |
 | `__seed_description__` | `""` | Human-readable label shown in `dbwarden seed list` output. |
 | `__seed_on_conflict__` | `"ignore"` | What to do when a row with matching columns exists: `"ignore"` (skip silently), `"update"` (overwrite), or `"error"` (raise). |
 | `__seed_conflict_columns__` | `None` | List of column names used for conflict detection. Required when `__seed_on_conflict__` is `"update"`. |
@@ -25069,7 +25846,7 @@ FastAPI integration ships separately as the `dbwarden-fastapi` plugin, so its re
 See also: [Cookbook: Seeds](../cookbook/07-seeds.md)
 
 ========================================================================
-PAGE: https://dbwarden.emiliano-go.com/sql-translation/
+PAGE: https://dbwarden.org/sql-translation/
 ========================================================================
 
 # SQL Translation

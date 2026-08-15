@@ -37,9 +37,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://dbwarden.emiliano-go.com/"
+Homepage = "https://dbwarden.org/"
 Repository = "https://github.com/dbwarden-org/dbwarden"
-Documentation = "https://dbwarden.emiliano-go.com/"
+Documentation = "https://dbwarden.org/"
 "Bug Tracker" = "https://github.com/dbwarden-org/dbwarden/issues"
 
 [project.scripts]

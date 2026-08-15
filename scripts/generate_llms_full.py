@@ -13,7 +13,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DOCS_DIR = PROJECT_ROOT / "docs"
 OUTPUT = DOCS_DIR / "llms-full.txt"
-SITE_URL = "https://dbwarden.emiliano-go.com"
+SITE_URL = "https://dbwarden.org"
 
 SKIP_FILES = {
     "llms.txt",

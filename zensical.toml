@@ -1,7 +1,7 @@
 [project]
 site_name = "DBWarden Documentation"
 site_description = "DBWarden: SQL-first database migration system for Python and SQLAlchemy projects. Multi-DB migrations, impact analysis, seal data management, and production safety controls."
-site_url = "https://dbwarden.emiliano-go.com"
+site_url = "https://dbwarden.org"
 docs_dir = "docs"
 site_dir = "site"
 
@@ -196,11 +196,11 @@ Reference = [
 
 [project.markdown_extensions]
 "seoslug.contrib.zensical" = {
-  canonical_host = "dbwarden.emiliano-go.com",
-  public_base_url = "https://dbwarden.emiliano-go.com/",
+  canonical_host = "dbwarden.org",
+  public_base_url = "https://dbwarden.org/",
   site_name = "DBWarden Documentation",
   title_template = "{title} - DBWarden",
-  default_og_image = "https://dbwarden.emiliano-go.com/assets/images/og-image.png",
+  default_og_image = "https://dbwarden.org/assets/images/og-image.png",
   publisher_name = "Emiliano Gandini Outeda",
   locale = "en_US",
   twitter_site = "@emiliano_go_",
