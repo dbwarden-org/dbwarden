@@ -7,7 +7,12 @@ description: Release notes for dbwarden, newest first. Tracks features, fixes, a
 
 All notable changes to dbwarden, newest first. Versions follow semantic versioning and are tagged in the repository.
 
-## [Unreleased]
+## [0.17.1] - 2026-08-15
+
+### Added
+
+- **Declarative configuration as the default scaffold.** `dbwarden init` now generates `DbwardenDatabase` subclasses, while discovery supports inherited configuration, aliases, indirect imports, and the existing function-based API.
+- **Migration convergence and replay hardening.** Migration generation and execution now share stronger convergence checks, replay handling, connection cleanup, and PostgreSQL column behavior coverage.
 
 ### Changed
 
