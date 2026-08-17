@@ -7,6 +7,12 @@ description: Release notes for dbwarden, newest first. Tracks features, fixes, a
 
 All notable changes to dbwarden, newest first. Versions follow semantic versioning and are tagged in the repository.
 
+## [0.17.2] - 2026-08-17
+
+### Fixed
+
+- **Official plugin provenance recognizes renamed publisher workflows.** `dbwarden plugin add` now verifies the trusted-publishing attestations for the ClickHouse RBAC, PostgreSQL extensions, PostgreSQL RBAC, and PostgreSQL types plugins against their `publishing.yml` workflows.
+
 ## [0.17.1] - 2026-08-15
 
 ### Added

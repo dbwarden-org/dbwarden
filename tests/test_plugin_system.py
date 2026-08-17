@@ -93,6 +93,20 @@ def test_classify_marks_known_plugins_official() -> None:
     assert classify("dbwarden-acme") == "community"
 
 
+def test_official_plugin_workflows_match_their_publishers() -> None:
+    assert {
+        name: spec.workflow for name, spec in OFFICIAL_PLUGINS.items()
+    } == {
+        "dbwarden-ch-rbac": "publishing.yml",
+        "dbwarden-fastapi": "publish.yml",
+        "dbwarden-pgsql-extensions": "publishing.yml",
+        "dbwarden-pgsql-rbac": "publishing.yml",
+        "dbwarden-pgsql-types": "publishing.yml",
+        "dbwarden-sandbox": "publish.yml",
+        "dbwarden-seeds": "publish.yml",
+    }
+
+
 def test_classify_marks_verified_plugins_after_official(monkeypatch) -> None:
     from dbwarden._verified import VERIFIED_PLUGINS
 
@@ -674,7 +688,7 @@ def test_verify_provenance_succeeds_for_matching_publisher(monkeypatch) -> None:
     _patch_pypi(
         monkeypatch,
         _make_project(EXT, "0.3.0", sha),
-        _make_provenance(EXT_SPEC.repo_slug, "publish.yml", sha),
+        _make_provenance(EXT_SPEC.repo_slug, EXT_SPEC.workflow, sha),
     )
 
     result = verify_official_provenance(EXT, EXT_SPEC)
@@ -716,7 +730,7 @@ def test_verify_provenance_fails_on_digest_mismatch(monkeypatch) -> None:
     _patch_pypi(
         monkeypatch,
         _make_project(EXT, "0.3.0", file_sha),
-        _make_provenance(EXT_SPEC.repo_slug, "publish.yml", attested_sha),
+        _make_provenance(EXT_SPEC.repo_slug, EXT_SPEC.workflow, attested_sha),
     )
 
     result = verify_official_provenance(EXT, EXT_SPEC)
@@ -736,7 +750,7 @@ def test_verify_provenance_fails_on_workflow_mismatch(monkeypatch) -> None:
     result = verify_official_provenance(EXT, EXT_SPEC)
 
     assert result.verified is False
-    assert "workflow publish.yml" in result.reason
+    assert f"workflow {EXT_SPEC.workflow}" in result.reason
 
 
 def test_verify_provenance_verifies_requested_version(monkeypatch) -> None:
@@ -752,7 +766,7 @@ def test_verify_provenance_verifies_requested_version(monkeypatch) -> None:
     monkeypatch.setattr("dbwarden.plugin._pypi_project_json", lambda p: project)
     monkeypatch.setattr(
         "dbwarden.plugin._pypi_provenance",
-        lambda p, version, filename: _make_provenance(EXT_SPEC.repo_slug, "publish.yml", sha)
+        lambda p, version, filename: _make_provenance(EXT_SPEC.repo_slug, EXT_SPEC.workflow, sha)
         if version == "0.3.0"
         else None,
     )

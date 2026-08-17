@@ -34,6 +34,7 @@ OFFICIAL_PLUGINS: dict[str, OfficialSpec] = {
     "dbwarden-ch-rbac": OfficialSpec(
         pypi="dbwarden-ch-rbac",
         repo_slug="dbwarden-org/dbwarden-ch-rbac",
+        workflow="publishing.yml",
     ),
     "dbwarden-fastapi": OfficialSpec(
         pypi="dbwarden-fastapi",
@@ -42,14 +43,17 @@ OFFICIAL_PLUGINS: dict[str, OfficialSpec] = {
     "dbwarden-pgsql-extensions": OfficialSpec(
         pypi="dbwarden-pgsql-extensions",
         repo_slug="dbwarden-org/dbwarden-pgsql-extensions",
+        workflow="publishing.yml",
     ),
     "dbwarden-pgsql-rbac": OfficialSpec(
         pypi="dbwarden-pgsql-rbac",
         repo_slug="dbwarden-org/dbwarden-pgsql-rbac",
+        workflow="publishing.yml",
     ),
     "dbwarden-pgsql-types": OfficialSpec(
         pypi="dbwarden-pgsql-types",
         repo_slug="dbwarden-org/dbwarden-pgsql-types",
+        workflow="publishing.yml",
     ),
     "dbwarden-sandbox": OfficialSpec(
         pypi="dbwarden-sandbox",
