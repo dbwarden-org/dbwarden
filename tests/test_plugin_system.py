@@ -98,12 +98,12 @@ def test_official_plugin_workflows_match_their_publishers() -> None:
         name: spec.workflow for name, spec in OFFICIAL_PLUGINS.items()
     } == {
         "dbwarden-ch-rbac": "publishing.yml",
-        "dbwarden-fastapi": "publish.yml",
+        "dbwarden-fastapi": "publishing.yml",
         "dbwarden-pgsql-extensions": "publishing.yml",
         "dbwarden-pgsql-rbac": "publishing.yml",
         "dbwarden-pgsql-types": "publishing.yml",
-        "dbwarden-sandbox": "publish.yml",
-        "dbwarden-seeds": "publish.yml",
+        "dbwarden-sandbox": "publishing.yml",
+        "dbwarden-seeds": "publishing.yml",
     }
 
 
