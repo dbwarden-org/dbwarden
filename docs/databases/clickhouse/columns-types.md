@@ -79,6 +79,30 @@ CREATE TABLE user_sessions (
 ) ENGINE = MergeTree() ORDER BY user_id
 ```
 
+Codec chains are preserved in order:
+
+```python
+class Event(Base):
+    __tablename__ = "events"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    value: Mapped[float] = mapped_column()
+
+    class Meta(CHTableMeta):
+        ch = ch_table(engine=merge_tree(), order_by="id")
+
+        class value(CHColumnMeta):
+            ch = ch.field(codec="Delta(8), ZSTD(1)")
+```
+
+```sql
+CREATE TABLE events (
+    id Int64,
+    value Float64 CODEC(Delta(8), ZSTD(1))
+) ENGINE = MergeTree() ORDER BY id
+```
+
+The default `LZ4` codec is treated as implicit and is omitted from generated models. `LowCardinality(Nullable(T))` round-trips as `low_cardinality=True, nullable=True`.
+
 ### Column with alias and comment
 
 ```python

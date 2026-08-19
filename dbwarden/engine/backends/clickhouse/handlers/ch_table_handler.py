@@ -4,35 +4,15 @@ import json
 from typing import Any, Dict, List, Optional, Tuple
 
 from dbwarden.engine.backends.clickhouse.cluster import emit_with_cluster
-
 from dbwarden.engine.core.protocol import ObjectHandler, Op, RunPhase
 from dbwarden.engine.model_discovery import _format_clickhouse_expression
 from dbwarden.engine.snapshot import (
     MigrationStatement,
     StatementOrder,
 )
+from dbwarden.engine.snapshot.ch_utils import _serialize_clickhouse_engine
+from dbwarden.databases.clickhouse.engine import ChEngineSpec
 
-
-_CH_SETTING_KEYS: frozenset[str] = frozenset({
-    "ch_settings",
-    "ch_ttl",
-    "ch_order_by",
-    "ch_primary_key",
-    "ch_partition_by",
-    "ch_sample_by",
-    "ch_engine",
-    "ch_projections",
-    "ch_select_statement",
-    "ch_to_table",
-    "ch_dictionary",
-    "ch_dict_layout",
-    "ch_dict_source",
-    "ch_dict_lifetime",
-    "ch_dict_primary_key",
-    "ch_zookeeper_path",
-    "ch_replica_name",
-    "ch_object_type",
-})
 
 # NOTE: immutable keys (ch_partition_by, ch_primary_key, ch_sample_by) are
 # deliberately excluded; they are refused by check_immutable() before this
@@ -100,6 +80,9 @@ class ChTableHandler(ObjectHandler):
             opts.pop("ch_engine_raw", None)
             opts = {k: v for k, v in opts.items() if v is not None and v is not False and v != []}
             engine = opts.get("ch_engine")
+            if isinstance(engine, ChEngineSpec):
+                engine = _serialize_clickhouse_engine(engine)
+                opts["ch_engine"] = engine
             if isinstance(engine, (list, tuple)) and len(engine) == 1:
                 opts["ch_engine"] = engine[0]
             opts = canonicalize_primary_key(opts)

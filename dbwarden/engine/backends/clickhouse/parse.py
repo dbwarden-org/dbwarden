@@ -27,7 +27,7 @@ def parse_ttl_expressions(create_query: str) -> list[str]:
     if not ttl_match:
         return []
     ttl_body = ttl_match.group(1).strip()
-    return [part.strip() for part in ttl_body.split(",") if part.strip()]
+    return _split_top_level_commas(ttl_body)
 
 
 def parse_projection_queries(create_query: str) -> list[dict[str, str]]:
@@ -50,10 +50,10 @@ def parse_projection_names(create_query: str) -> list[str]:
 
 
 def parse_mv_query(create_query: str) -> str | None:
-    mv_match = re.search(r"\bAS\s+SELECT\s+.+$", create_query, re.IGNORECASE | re.DOTALL)
+    mv_match = re.search(r"\bAS\s+(SELECT\s+.+)$", create_query, re.IGNORECASE | re.DOTALL)
     if not mv_match:
         return None
-    return mv_match.group(0)[3:].strip()
+    return mv_match.group(1).strip()
 
 
 def parse_mv_to_table(create_query: str) -> str | None:
@@ -74,11 +74,11 @@ def parse_mv_refresh(create_query: str) -> str | None:
         re.IGNORECASE | re.DOTALL,
     )
     if match:
-        return match.group(1).strip()
+        return match.group(1).strip().strip("'\"")
     # Handle REFRESH at end of statement (no following keywords)
     match = re.search(r"\bREFRESH\s+(.+?)\s*$", create_query, re.IGNORECASE)
     if match:
-        return match.group(1).strip()
+        return match.group(1).strip().strip("'\"")
     return None
 
 
@@ -87,7 +87,7 @@ def parse_zookeeper_path(create_query: str, engine: str) -> str | None:
         return None
     match = re.search(r"\bReplicated\w+\s*\(([^,]+),", create_query)
     if match:
-        return match.group(1).strip()
+        return match.group(1).strip().strip("'\"")
     return None
 
 
@@ -96,7 +96,7 @@ def parse_replica_name(create_query: str, engine: str) -> str | None:
         return None
     match = re.search(r"\bReplicated\w+\s*\([^,]+,\s*([^)]+)", create_query)
     if match:
-        return match.group(1).strip()
+        return match.group(1).strip().strip("'\"")
     return None
 
 
@@ -108,9 +108,14 @@ def parse_tuple_or_list(value: Any) -> str | list[str] | None:
         inner = value_str[6:-1].strip()
         if not inner:
             return []
-        return [part.strip() for part in inner.split(",")]
+        return _split_top_level_commas(inner)
+    if value_str.startswith("(") and value_str.endswith(")"):
+        inner = value_str[1:-1].strip()
+        if not inner:
+            return []
+        return _split_top_level_commas(inner)
     if "," in value_str:
-        parts = [part.strip() for part in value_str.split(",")]
+        parts = _split_top_level_commas(value_str)
         if len(parts) > 1:
             return parts
     return value_str
@@ -170,3 +175,30 @@ def _clean_expression(value: Any) -> str | None:
     if not value_str:
         return None
     return value_str
+
+
+def _split_top_level_commas(value: str) -> list[str]:
+    """Split comma-separated SQL expressions without splitting function arguments."""
+    parts: list[str] = []
+    start = 0
+    depth = 0
+    quote: str | None = None
+    for index, char in enumerate(value):
+        if quote:
+            if char == quote:
+                quote = None
+        elif char in "'\"`":
+            quote = char
+        elif char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+        elif char == "," and depth == 0:
+            part = value[start:index].strip()
+            if part:
+                parts.append(part)
+            start = index + 1
+    part = value[start:].strip()
+    if part:
+        parts.append(part)
+    return parts

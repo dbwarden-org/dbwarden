@@ -59,6 +59,8 @@ class MaterializedViewSpec:
             if isinstance(self.engine, ChEngineSpec):
                 d["ch_engine_raw"] = self.engine.to_dict()
                 d["ch_engine"] = self.engine.name
+                if self.settings is None and self.engine.settings is not None:
+                    d["ch_settings"] = dict(self.engine.settings)
             else:
                 d["ch_engine"] = self.engine
         if self.order_by is not None:
@@ -253,6 +255,8 @@ class AggregatingViewSpec:
         for g in self.group_by:
             cols.append(column_name_from_expr(g))
         for a in self.aggregates:
+            if not a.alias:
+                raise ValueError("aggregating_view aggregates require an alias")
             cols.append(a.alias)
         return cols
 
@@ -604,6 +608,4 @@ def _match_column_type_from_raw(sql: str, source_types: dict[str, str]) -> str |
         if _re.search(r"\b" + _re.escape(col_name) + r"\b", sql):
             return col_type
     return None
-
-
 

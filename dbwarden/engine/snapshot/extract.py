@@ -113,7 +113,7 @@ def extract_full_schema_snapshot(
     inspect_kw = {"schema": pg_schema} if pg_schema else {}
     table_names = inspector.get_table_names(**inspect_kw)
     for table_name in table_names:
-        _regclass_name = f"{pg_schema}.{table_name}" if pg_schema else table_name
+        _regclass_name = f'"{pg_schema}"."{table_name}"' if pg_schema else f'"{table_name}"'
         columns_info = inspector.get_columns(table_name, **inspect_kw)
         pk_info = inspector.get_pk_constraint(table_name, **inspect_kw)
 
@@ -443,14 +443,18 @@ def extract_full_schema_snapshot(
 
                 try:
                     child_rows = _conn.execute(
-                        text("SELECT c.relname, pg_get_expr(c.relpartbound, c.oid) AS bound "
-                             "FROM pg_class c JOIN pg_inherits i ON i.inhrelid = c.oid "
+                        text("SELECT n.nspname, c.relname, pg_get_expr(c.relpartbound, c.oid) AS bound "
+                             "FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+                             "JOIN pg_inherits i ON i.inhrelid = c.oid "
                              "WHERE i.inhparent = CAST(:t AS regclass) AND c.relispartition = true "
                              "ORDER BY c.relname"),
                         {"t": _regclass_name},
                     ).fetchall()
                     if child_rows:
-                        children = [{"name": r[0], "bound": r[1]} for r in child_rows]
+                        children = [
+                            {"name": r[1] if not pg_schema or r[0] == pg_schema else f"{r[0]}.{r[1]}", "bound": r[2]}
+                            for r in child_rows
+                        ]
                         pg_table["pg_partitions"] = children
                 except Exception as e:
                     import logging
@@ -704,6 +708,7 @@ def extract_full_schema_snapshot(
 
         constraint_index_names: set[str] = set()
         if database_type == "postgresql":
+            _pg_c = None
             try:
                 _pg_c = engine.connect() if own_engine and engine is not None else connection
                 rows = _pg_c.execute(
@@ -715,11 +720,14 @@ def extract_full_schema_snapshot(
                         "AND c.contype IN ('p', 'u', 'x') "
                         "AND c.conindid <> 0"
                     ),
-                    {"t": table_name},
+                    {"t": _regclass_name},
                 ).fetchall()
                 constraint_index_names = {r[0] for r in rows}
             except Exception:
                 pass
+            finally:
+                if own_engine and _pg_c is not None:
+                    _pg_c.close()
 
         for idx in inspector.get_indexes(table_name, **inspect_kw):
             idx_name = idx.get("name", "")
@@ -789,6 +797,7 @@ def extract_full_schema_snapshot(
                     break
 
             if database_type == "postgresql" and idx_name:
+                _pg_c = None
                 try:
                     _pg_c = engine.connect() if own_engine and engine is not None else connection
                     sort_rows = _pg_c.execute(
@@ -820,8 +829,12 @@ def extract_full_schema_snapshot(
                         idx_entry["column_sorting"] = sorting
                 except Exception:
                     pass
+                finally:
+                    if own_engine and _pg_c is not None:
+                        _pg_c.close()
 
             if database_type == "postgresql" and idx_name:
+                _pg_c = None
                 try:
                     _pg_c = engine.connect() if own_engine and engine is not None else connection
                     opclass_rows = _pg_c.execute(
@@ -842,8 +855,12 @@ def extract_full_schema_snapshot(
                         idx_entry["postgresql_ops"] = {r.attname: r.opcname for r in opclass_rows}
                 except Exception:
                     pass
+                finally:
+                    if own_engine and _pg_c is not None:
+                        _pg_c.close()
 
             if database_type == "postgresql" and idx_name:
+                _pg_c = None
                 try:
                     _pg_c = engine.connect() if own_engine and engine is not None else connection
                     row = _pg_c.execute(
@@ -860,6 +877,9 @@ def extract_full_schema_snapshot(
                         idx_entry["comment"] = row
                 except Exception:
                     pass
+                finally:
+                    if own_engine and _pg_c is not None:
+                        _pg_c.close()
 
             indexes[f"{table_name}.{idx_name}"] = idx_entry
 
@@ -912,7 +932,7 @@ def extract_full_schema_snapshot(
 
         if database_type == "postgresql":
             _pg_conn = engine.connect() if own_engine else connection
-            _regclass_name = f"{pg_schema}.{table_name}" if pg_schema else table_name
+            _regclass_name = f'"{pg_schema}"."{table_name}"' if pg_schema else f'"{table_name}"'
             try:
                 no_inherit_rows = _pg_conn.execute(
                     text("SELECT conname, connoinherit FROM pg_constraint WHERE conrelid = CAST(:t AS regclass) AND contype = 'c'"),
@@ -959,6 +979,7 @@ def extract_full_schema_snapshot(
             pass
 
         try:
+            _pg_conn = None
             _pg_conn = engine.connect() if own_engine else connection
             domain_rows = _pg_conn.execute(
                 text("""
@@ -998,13 +1019,15 @@ def extract_full_schema_snapshot(
             for r in check_rows:
                 if r.domain_name in domains:
                     domains[r.domain_name]["check"] = r.check_def
-            if own_engine:
-                _pg_conn.close()
         except Exception:
             pass
+        finally:
+            if own_engine and _pg_conn is not None:
+                _pg_conn.close()
 
         try:
             view_names = inspector.get_view_names(**inspect_kw)
+            _pg_conn = None
             _pg_conn = engine.connect() if own_engine else connection
             for view_name in view_names:
                 if view_name in tables:
@@ -1376,10 +1399,11 @@ def extract_full_schema_snapshot(
                 except Exception:
                     pass
 
-            if own_engine:
-                _pg_conn.close()
         except Exception:
             pass
+        finally:
+            if own_engine and _pg_conn is not None:
+                _pg_conn.close()
 
     if own_engine and engine is not None:
         engine.dispose()

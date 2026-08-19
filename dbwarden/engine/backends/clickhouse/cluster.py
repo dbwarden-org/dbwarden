@@ -79,6 +79,8 @@ class ClusterableStatement:
         at the end. Likely wrong, but safe for non-DDL pass-through.
         """
         import re
+        identifier = r"(?:`(?:``|[^`])+`|[a-zA-Z_][a-zA-Z0-9_]*)"
+        qualified_identifier = rf"{identifier}(?:\.{identifier})*"
         m = re.search(
             r'\b('
             r'CREATE\s+(TABLE|MATERIALIZED\s+VIEW|DICTIONARY)'
@@ -91,7 +93,7 @@ class ClusterableStatement:
             r'(?:DETACH|ATTACH)\s+TABLE'
             r'|'
             r'DROP\s+(TABLE|DICTIONARY)(?:\s+IF\s+EXISTS)?'
-            r')\s+([a-zA-Z_][a-zA-Z0-9_.]*)',
+            rf')\s+({qualified_identifier})',
             sql, re.IGNORECASE
         )
         if m:

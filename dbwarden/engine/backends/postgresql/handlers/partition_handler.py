@@ -6,6 +6,13 @@ from dbwarden.engine.core.protocol import ObjectHandler, Op, RunPhase
 from dbwarden.engine.snapshot import MigrationStatement, StatementOrder
 
 
+def _quote_relation(name: str) -> str:
+    return ".".join(
+        part if part.isidentifier() and part == part.lower() else '"' + part.replace('"', '""') + '"'
+        for part in name.split(".")
+    )
+
+
 class PartitionHandler(ObjectHandler):
     object_type: str = "partition"
     op_types: tuple[str, ...] = (
@@ -192,7 +199,7 @@ class PartitionHandler(ObjectHandler):
                 rollback_sql=f"-- Cannot revert partition change for {table}",
             ))
         elif ot == "attach_partition":
-            pname = op.upgrade_attrs["partition_name"]
+            pname = _quote_relation(op.upgrade_attrs["partition_name"])
             bound = op.upgrade_attrs["bound"]
             stmts.append(MigrationStatement(
                 order=StatementOrder.ALTER_TABLE_OPTIONS,
@@ -200,7 +207,7 @@ class PartitionHandler(ObjectHandler):
                 rollback_sql=f"ALTER TABLE {table} DETACH PARTITION {pname};",
             ))
         elif ot == "detach_partition":
-            pname = op.upgrade_attrs["partition_name"]
+            pname = _quote_relation(op.upgrade_attrs["partition_name"])
             stmts.append(MigrationStatement(
                 order=StatementOrder.ALTER_TABLE_OPTIONS,
                 upgrade_sql=f"ALTER TABLE {table} DETACH PARTITION {pname};",

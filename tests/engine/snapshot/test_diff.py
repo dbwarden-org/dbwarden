@@ -1013,6 +1013,22 @@ class TestForeignKeyDiff:
         fk_ops = [op for op in upgrade if op["type"] == "drop_foreign_key"]
         assert len(fk_ops) == 1
         assert fk_ops[0]["columns"] == ["group_id"]
+        assert fk_ops[0]["name"] == "users_group_id_fkey"
+
+    def test_fk_drop_uses_snapshot_constraint_name(self, monkeypatch):
+        monkeypatch.setattr("dbwarden.engine.snapshot._get_backend", lambda db_name=None: "postgresql")
+        op = Op(object_type="drop_foreign_key", upgrade_attrs={
+            "table": "users",
+            "name": "users_group_id_fkey",
+            "columns": ["group_id"],
+            "referenced_table": "groups",
+            "referenced_columns": ["id"],
+        })
+
+        stmts = ConstraintHandler().emit(op, db_name="primary")
+
+        assert "DROP CONSTRAINT users_group_id_fkey" in stmts[0].upgrade_sql
+        assert "ADD CONSTRAINT users_group_id_fkey" in stmts[0].rollback_sql
 
     def test_fk_diff_no_change(self):
         snapshot = {

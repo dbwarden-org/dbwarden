@@ -3,6 +3,10 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from dbwarden.engine.shared.format_utils import _sanitize_identifier
+from dbwarden.engine.snapshot.ch_utils import _pick_clickhouse_codec
+from dbwarden.engine.backends.clickhouse.render import _parse_ch_type_wrappers
+
 
 def _strip_codec_wrapper(codec_expr: str) -> str:
     m = re.match(r"^CODEC\((.+)\)$", codec_expr.strip(), re.IGNORECASE)
@@ -106,7 +110,7 @@ def _render_ch_meta(columns: list[dict], options: dict, object_type: str) -> lis
         if not ch_meta and not col.get("comment"):
             continue
         lines.append("")
-        lines.append(f"        class {col['name']}(CHColumnMeta):")
+        lines.append(f"        class {_sanitize_identifier(col['name'])}(CHColumnMeta):")
         has_content = False
         if col.get("comment"):
             lines.append(f"            comment = {col['comment']!r}")
@@ -292,8 +296,7 @@ def _extract_ch_meta(connection, table_name: str) -> dict:
         codec_expr = getattr(c, "compression_codec", None) or None
         col_comment = getattr(c, "comment", None) or None
 
-        ch_nullable = raw_type.startswith("Nullable(")
-        ch_low_cardinality = raw_type.startswith("LowCardinality(")
+        _, ch_nullable, ch_low_cardinality = _parse_ch_type_wrappers(str(raw_type))
 
         ch_materialized = None
         ch_alias = None
@@ -302,7 +305,7 @@ def _extract_ch_meta(connection, table_name: str) -> dict:
         elif default_kind == "ALIAS":
             ch_alias = default_expr
 
-        codec = _strip_codec_wrapper(codec_expr) if codec_expr else None
+        codec = _pick_clickhouse_codec(codec_expr)
 
         ch_col: dict = {
             "name": cname,

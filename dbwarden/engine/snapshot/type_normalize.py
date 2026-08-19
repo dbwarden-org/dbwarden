@@ -94,10 +94,11 @@ def snap_to_model_key(snap_key: str) -> str:
 
 def _strip_ch_type_wrappers(raw_type: str) -> str:
     result = raw_type.strip()
-    while result.startswith("Nullable(") and result.endswith(")"):
-        result = result[9:-1].strip()
-    while result.startswith("LowCardinality(") and result.endswith(")"):
-        result = result[15:-1].strip()
+    while result.startswith(("Nullable(", "LowCardinality(")) and result.endswith(")"):
+        if result.startswith("Nullable("):
+            result = result[9:-1].strip()
+        else:
+            result = result[15:-1].strip()
     return result
 
 

@@ -422,8 +422,9 @@ class TestTypeNormalize:
         assert _strip_ch_type_wrappers("LowCardinality(String)") == "String"
         assert _strip_ch_type_wrappers("String") == "String"
         assert _strip_ch_type_wrappers("") == ""
-        # Only outermost wrapper is stripped per call
-        assert _strip_ch_type_wrappers("LowCardinality(Nullable(String))") == "Nullable(String)"
+        assert _strip_ch_type_wrappers("LowCardinality(Nullable(String))") == "String"
+        assert _strip_ch_type_wrappers("Nullable(LowCardinality(String))") == "String"
+        assert _strip_ch_type_wrappers("LowCardinality(Nullable(Array(String)))") == "Array(String)"
 
     def test_model_type_str_with_enums(self):
         from dbwarden.engine.snapshot.type_normalize import _model_type_str

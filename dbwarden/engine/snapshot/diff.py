@@ -16,6 +16,7 @@ def _suppress_ch_column_ops(ops: list[Any]) -> list[Any]:
         "alter_column_nullable",
         "alter_column_default",
         "alter_column_comment",
+        "alter_column_autoincrement",
     })
     return [
         op
@@ -24,7 +25,7 @@ def _suppress_ch_column_ops(ops: list[Any]) -> list[Any]:
     ]
 
 
-_SYSTEM_TABLE_PREFIXES = ("_dbwarden_", "dbwarden_lock")
+_SYSTEM_TABLE_PREFIXES = (".inner", "_dbwarden_", "dbwarden_lock")
 
 
 def _is_system_table_name(name: str | None) -> bool:
@@ -214,14 +215,18 @@ def diff_models_against_snapshot(
                 "alter_column_autoincrement",
                 "alter_column_comment",
                 "alter_table_comment",
+                "alter_ch_options",
+                "alter_ch_column",
+                "modify_mv_query",
+                "modify_mv_refresh",
             }:
                 return True
             if op.get("type") == "alter_pg_partition":
                 return True
-            # MySQL table options for a brand-new table are emitted inline by
-            # CREATE TABLE, so a separate ALTER TABLE is redundant (and would
-            # target a table that does not exist yet).
-            if op.get("type") == "alter_my_table":
+            # MySQL and ClickHouse table options for a brand-new table are
+            # emitted inline by CREATE TABLE, so a separate ALTER TABLE is
+            # redundant (and would target a table that does not exist yet).
+            if op.get("type") in ("alter_my_table", "alter_ch_table"):
                 return True
             if op.get("type") == "alter_pg_table" and op.get("key") in {
                 "pg_partition",

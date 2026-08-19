@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any, List, Optional, Tuple
 
 from dbwarden.engine.core.protocol import ObjectHandler, Op, RunPhase
@@ -7,6 +8,19 @@ from dbwarden.engine.snapshot import (
     MigrationStatement,
     StatementOrder,
 )
+
+
+def _quote_constraint_name(name: str) -> str:
+    """Quote PostgreSQL constraint identifiers that cannot be emitted bare."""
+    from dbwarden.engine.backends.postgresql.render import _POSTGRES_RESERVED_WORDS
+
+    if re.fullmatch(r"[a-z_][a-z0-9_$]*", name) and name.upper() not in _POSTGRES_RESERVED_WORDS:
+        return name
+    return '"' + name.replace('"', '""') + '"'
+
+
+def _quote_relation(name: str) -> str:
+    return ".".join(_quote_constraint_name(part) for part in name.split("."))
 
 
 class ConstraintHandler(ObjectHandler):
@@ -51,7 +65,9 @@ class ConstraintHandler(ObjectHandler):
             elif ctype == "check":
                 result[table]["checks"][name] = c
             elif ctype == "foreign_key":
-                result[table]["fks"].append(c)
+                fk = dict(c)
+                fk.setdefault("name", str(name).rsplit(".", 1)[-1])
+                result[table]["fks"].append(fk)
         return result
 
     def model_spec_from_tables(self, model_tables: list[Any]) -> dict[str, Any]:
@@ -97,7 +113,6 @@ class ConstraintHandler(ObjectHandler):
                     fk.pop("match", None)
                 fk.pop("type", None)
                 fk.pop("table", None)
-                fk.pop("name", None)
                 fk.pop("validated", None)
                 if not fk.get("deferrable"):
                     fk.pop("deferrable", None)
@@ -256,12 +271,14 @@ class ConstraintHandler(ObjectHandler):
                         object_type="drop_foreign_key",
                         upgrade_attrs={
                             "table": tname,
+                            "name": fk.get("name"),
                             "columns": fk["columns"],
                             "referenced_table": _ref_table,
                             "referenced_columns": _ref_cols,
                         },
                         rollback_attrs={
                             "table": tname,
+                            "name": fk.get("name"),
                             "columns": fk["columns"],
                             "referenced_table": _ref_table,
                             "referenced_columns": _ref_cols,
@@ -276,6 +293,7 @@ class ConstraintHandler(ObjectHandler):
                         object_type="add_foreign_key",
                         upgrade_attrs={
                             "table": tname,
+                            "name": fk.get("name"),
                             "columns": fk["columns"],
                             "referenced_table": _ref_table,
                             "referenced_columns": _ref_cols,
@@ -287,6 +305,7 @@ class ConstraintHandler(ObjectHandler):
                         },
                         rollback_attrs={
                             "table": tname,
+                            "name": fk.get("name"),
                             "columns": fk["columns"],
                             "referenced_table": _ref_table,
                             "referenced_columns": _ref_cols,
@@ -393,8 +412,11 @@ class ConstraintHandler(ObjectHandler):
             ))
 
         elif ot == "rename_unique_constraint":
-            up = f"ALTER TABLE {table} RENAME CONSTRAINT {attrs['old_name']} TO {attrs['new_name']};"
-            rb = f"ALTER TABLE {table} RENAME CONSTRAINT {attrs['new_name']} TO {attrs['old_name']};"
+            old_name = _quote_constraint_name(attrs["old_name"])
+            new_name = _quote_constraint_name(attrs["new_name"])
+            qtable = _quote_relation(table)
+            up = f"ALTER TABLE {qtable} RENAME CONSTRAINT {old_name} TO {new_name};"
+            rb = f"ALTER TABLE {qtable} RENAME CONSTRAINT {new_name} TO {old_name};"
             stmts.append(MigrationStatement(
                 order=StatementOrder.ALTER_TABLE_CONSTRAINT,
                 upgrade_sql=up, rollback_sql=rb,
@@ -423,8 +445,11 @@ class ConstraintHandler(ObjectHandler):
                     ))
             else:
                 up = f"ALTER TABLE {table} DROP CONSTRAINT IF EXISTS {name};"
-                expr = attrs.get("expression", "")
-                rb = f"ALTER TABLE {table} ADD CONSTRAINT {name} CHECK ({expr}){no_inherit}{nv};"
+                rollback_attrs = op.rollback_attrs or attrs
+                rb_no_inherit = " NO INHERIT" if (rollback_attrs.get("no_inherit") and backend == "postgresql") else ""
+                rb_nv = " NOT VALID" if backend == "postgresql" and rollback_attrs.get("validated") is False else ""
+                expr = rollback_attrs.get("expression", "")
+                rb = f"ALTER TABLE {table} ADD CONSTRAINT {rollback_attrs.get('name', name)} CHECK ({expr}){rb_no_inherit}{rb_nv};"
                 stmts.append(MigrationStatement(
                     order=StatementOrder.ALTER_TABLE_CONSTRAINT,
                     upgrade_sql=up, rollback_sql=rb,
@@ -434,7 +459,7 @@ class ConstraintHandler(ObjectHandler):
             columns = attrs.get("columns", [])
             ref_table = attrs.get("referenced_table", "")
             ref_columns = attrs.get("referenced_columns", [])
-            fk_name = self._build_fk_name(table, columns)
+            fk_name = attrs.get("name") or self._build_fk_name(table, columns)
             not_valid = backend == "postgresql" and attrs.get("validated") is False
 
             if ot == "add_foreign_key":

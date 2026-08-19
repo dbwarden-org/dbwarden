@@ -8,7 +8,7 @@ dbwarden provides seed data management for populating databases with initial or 
 
 There are two ways to define seeds, listed in order of preference:
 
-1. **Code seeds** (recommended): define seeds inline alongside your SQLAlchemy models using the `Seed` base class or `@seed_data` decorator. No separate files, no manual versioning.
+1. **Code seeds** (recommended): define seeds inline alongside your SQLAlchemy models using the `Seed` base class. Each seed has an immutable explicit version.
 2. **File seeds**: traditional `.sql` or `.py` files in a `seeds/` directory, useful for complex multi-statement SQL.
 
 Both are tracked in the `_dbwarden_seeds` table and applied via `dbwarden seed apply`.
@@ -27,6 +27,7 @@ Inherit from `Seed` and set a `model` + `rows`:
 from dbwarden.seed import Seed
 
 class CountrySeed(Seed):
+    __seed_version__ = "C0001"
     __seed_database__ = "primary"
     __seed_description__ = "initial countries"
     __seed_on_conflict__ = "update"
@@ -42,7 +43,7 @@ class CountrySeed(Seed):
 Key advantages over the old decorator approach:
 
 - **Full IDE autocompletion**: `rows` uses model instances directly, so your editor knows the column names and types
-- **No `version` parameter**: versions are auto-assigned (`C0001`, `C0002`, ...) based on deterministic class ordering
+- **Immutable versioning**: declare a permanent `__seed_version__` such as `C0001`; never change or reuse a released version
 - **No manual import of `SeedRow`**: though `SeedRow` is still available if you prefer dict-like rows
 
 ### Seed Class Reference
@@ -137,10 +138,11 @@ The schema is resolved in this order: `Meta.pg_schema`, then `Meta.backend_table
 
 ### Logic-Based Seeds
 
-Define a `generate(session)` static/class method for programmatic data:
+Define `forward(connection, session)` and `reverse(connection, session)` for procedural data, analogous to Django's `RunPython`:
 
 ```python
 class PermissionSeed(Seed):
+    __seed_version__ = "C0002"
     __seed_database__ = "primary"
     __seed_description__ = "load permissions"
     __seed_on_conflict__ = "ignore"
@@ -148,10 +150,14 @@ class PermissionSeed(Seed):
     model = Permission
 
     @staticmethod
-    def generate(session):
+    def forward(connection, session):
         for resource in ["users", "orders"]:
             for action in ["read", "write", "delete"]:
                 session.add(Permission(name=f"{resource}:{action}"))
+
+    @staticmethod
+    def reverse(connection, session):
+        session.execute("DELETE FROM permissions")
 ```
 
 ### `@seed_data` Decorator (Deprecated)
@@ -172,11 +178,11 @@ class CountrySeed:
     rows = [SeedRow(code="UY", name="Uruguay")]
 ```
 
-Note that `version` is **no longer required**; it is auto-assigned.
+The deprecated decorator does not provide the required immutable version contract; use `Seed` subclasses for new code seeds.
 
 ### Discovery and Ordering
 
-Code seeds are discovered through the same `model_paths` scan as models. They use auto-assigned versions in the `C` namespace (`C0001`, `C0002`, ...) and are sorted deterministically by module and class name. Pending detection compares the class qualified name against the `_dbwarden_seeds` tracking table.
+Code seeds are discovered through the same `model_paths` scan as models. They declare immutable versions in the `C` namespace (`C0001`, `C0002`, ...) and duplicate versions are rejected. Pending detection compares versions against the `_dbwarden_seeds` tracking table.
 
 ---
 
@@ -217,13 +223,13 @@ Creates a file like `seeds/V0001__seed_initial_users.sql`:
 $ dbwarden seed create "generate sample data" --database primary --type python
 ```
 
-Creates `seeds/V0001__generate_sample_data.py` with a `seed(connection, session)` function.
+Creates `seeds/V0001__generate_sample_data.py` with `forward(connection, session)` and `reverse(connection, session)` functions.
 
-The `seed()` function receives both a raw SQLAlchemy `Connection` and an ORM `Session` bound to the same transaction:
+Both functions receive a raw SQLAlchemy `Connection` and an ORM `Session` bound to the same transaction:
 
 ```python
 # Using raw connection
-def seed(connection, session):
+def forward(connection, session):
     for i in range(100):
         connection.execute(
             "INSERT INTO users (name) VALUES (:name)",
@@ -231,7 +237,7 @@ def seed(connection, session):
         )
 
 # Using ORM session
-def seed(connection, session):
+def forward(connection, session):
     for i in range(100):
         session.add(User(name=f"user_{i}"))
     session.flush()
@@ -322,7 +328,7 @@ $ dbwarden seed list --prune
 
 ## Rolling Back Seeds
 
-Rollback removes the applied tracking record, allowing the seed to be re-applied. It does **not** reverse data changes.
+Rollback executes the seed's inverse operation and removes its tracking record only after that succeeds. SQL files require a `-- rollback` section; Python and procedural code seeds require `reverse(connection, session)`. Missing reverse logic makes a seed irreversible.
 
 ```bash
 # Rollback the most recent seed
@@ -354,10 +360,10 @@ The tracking table is created automatically on first seed apply. Each version ca
 
 ### Checksum Drift
 
-When a seed file has been modified since it was last applied, dbwarden emits a warning:
+When a seed file has been modified since it was last applied, dbwarden raises an error and blocks seed operations:
 
 ```
-Warning: Seed V0001 has been modified since last apply (checksum mismatch).
+SeedError: Seed V0001 has been modified since it was applied (checksum mismatch).
 ```
 
 This helps detect accidental changes to already-applied seeds.
@@ -381,8 +387,7 @@ Because the file is ROC, updating the code seed and re-exporting produces a new 
 **Non-handled problems:**
 
 - Rows removed from a code seed are not automatically deleted in the target database
-- Logic seeds that depend on other logic seeds' output are not supported (preceding row-based seeds are pre-loaded, but logic-to-logic ordering is not)
-- Non-deterministic `generate()` methods (e.g. using `datetime.now()`) produce a new checksum every export, causing re-apply on every deploy: acceptable for idempotent upserts, wasteful for pure inserts. Use deterministic `generate()` where possible
+- Procedural `forward()` seeds cannot be exported, because executing arbitrary code against SQLite would not reliably reproduce behavior on the configured backend
 
 **Dialect requirement:** Exporting requires the same dialect packages as connecting to that database. For ClickHouse, install `clickhouse-sqlalchemy`. Missing packages produce a clear error at export time.
 

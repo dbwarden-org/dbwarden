@@ -42,6 +42,7 @@ def model_state_to_dict(tables: list[ModelTable], dbwarden_version: str = "") ->
             state_constraints[_constraint_key(table.name, "foreign_key", i, fk.get("name"))] = {
                 "type": "foreign_key",
                 "table": table.name,
+                **({"name": fk["name"]} if fk.get("name") else {}),
                 "columns": list(fk.get("columns", [])),
                 "referenced_table": fk.get("referenced_table") or fk.get("referred_table", ""),
                 "referenced_columns": list(fk.get("referenced_columns", fk.get("referred_columns", []))),

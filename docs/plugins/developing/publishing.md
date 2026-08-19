@@ -64,7 +64,7 @@ version = "0.2.0"
 description = "Example dbwarden plugin"
 readme = "README.md"
 requires-python = ">=3.12.7"
-dependencies = ["dbwarden>=0.15.0"]
+dependencies = ["dbwarden>=0.15.0,<0.18.0"]
 
 [project.entry-points."dbwarden.plugins"]
 example = "dbwarden_example:setup"
@@ -80,13 +80,13 @@ The entry point is `dbwarden_example:setup` because `setup` is defined in the pa
 
 ## Compatibility
 
-Depend on dbwarden with a lower bound, as the official plugins do:
+Declare both the oldest core version you test and the next untested compatibility boundary:
 
 ```toml
-dependencies = ["dbwarden>=0.15.0"]
+dependencies = ["dbwarden>=0.15.0,<0.18.0"]
 ```
 
-The plugin API is stable within the `0.x` series. To guarantee a core update never silently breaks your plugin, you can also cap the upper bound (`"dbwarden>=0.15.0,<1.0"`), though the official plugins currently pin only the lower bound.
+`DBWARDEN_PLUGIN_API` protects the explicit plugin contract, but it does not prove compatibility with every core release. Update the upper bound after testing each new DBWarden minor release. Official plugins should follow the same policy.
 
 ## CI/CD Example
 

@@ -10,14 +10,14 @@ from dbwarden.engine.backends.postgresql.generate_models import (
     _render_postgresql_meta,
 )
 from dbwarden.engine.core.type_parsing import _format_default, _parse_type
-from dbwarden.engine.shared.format_utils import _format_meta_value
+from dbwarden.engine.shared.format_utils import _format_meta_value, _sanitize_identifier
 
 
 def _format_column(col: dict) -> str:
-    col_name = col["name"]
+    attr_name = _sanitize_identifier(col["name"])
     sa_type = _format_pg_type(col) or _parse_type(col["type"], col.get("dialect"))
 
-    col_args = [f"{col_name} = Column({col_name!r}, {sa_type}"]
+    col_args = [f"{attr_name} = Column({col['name']!r}, {sa_type}"]
     if col.get("foreign_key"):
         fk_opts = col.get("fk_options", {})
         fk_parts: list[str] = []
@@ -46,7 +46,9 @@ def _format_column(col: dict) -> str:
         col_args.append(f"default={default}")
     if col.get("server_default"):
         col_args.append(f"server_default=text({col['server_default']!r})")
-    if col.get("autoincrement") is False:
+    if col.get("autoincrement") is True:
+        col_args.append("autoincrement=True")
+    elif col.get("autoincrement") is False:
         col_args.append("autoincrement=False")
 
     col_args.append(")")

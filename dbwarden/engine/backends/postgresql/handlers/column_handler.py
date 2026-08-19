@@ -419,17 +419,32 @@ class ColumnHandler(ObjectHandler):
     ):
         snap_autoinc = snap_col.get("autoincrement", False)
         model_autoinc = model_col.autoincrement
+        model_type_lower = str(model_col.type).lower()
+        snap_type_lower = str(snap_col.get("type", "")).lower()
+        model_has_identity = bool((model_col.pg_meta or {}).get("pg_identity"))
+        snap_has_identity = bool((snap_col.get("pg_column") or {}).get("identity"))
+
         if model_autoinc == "auto":
             model_autoinc = (
                 model_col.primary_key
                 and pk_count <= 1
-                and "int" in str(model_col.type).lower()
+                and ("int" in model_type_lower or "serial" in model_type_lower or model_has_identity)
             )
+        elif model_has_identity and not model_autoinc:
+            model_autoinc = True
+
+        if snap_has_identity and not snap_autoinc:
+            snap_autoinc = True
+
+        # Treat snapshot SERIAL/BIGSERIAL columns as autoincrement as well.
+        if not snap_autoinc and "serial" in snap_type_lower:
+            snap_autoinc = True
+
         if (
             backend == "sqlite"
             and model_col.primary_key
             and pk_count <= 1
-            and "int" in str(model_col.type).lower()
+            and "int" in model_type_lower
             and model_col.autoincrement in (None, "auto", True)
         ):
             return

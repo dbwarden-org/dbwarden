@@ -71,15 +71,16 @@ def _build_pg_meta_sql(
             else:
                 rb = f"ALTER TABLE {table} ALTER COLUMN {column} DROP IDENTITY IF EXISTS;"
         elif key in ("identity_start", "identity_increment", "identity_min", "identity_max"):
-            pg_key = key.replace("identity_", "")
-            if to_val is not None:
-                up = f"ALTER TABLE {table} ALTER COLUMN {column} SET ({pg_key} {to_val});"
-            else:
-                up = f"ALTER TABLE {table} ALTER COLUMN {column} SET ({pg_key} DEFAULT);"
-            if from_val is not None:
-                rb = f"ALTER TABLE {table} ALTER COLUMN {column} SET ({pg_key} {from_val});"
-            else:
-                rb = f"ALTER TABLE {table} ALTER COLUMN {column} SET ({pg_key} DEFAULT);"
+            pg_key = {
+                "identity_start": "START WITH",
+                "identity_increment": "INCREMENT BY",
+                "identity_min": "MINVALUE",
+                "identity_max": "MAXVALUE",
+            }[key]
+            if to_val is None and from_val is None:
+                continue
+            up = f"ALTER TABLE {table} ALTER COLUMN {column} SET {pg_key} {to_val};" if to_val is not None else f"-- No ALTER needed: remove {pg_key} for {table}.{column}"
+            rb = f"ALTER TABLE {table} ALTER COLUMN {column} SET {pg_key} {from_val};" if from_val is not None else f"-- No ALTER needed: remove {pg_key} for {table}.{column}"
         else:
             continue
         stmts.append(MigrationStatement(

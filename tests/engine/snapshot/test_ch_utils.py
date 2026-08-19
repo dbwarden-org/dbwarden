@@ -112,8 +112,11 @@ class TestPickClickhouseCodec:
         assert _pick_clickhouse_codec(",") is None
 
     def test_lz4_only_default(self):
-        result = _pick_clickhouse_codec("LZ4")
-        assert result == "LZ4"
+        # Default LZ4 is not a meaningful explicit codec.
+        assert _pick_clickhouse_codec("LZ4") is None
+
+    def test_none_default(self):
+        assert _pick_clickhouse_codec("NONE") is None
 
     def test_lz4_with_other(self):
         result = _pick_clickhouse_codec("LZ4, ZSTD")
@@ -124,8 +127,13 @@ class TestPickClickhouseCodec:
         assert result == "ZSTD(3)"
 
     def test_multiple_non_default(self):
+        # The full codec chain is preserved in order.
         result = _pick_clickhouse_codec("ZSTD, Delta")
-        assert result == "Delta"
+        assert result == "ZSTD, Delta"
+
+    def test_multiple_with_parentheses(self):
+        result = _pick_clickhouse_codec("CODEC(Delta(8), ZSTD(1))")
+        assert result == "Delta(8), ZSTD(1)"
 
     def test_lz4_with_leading_trailing_spaces(self):
         result = _pick_clickhouse_codec("  LZ4 , ZSTD(3)  ")

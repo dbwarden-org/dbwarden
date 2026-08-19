@@ -134,7 +134,8 @@ The canonicalizer has **zero version branching**: a single code path covers 24.3
 | | Comments (table + column) | Done |
 | | Projections, skip indexes | Done |
 | Materialized views | Class-based API (`materialized_view()` + `CHViewMeta`) | Done |
-| | TO target, implicit `.inner`, refreshable | Done |
+| | Forward DDL: TO target, implicit `.inner`, refreshable, POPULATE | Done |
+| | Reverse engineering (`generate-models`) | Partial (see [Known gaps](#known-gaps)) |
 | | MODIFY QUERY vs recreate | Done |
 | | POPULATE (data-op) | Done |
 | Dictionaries | CREATE DICTIONARY via ch_dict_* | Done |
@@ -169,6 +170,16 @@ These are not gaps: they are deliberate boundaries, documented with reasoning so
 | **SYSTEM commands** | Operational concern, not schema management. Not declarable in a model. |
 | **Server config (`config.xml`)** | Infrastructure. Same boundary as PostgreSQL's `postgresql.conf`. |
 | **Secret values** | Declare-only by design (see [named-collections](named-collections.md)). Values are not diffed. |
+
+## Known gaps
+
+These are real reverse-engineering / round-trip gaps, not deliberate exclusions. They are documented so they can be closed systematically.
+
+| Gap | What happens today | How to close it |
+|-----|-------------------|-----------------|
+| **Materialized view reverse engineering** | `generate-models` emits a plain `Base` subclass with `ch_engine = ChEngineSpec('MaterializedView')` and the implicit result columns. `make-migrations` then wants to drop/recreate the MV because it does not recognize the class as a `MaterializedView` and the stored spec differs. | Make `generate-models` emit `class Foo(MaterializedView):` and reconstruct the `materialized_view(...)` spec (`select`, `to`, `engine`, `order_by`, `populate`, `settings`, `refresh`) instead of emitting the implicit `.inner` columns. |
+| **Default `MergeTree` settings drift** | A hand-written model that omits `ch_settings` is compared against a snapshot that contains ClickHouse's reported defaults (e.g. `index_granularity=8192`), producing a spurious `alter_ch_options`. | Either canonicalize known default settings away in `ChTableHandler.canonicalize`, or always emit settings in generated models (already done) and document that hand-written models should declare them. |
+| **MV `SELECT` database qualifier** | Reverse-engineered `ch_select_statement` includes the database qualifier (`SELECT ... FROM dbwarden_test.events`), while hand-written models usually omit it, so `make-migrations` tries to `MODIFY QUERY`. | Strip the current database prefix from `ch_select_statement` during extraction, or normalize it away during canonicalization/diff. |
 
 ## Config keys
 

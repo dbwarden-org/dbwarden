@@ -37,6 +37,7 @@ from dbwarden.databases.clickhouse.engine import (
     url_engine,
     versioned_collapsing_merge_tree,
 )
+from dbwarden.databases.clickhouse.compiler import column_name_from_expr
 
 
 class TestSplitEngineArgs:
@@ -54,6 +55,11 @@ class TestSplitEngineArgs:
 
     def test_args_with_quotes(self):
         assert _split_engine_args("'/zk/path', 'replica'") == ["'/zk/path'", "'replica'"]
+
+
+class TestExpressionColumnNames:
+    def test_lowercase_as_alias(self):
+        assert column_name_from_expr("toDate(event_time) as day") == "day"
 
 
 class TestChEngineSpec:
@@ -89,10 +95,10 @@ class TestChEngineSpec:
         assert d["zookeeper_path"] == "/zk/path"
         assert d["replica_name"] == "r1"
 
-    def test_to_dict_excludes_settings(self):
-        spec = ChEngineSpec("MergeTree")
+    def test_to_dict_includes_settings(self):
+        spec = ChEngineSpec("MergeTree", settings={"index_granularity": "8192"})
         d = spec.to_dict()
-        assert "settings" not in d  # settings live in ch_table spec, not engine
+        assert d["settings"] == {"index_granularity": "8192"}
 
     def test_from_dict(self):
         d = {"name": "MergeTree", "args": ("col1",)}
@@ -100,9 +106,10 @@ class TestChEngineSpec:
         assert spec.name == "MergeTree"
         assert spec.args == ("col1",)
 
-    def test_from_dict_ignores_settings_key(self):
-        spec = ChEngineSpec.from_dict({"name": "MergeTree", "settings": {}})
+    def test_from_dict_preserves_settings_key(self):
+        spec = ChEngineSpec.from_dict({"name": "MergeTree", "settings": {"index_granularity": "8192"}})
         assert spec.name == "MergeTree"
+        assert spec.settings == {"index_granularity": "8192"}
 
     def test_from_engine_string_basic(self):
         spec = ChEngineSpec.from_engine_string("MergeTree()")
@@ -126,9 +133,9 @@ class TestEngineFactories:
         spec = merge_tree()
         assert spec.name == "MergeTree"
 
-    def test_merge_tree_with_settings_backward_compat(self):
+    def test_merge_tree_with_settings(self):
         spec = merge_tree(settings={"a": "b"})
-        assert spec.name == "MergeTree"  # settings kwarg accepted but not stored on engine
+        assert spec.settings == {"a": "b"}
 
     def test_engine_spec_to_dict_from_dict_round_trip(self):
         spec = merge_tree()

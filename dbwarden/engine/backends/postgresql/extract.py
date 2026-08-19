@@ -5,9 +5,7 @@ from typing import Any
 
 
 def _strip_pg_expr_parens(expr: str | None) -> str | None:
-    if not expr:
-        return expr
-    if expr.startswith('(') and expr.endswith(')'):
+    while expr and expr.startswith('(') and expr.endswith(')'):
         depth = 0
         for i, ch in enumerate(expr):
             if ch == '(':
@@ -16,7 +14,7 @@ def _strip_pg_expr_parens(expr: str | None) -> str | None:
                 depth -= 1
             if depth == 0 and i < len(expr) - 1:
                 return expr
-        return expr[1:-1]
+        expr = expr[1:-1].strip()
     return expr
 
 
@@ -26,7 +24,6 @@ def _normalize_view_def(sql: str | None) -> str | None:
     sql = re.sub(r'\s+', ' ', sql).strip()
     sql = sql.rstrip(';').strip()
     sql = re.sub(r'(\w+\([^)]*\))\s+AS\s+\w+', r'\1', sql, flags=re.IGNORECASE)
-    sql = re.sub(r'(?<=\s)(\w+)\.(\w+)', r'\2', sql)
     return sql.lower()
 
 

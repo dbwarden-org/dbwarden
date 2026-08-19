@@ -707,6 +707,81 @@ class TestSQLGeneration:
         assert "ORDER BY (group_col)" in sql
         assert "AS SELECT group_col, count() AS total FROM source_table GROUP BY group_col" in sql
 
+    def test_generate_clickhouse_materialized_view_sql_with_populate(self, monkeypatch):
+        monkeypatch.setattr(model_discovery.type_mapping, "_get_backend_name", lambda db_name=None: "clickhouse")
+        table = ModelTable(
+            name="mv_name",
+            columns=[ModelColumn("group_col", "String", False, True, False, None, None)],
+            clickhouse_options={
+                "ch_select_statement": "SELECT group_col FROM source_table GROUP BY group_col",
+                "ch_engine": "MergeTree",
+                "ch_order_by": ["group_col"],
+                "ch_populate": True,
+            },
+            object_type="materialized_view",
+        )
+        sql = generate_create_table_sql(table)
+        assert "POPULATE" in sql
+        assert "AS SELECT" in sql
+
+    def test_generate_clickhouse_materialized_view_sql_with_refresh(self, monkeypatch):
+        monkeypatch.setattr(model_discovery.type_mapping, "_get_backend_name", lambda db_name=None: "clickhouse")
+        table = ModelTable(
+            name="mv_name",
+            columns=[ModelColumn("group_col", "String", False, True, False, None, None)],
+            clickhouse_options={
+                "ch_select_statement": "SELECT group_col FROM source_table GROUP BY group_col",
+                "ch_engine": "MergeTree",
+                "ch_order_by": ["group_col"],
+                "ch_refresh": "EVERY 1 HOUR",
+                "ch_settings": {"refresh_retries": "5"},
+            },
+            object_type="materialized_view",
+        )
+        sql = generate_create_table_sql(table)
+        assert "REFRESH EVERY 1 HOUR" in sql
+        assert "SETTINGS refresh_retries=5" in sql
+
+    def test_generate_clickhouse_materialized_view_to_skips_engine(self, monkeypatch):
+        monkeypatch.setattr(model_discovery.type_mapping, "_get_backend_name", lambda db_name=None: "clickhouse")
+        table = ModelTable(
+            name="mv_name",
+            columns=[],
+            clickhouse_options={
+                "ch_select_statement": "SELECT group_col FROM source_table GROUP BY group_col",
+                "ch_to_table": "target",
+                "ch_refresh": "EVERY 1 HOUR",
+                "ch_settings": {"refresh_retries": "5"},
+            },
+            object_type="materialized_view",
+        )
+        sql = generate_create_table_sql(table)
+        assert "TO target" in sql
+        assert "ENGINE =" not in sql
+        assert "ORDER BY" not in sql
+        assert "REFRESH EVERY 1 HOUR" in sql
+        assert "SETTINGS refresh_retries=5" in sql
+
+    def test_generate_clickhouse_materialized_view_refresh_before_to(self, monkeypatch):
+        """Refreshable MVs must place REFRESH (and SETTINGS) before the TO clause."""
+        monkeypatch.setattr(model_discovery.type_mapping, "_get_backend_name", lambda db_name=None: "clickhouse")
+        table = ModelTable(
+            name="mv_name",
+            columns=[],
+            clickhouse_options={
+                "ch_select_statement": "SELECT group_col FROM source_table GROUP BY group_col",
+                "ch_to_table": "target",
+                "ch_refresh": "EVERY 1 HOUR",
+                "ch_settings": {"refresh_retries": "5"},
+            },
+            object_type="materialized_view",
+        )
+        sql = generate_create_table_sql(table)
+        refresh_idx = sql.index("REFRESH EVERY 1 HOUR")
+        settings_idx = sql.index("SETTINGS refresh_retries=5")
+        to_idx = sql.index("TO target")
+        assert refresh_idx < settings_idx < to_idx
+
     def test_generate_drop_object_sql_for_materialized_view(self):
         table = ModelTable(
             name="mv_name",
@@ -756,6 +831,24 @@ class TestSQLGeneration:
         sql = generate_create_table_sql(table)
 
         assert "ENGINE = ReplicatedReplacingMergeTree('/zk/path', '{replica}', ver_col)" in sql
+
+    def test_generate_replicated_clickhouse_engine_does_not_duplicate_serialized_args(self, monkeypatch):
+        monkeypatch.setattr(model_discovery.type_mapping, "_get_backend_name", lambda db_name=None: "clickhouse")
+
+        table = ModelTable(
+            name="replicated_table",
+            columns=[ModelColumn("id", "UInt64", False, True, False, None, None)],
+            clickhouse_options={
+                "ch_engine": ("ReplicatedMergeTree", "/zk/path", "replica_1"),
+                "ch_zookeeper_path": "'/zk/path'",
+                "ch_replica_name": "'replica_1'",
+                "ch_order_by": ["id"],
+            },
+        )
+
+        sql = generate_create_table_sql(table)
+
+        assert "ENGINE = ReplicatedMergeTree(/zk/path, replica_1)" in sql
 
     def test_generate_dictionary_sql(self, monkeypatch):
         monkeypatch.setattr(model_discovery.type_mapping, "_get_backend_name", lambda db_name=None: "clickhouse")

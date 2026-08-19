@@ -40,6 +40,12 @@ See [MySQL Deep Dive](mysql.md) for the complete list of supported features.
 
 ClickHouse has full round-trip support: `generate-models` reads schema from a live ClickHouse server, and `make-migrations` / `migrate` auto-generates DDL for table operations.
 
+Known edge cases:
+
+- Materialized views are introspected but are not currently emitted as discoverable model tables.
+- Some native types (`Enum8`/`Enum16`, `DateTime64`, `FixedString`, `UUID`) may map to generic SQLAlchemy types in generated models; the underlying CH types are preserved in `CHColumnMeta` where possible.
+- Replicated engine string arguments and `SETTINGS` on materialized views require manual review.
+
 See [ClickHouse Deep Dive](clickhouse/index.md) for the complete list of supported features.
 
 ### SQLite

@@ -51,7 +51,10 @@ class Seed:
 
     Attributes:
         model: The SQLAlchemy model class to seed data into.
-        rows: List of model instances or ``SeedRow`` objects.
+        __seed_version__: Immutable version in the ``C0001`` form.
+        rows: List of model instances or ``SeedRow`` objects for declarative seeds.
+        forward: Optional ``(connection, session)`` callable for procedural seeds.
+        reverse: Optional ``(connection, session)`` callable that reverses ``forward``.
         __seed_database__: Target database name (default ``"default"``).
         __seed_description__: Human-readable label shown in seed list.
         __seed_on_conflict__: ``"ignore"`` (default), ``"update"``, or ``"error"``.
@@ -61,6 +64,9 @@ class Seed:
 
     model: ClassVar[type]
     rows: ClassVar[list | None] = None
+
+    __seed_version__: ClassVar[str] = ""
+    """Immutable code-seed version, for example ``C0001``."""
 
     __seed_database__: ClassVar[str] = "default"
     """Target database name. Routes the seed to the correct database handle."""

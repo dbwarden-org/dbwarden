@@ -199,9 +199,15 @@ class ChDictionaryHandler(ObjectHandler):
                             suffix=f"MODIFY LIFETIME({from_val})",
                         ).render(self._cluster_ctx))
                 elif key == "ch_dict_primary_key" and to_val:
-                    up_parts.append(f"ALTER DICTIONARY {name} MODIFY PRIMARY KEY {to_val}")
+                    up_key = str(to_val).strip()
+                    if not (up_key.startswith("(") and up_key.endswith(")")):
+                        up_key = f"({up_key})"
+                    up_parts.append(f"ALTER DICTIONARY {name} MODIFY PRIMARY KEY {up_key}")
                     if from_val:
-                        rb_parts.append(f"ALTER DICTIONARY {name} MODIFY PRIMARY KEY {from_val}")
+                        rb_key = str(from_val).strip()
+                        if not (rb_key.startswith("(") and rb_key.endswith(")")):
+                            rb_key = f"({rb_key})"
+                        rb_parts.append(f"ALTER DICTIONARY {name} MODIFY PRIMARY KEY {rb_key}")
                 else:
                     up_parts.append(f"-- {key} changed for dict {name}; manual reconcile")
                     rb_parts.append(f"-- {key} rollback for dict {name}; manual reconcile")

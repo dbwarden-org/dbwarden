@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from sqlalchemy import ColumnElement
@@ -86,6 +87,7 @@ def _bare_name(expr: str) -> str:
     ``"toDate(event_time) AS day"`` → ``"day"``
     ``"user_id"`` → ``"user_id"``
     """
-    if " AS " in expr.upper():
-        return expr.split(" AS ")[-1].strip()
+    alias_parts = re.split(r"\s+AS\s+", expr, flags=re.IGNORECASE)
+    if len(alias_parts) > 1:
+        return alias_parts[-1].strip()
     return expr.strip()

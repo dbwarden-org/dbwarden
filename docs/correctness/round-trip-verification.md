@@ -131,6 +131,8 @@ dbwarden diff --database primary --out table
 
 The expected diff is empty. If dbwarden emits a migration every time from the generated model, some part of extraction, canonicalization, or emission is losing information.
 
+Known PostgreSQL gaps: `SERIAL` / identity column sequence metadata may not fully round-trip through generated SQLAlchemy models, producing spurious `DROP DEFAULT` / `DROP SEQUENCE` operations. Mixed-case or quoted identifiers are now handled, but some index sort-option canonicalization (e.g. default `NULLS LAST`) can still produce noise.
+
 ## ClickHouse Example
 
 Start with a ClickHouse table that uses a `MergeTree` engine, partitioning, a projection, and a skip index:
@@ -197,6 +199,8 @@ dbwarden diff --database analytics --out table
 ```
 
 The diff should be empty. If the engine settings, projection, or skip index are missing after extraction, the round trip fails and the handler needs a fix.
+
+Known ClickHouse gaps: materialized views are not emitted as discoverable model tables; some native types (`Enum8`/`Enum16`, `DateTime64`, `FixedString`, `UUID`) may map to generic SQLAlchemy types; and Replicated engine string arguments / MV `SETTINGS` require manual review.
 
 ## Manual Round-Trip Checklist
 

@@ -62,12 +62,15 @@ def _write_models(
         for table in tables:
             if any(col.get("pg_meta") for col in table["columns"]):
                 pg_meta_imports.add("PGColumnMeta")
+                pg_meta_imports.add("PGTableMeta")
                 needs_pg_spec = True
             if any(col.get("my_meta") for col in table["columns"]):
                 my_meta_imports.add("MyColumnMeta")
+                my_meta_imports.add("MyTableMeta")
                 needs_my_spec = True
             if any(col.get("sq_meta") for col in table["columns"]):
                 sq_meta_imports.add("SqColumnMeta")
+                sq_meta_imports.add("SqTableMeta")
                 needs_sq_spec = True
             if any(col.get("ch_meta") for col in table["columns"]):
                 needs_ch_spec = True
@@ -142,11 +145,13 @@ def _write_models(
         needs_ch_spec = False
         if any(col.get("pg_meta") for col in table["columns"]):
             needs_pg_base.add("PGColumnMeta")
+            needs_pg_base.add("PGTableMeta")
             needs_pg_spec = True
         if table.get("pg_meta"):
             needs_pg_base.add("PGTableMeta")
         if any(col.get("my_meta") for col in table["columns"]):
             needs_my_base.add("MyColumnMeta")
+            needs_my_base.add("MyTableMeta")
             needs_my_spec = True
         if table.get("my_meta"):
             needs_my_base.add("MyTableMeta")

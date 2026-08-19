@@ -11,6 +11,21 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 
 ### Fixed
 
+- **PostgreSQL reverse-engineering now works with mixed-case and quoted identifiers.** `generate-models` and snapshot queries use quoted `regclass` references, so tables and columns such as `"MyTable"` and `"weird-col"` no longer silently fail metadata extraction.
+- **`generate-models` no longer crashes against PostgreSQL.** The command now opens a raw SQLAlchemy connection instead of a transactional one, avoiding the closed-transaction error during SQLAlchemy reflection.
+- **Generated model imports are complete.** Models that only have column-level metadata now correctly import the required table-meta class (`PGTableMeta`, `MyTableMeta`, `SqTableMeta`).
+- **Python identifier sanitization.** SQL column names containing hyphens or other non-identifier characters are converted into valid Python attribute and nested-class names while preserving the original SQL name in `Column(...)`.
+- **PostgreSQL array columns render correctly.** Array types are emitted as `text[]`, `integer[]`, etc. instead of bare `array`.
+- **ClickHouse codec extraction is parenthesis-aware.** Multi-codec chains like `CODEC(Delta(8), ZSTD(1))` are preserved in order, and the implicit default `LZ4` codec is omitted.
+- **ClickHouse `LowCardinality(Nullable(T))` is preserved.** Reverse-engineering now correctly captures both `low_cardinality=True` and `nullable=True` for nested wrappers.
+- **PostgreSQL `SERIAL`/`BIGSERIAL` and identity columns round-trip cleanly.** `generate-models` only marks columns as `autoincrement=True` when the live default is a `nextval(...)` sequence; identity columns are left as `autoincrement=False` and rely on `pg_meta`. `make-migrations` now treats both `SERIAL` types and identity columns as autoincrement-equivalent.
+- **PostgreSQL identity column ALTER syntax is valid.** Identity changes now emit `ALTER TABLE ... ALTER COLUMN ... SET START WITH ...`, `SET INCREMENT BY ...`, `SET MINVALUE ...`, `SET MAXVALUE ...` instead of the invalid `SET (...)` form.
+- **ClickHouse default changes generate valid DDL.** `_build_alter_default_sql` now emits `ALTER TABLE ... MODIFY COLUMN ... DEFAULT ...` and `... REMOVE DEFAULT` instead of falling through to PostgreSQL `ALTER COLUMN SET DEFAULT` syntax.
+- **ClickHouse nullability changes are type-safe.** The shared nullable builder guards against generic SQLAlchemy type strings and requires a ClickHouse type such as `Int64` or `String`.
+- **ClickHouse materialized view DDL is complete.** `CREATE MATERIALIZED VIEW` now includes `POPULATE`, `REFRESH ...`, and `SETTINGS ...` when declared, and omits engine/`ORDER BY`/`PARTITION BY` clauses when a `TO` target is set.
+- **ClickHouse `ChEngineSpec` engines converge with snapshot engines.** Model-side `ChEngineSpec('MergeTree')` and similar specs are serialized to the same string/tuple representation stored in snapshots, so `make-migrations` no longer emits spurious `alter_ch_options` operations for engine-only differences.
+- **ClickHouse implicit MV backing tables are excluded from diffs.** Internal `.inner_id.*` tables created by ClickHouse for materialized views with implicit storage are filtered out of model-to-snapshot diffs.
+
 - **Official plugin provenance recognizes renamed publisher workflows.** `dbwarden plugin add` now verifies the trusted-publishing attestations for the ClickHouse RBAC, PostgreSQL extensions, PostgreSQL RBAC, and PostgreSQL types plugins against their `publishing.yml` workflows.
 
 ## [0.17.1] - 2026-08-15

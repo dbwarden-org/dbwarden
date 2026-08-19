@@ -18,6 +18,8 @@ primary = database_config(
 
 All unqualified table references use this schema. The `_dbwarden_seeds` tracking table is created in the schema specified by `search_path`.
 
+`generate-models` also uses this schema: it sets `search_path` before introspection and lists tables from the configured schema. Snapshot queries against `pg_catalog` use quoted schema/table identifiers, so mixed-case or quoted table names are resolved correctly.
+
 ## Model-Level Schema
 
 Set `pg_schema` on `PGTableMeta` or `PGViewMeta`:

@@ -165,6 +165,7 @@ class ChEngineSpec:
     args: tuple[str, ...] = ()
     zookeeper_path: str | None = None
     replica_name: str | None = None
+    settings: dict[str, str] | None = None
 
     def __post_init__(self) -> None:
         if isinstance(self.args, str):
@@ -180,6 +181,8 @@ class ChEngineSpec:
             d["zookeeper_path"] = self.zookeeper_path
         if self.replica_name is not None:
             d["replica_name"] = self.replica_name
+        if self.settings is not None:
+            d["settings"] = dict(self.settings)
         return d
 
     @classmethod
@@ -189,6 +192,7 @@ class ChEngineSpec:
             args=tuple(d.get("args", [])),
             zookeeper_path=d.get("zookeeper_path"),
             replica_name=d.get("replica_name"),
+            settings=d.get("settings"),
         )
 
     @classmethod
@@ -244,7 +248,7 @@ def merge_tree(
     *,
     settings: MergeTreeSettings | None = None,
 ) -> ChEngineSpec:
-    return ChEngineSpec("MergeTree")
+    return ChEngineSpec("MergeTree", settings=_render_settings(settings))
 
 
 def replacing_merge_tree(
@@ -253,7 +257,7 @@ def replacing_merge_tree(
     settings: MergeTreeSettings | None = None,
 ) -> ChEngineSpec:
     args = (version_col,) if version_col else ()
-    return ChEngineSpec("ReplacingMergeTree", args=args)
+    return ChEngineSpec("ReplacingMergeTree", args=args, settings=_render_settings(settings))
 
 
 def replicated_merge_tree(
@@ -267,6 +271,7 @@ def replicated_merge_tree(
         args=args,
         zookeeper_path=zookeeper_path,
         replica_name=replica_name,
+        settings=_render_settings(settings),
     )
 
 
@@ -274,14 +279,14 @@ def summing_merge_tree(
     *columns: str,
     settings: MergeTreeSettings | None = None,
 ) -> ChEngineSpec:
-    return ChEngineSpec("SummingMergeTree", args=columns)
+    return ChEngineSpec("SummingMergeTree", args=columns, settings=_render_settings(settings))
 
 
 def aggregating_merge_tree(
     *,
     settings: MergeTreeSettings | None = None,
 ) -> ChEngineSpec:
-    return ChEngineSpec("AggregatingMergeTree")
+    return ChEngineSpec("AggregatingMergeTree", settings=_render_settings(settings))
 
 
 def collapsing_merge_tree(
@@ -290,7 +295,7 @@ def collapsing_merge_tree(
     settings: MergeTreeSettings | None = None,
 ) -> ChEngineSpec:
     """``CollapsingMergeTree(sign_col)``: rows with opposite sign cancel on merge."""
-    return ChEngineSpec("CollapsingMergeTree", args=(sign_col,))
+    return ChEngineSpec("CollapsingMergeTree", args=(sign_col,), settings=_render_settings(settings))
 
 
 def versioned_collapsing_merge_tree(
@@ -301,7 +306,7 @@ def versioned_collapsing_merge_tree(
 ) -> ChEngineSpec:
     """``VersionedCollapsingMergeTree(sign_col, version_col)``."""
     return ChEngineSpec(
-        "VersionedCollapsingMergeTree", args=(sign_col, version_col),
+        "VersionedCollapsingMergeTree", args=(sign_col, version_col), settings=_render_settings(settings),
     )
 
 
@@ -311,7 +316,7 @@ def graphite_merge_tree(
     settings: MergeTreeSettings | None = None,
 ) -> ChEngineSpec:
     """``GraphiteMergeTree(config_section)``: for graphite rollup data."""
-    return ChEngineSpec("GraphiteMergeTree", args=(config_section,))
+    return ChEngineSpec("GraphiteMergeTree", args=(config_section,), settings=_render_settings(settings))
 
 
 def distributed(
@@ -335,7 +340,7 @@ def distributed(
         args.append(sharding_key)
     if policy_name is not None:
         args.append(policy_name)
-    return ChEngineSpec("Distributed", args=tuple(args))
+    return ChEngineSpec("Distributed", args=tuple(args), settings=_render_settings(settings))
 
 
 def kafka(
@@ -530,5 +535,6 @@ def buffer(
     return ChEngineSpec(
         "Buffer",
         args=(database, table, str(num_layers), str(min_time), str(max_time),
-              str(min_rows), str(max_rows), str(min_bytes), str(max_bytes)),
+               str(min_rows), str(max_rows), str(min_bytes), str(max_bytes)),
+        settings=_render_settings(settings),
     )

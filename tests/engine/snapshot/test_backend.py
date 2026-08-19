@@ -1081,6 +1081,13 @@ class TestClickHouseDiff:
         assert "created_at + INTERVAL 30 DAY" in result
         assert _parse_ttl_expressions("CREATE TABLE t (id UInt64) ENGINE = MergeTree() ORDER BY id") == []
 
+    def test_snapshot_parse_ttl_preserves_function_arguments(self):
+        from dbwarden.engine.snapshot import _parse_ttl_expressions
+        result = _parse_ttl_expressions(
+            "CREATE TABLE t ENGINE = MergeTree() ORDER BY id TTL if(flag, created_at, updated_at) + INTERVAL 30 DAY"
+        )
+        assert result == ["if(flag, created_at, updated_at) + INTERVAL 30 DAY"]
+
     def test_snapshot_parse_projection_names(self):
         from dbwarden.engine.snapshot import _parse_projection_names
         result = _parse_projection_names(
@@ -1101,7 +1108,7 @@ class TestClickHouseDiff:
         result = _parse_zookeeper_path(
             "CREATE TABLE t (id UInt64) ENGINE = ReplicatedMergeTree('/zk/path', '{replica}') ORDER BY id", "ReplicatedMergeTree"
         )
-        assert result == "'/zk/path'"
+        assert result == "/zk/path"
 
     def test_snapshot_parse_dict_layout(self):
         from dbwarden.engine.snapshot import _parse_dict_layout
@@ -1167,7 +1174,7 @@ class TestBugFixRegression:
         assert "DEFAULT 'hello'" in upgrade
         assert "MODIFY COLUMN" in rollback
 
-    @pytest.mark.parametrize("backend", ("postgresql", "sqlite", "clickhouse"))
+    @pytest.mark.parametrize("backend", ("postgresql", "sqlite"))
     def test_non_mysql_alter_default_unchanged(self, backend):
         """Non-MySQL backends still use ALTER COLUMN SET DEFAULT."""
         from dbwarden.engine.snapshot import _build_alter_default_sql
@@ -1178,6 +1185,44 @@ class TestBugFixRegression:
         assert "SET DEFAULT 42" in upgrade
         assert "ALTER COLUMN" in rollback
         assert "DROP DEFAULT" in rollback
+
+    def test_clickhouse_alter_default_uses_modify_column(self):
+        """ClickHouse default changes use MODIFY COLUMN DEFAULT / REMOVE DEFAULT."""
+        from dbwarden.engine.snapshot import _build_alter_default_sql
+        upgrade, rollback = _build_alter_default_sql(
+            "t", "c", "42", "clickhouse", col_type="Int64",
+        )
+        assert "ALTER TABLE t MODIFY COLUMN c Int64 DEFAULT 42" == upgrade
+        assert "ALTER TABLE t MODIFY COLUMN c Int64 REMOVE DEFAULT" == rollback
+
+    def test_clickhouse_alter_default_drop_uses_remove_default(self):
+        """ClickHouse DROP DEFAULT uses REMOVE DEFAULT; rollback restores the old default."""
+        from dbwarden.engine.snapshot import _build_alter_default_sql
+        upgrade, rollback = _build_alter_default_sql(
+            "t", "c", None, "clickhouse", col_type="String",
+        )
+        assert "ALTER TABLE t MODIFY COLUMN c String REMOVE DEFAULT" == upgrade
+        assert "DEFAULT <original_def_unavailable>" in rollback
+        assert "REMOVE DEFAULT" not in rollback
+
+    def test_clickhouse_alter_nullable_uses_ch_type(self):
+        """ClickHouse nullability changes use the CH type, not an SA type."""
+        from dbwarden.engine.snapshot import _build_alter_nullable_sql
+        upgrade, rollback = _build_alter_nullable_sql(
+            "t", "c", nullable=True, col_type="Int64", backend="clickhouse",
+        )
+        assert "ALTER TABLE t MODIFY COLUMN c Nullable(Int64)" == upgrade
+        assert "ALTER TABLE t MODIFY COLUMN c Int64" == rollback
+
+    def test_clickhouse_alter_nullable_sa_type_is_commented(self):
+        """Passing a generic SQLAlchemy type to the CH branch emits a safe comment."""
+        from dbwarden.engine.snapshot import _build_alter_nullable_sql
+        upgrade, rollback = _build_alter_nullable_sql(
+            "t", "c", nullable=False, col_type="VARCHAR(255)", backend="clickhouse",
+        )
+        assert upgrade.startswith("-- ClickHouse:")
+        assert "non-CH type" in upgrade
+        assert rollback.startswith("-- ClickHouse:")
 
     def test_mysql_alter_default_fallback_no_col_type(self):
         """MySQL emits a hard-failure comment when type info is missing."""
@@ -1294,6 +1339,51 @@ class TestBugFixRegression:
             snapshot_module._get_backend = original_get_backend
         assert not any(op["type"] == "alter_column_autoincrement" for op in upgrade_ops)
         assert not any(op["type"] == "alter_column_autoincrement" for op in rollback_ops)
+
+    def test_clickhouse_new_table_suppresses_alter_ch_options(self, monkeypatch):
+        """A brand-new ClickHouse table must not emit redundant alter_ch_options."""
+        monkeypatch.setattr("dbwarden.engine.model_discovery.type_mapping._get_backend_name", lambda db_name=None: "clickhouse")
+        model_tables = [
+            ModelTable(
+                name="events",
+                columns=[ModelColumn("id", "UInt64", False, True, False, None, None)],
+                clickhouse_options={"ch_engine": "MergeTree", "ch_order_by": ["id"]},
+            )
+        ]
+        upgrade, rollback = diff_models_against_snapshot(
+            model_tables, {"tables": {}, "indexes": {}, "constraints": {}}, db_name="analytics"
+        )
+        assert any(op["type"] == "create_table" for op in upgrade)
+        assert not any(op["type"] == "alter_ch_options" for op in upgrade)
+        assert not any(op["type"] == "alter_ch_options" for op in rollback)
+
+    def test_clickhouse_inner_tables_filtered_from_diff(self, monkeypatch):
+        """ClickHouse implicit MV storage tables (.inner_id.*) must not appear in diffs."""
+        monkeypatch.setattr("dbwarden.engine.model_discovery.type_mapping._get_backend_name", lambda db_name=None: "clickhouse")
+        model_tables = [
+            ModelTable(
+                name="events",
+                columns=[ModelColumn("id", "UInt64", False, True, False, None, None)],
+                clickhouse_options={"ch_engine": "MergeTree", "ch_order_by": ["id"]},
+            )
+        ]
+        snapshot = {
+            "tables": {
+                "events": {
+                    "columns": {"id": {"type": "UInt64", "nullable": False, "primary_key": True}},
+                    "ch_options": {"ch_engine": "MergeTree", "ch_order_by": ["id"]},
+                },
+                ".inner_id.640454c2-38b8-479e-b241-eff4ea257209": {
+                    "columns": {},
+                    "ch_options": {"ch_engine": "MergeTree", "ch_order_by": ["id"]},
+                },
+            },
+            "indexes": {},
+            "constraints": {},
+        }
+        upgrade, rollback = diff_models_against_snapshot(model_tables, snapshot, db_name="analytics")
+        assert not any(op.get("table", "").startswith(".inner") for op in upgrade + rollback)
+        assert not any(op.get("type") == "drop_table" and op.get("table", "").startswith(".inner") for op in upgrade)
 
     def test_check_migration_scope_warns_large_drift(self):
         """Large migrations produce warnings."""
@@ -1760,7 +1850,6 @@ class TestPGSnapshotDiffToSql:
         assert len(changes) == 1
         assert changes[0].operation == "refresh_matview"
         assert changes[0].table == "user_summary"
-
 
 
 

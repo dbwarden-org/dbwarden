@@ -77,7 +77,7 @@ $ dbwarden seed list --prune              # clean up orphaned tracking records
 
 ## `seed rollback`
 
-Roll back applied seeds. Removes the tracking record, allowing the seed to be re-applied. Does **not** reverse data changes.
+Reverse applied seeds and then remove their tracking records. SQL file seeds require a `-- rollback` section; Python file and procedural code seeds require `reverse(connection, session)`. Seeds without reverse logic are irreversible and rollback fails without changing tracking.
 
 ### Usage
 
@@ -120,7 +120,7 @@ $ dbwarden seed export --database clickhouse --output-dir ./seeds
 ### Behavior
 
 - **Row-based seeds** (`rows = [...]`): each row is rendered as an `INSERT` statement with `ON CONFLICT` matching the seed's `__seed_on_conflict__`
-- **Logic-based seeds** (`generate(session)`): executed in a temporary SQLite database with FK-closure tables created and preceding row-based seeds pre-loaded. The resulting rows are exported as INSERT statements
+- **Procedural seeds** (`forward(connection, session)`): cannot be exported because executing arbitrary code under a different database backend could produce incorrect SQL
 - Seeds are ordered by FK dependency (topological sort) so foreign-key-safe insert order is preserved
 
 ### Dialect requirement
@@ -130,5 +130,4 @@ Exporting requires the same dialect packages as connecting to that database. For
 ### Non-handled problems
 
 - Removed rows are not deleted (no purge on re-export)
-- Logic seeds that depend on other logic seeds' output are unsupported
-- Non-deterministic `generate()` methods produce a new checksum every export
+- Procedural seeds must be applied directly to their configured database

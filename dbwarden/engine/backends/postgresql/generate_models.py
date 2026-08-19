@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from dbwarden.engine.core.type_parsing import _parse_type
-from dbwarden.engine.shared.format_utils import _format_meta_value
+from dbwarden.engine.shared.format_utils import _format_meta_value, _sanitize_identifier
 
 
 def _resolve_postgresql_imports(columns: list[dict]) -> set[str]:
@@ -389,7 +389,7 @@ def _render_postgresql_meta(columns: list[dict], pg_meta: dict | None = None) ->
         if not field_meta:
             continue
         lines.append("")
-        lines.append(f"        class {col['name']}(PGColumnMeta):")
+        lines.append(f"        class {_sanitize_identifier(col['name'])}(PGColumnMeta):")
         comment_val = field_meta.pop("comment", None)
         if comment_val is not None:
             lines.append(f"            comment = {comment_val!r}")

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 _POSTGRES_RESERVED_WORDS: set[str] = {
@@ -47,8 +48,10 @@ def _quote_pg(name: str) -> str:
     if not name:
         return name
     if name.upper() in _POSTGRES_RESERVED_WORDS:
-        return f'"{name}"'
-    return name
+        return f'"{name.replace(chr(34), chr(34) + chr(34))}"'
+    if re.fullmatch(r"[a-z_][a-z0-9_]*", name):
+        return name
+    return f'"{name.replace(chr(34), chr(34) + chr(34))}"'
 
 
 def _is_expression(s: str) -> bool:
@@ -66,6 +69,9 @@ def _render_postgres_column_type(col: Any) -> str:
     pg_type = col.pg_meta.get("pg_type", {}) if col.pg_meta else {}
     if pg_type.get("kind") == "enum" and pg_type.get("type_name"):
         return str(pg_type["type_name"])
+    if pg_type.get("kind") == "array" and pg_type.get("inner"):
+        dimensions = pg_type.get("dimensions", 1) or 1
+        return f"{pg_type['inner']}" + "[]" * dimensions
     return col.type
 
 

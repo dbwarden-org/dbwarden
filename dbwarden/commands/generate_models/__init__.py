@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from dbwarden.config import get_database
-from dbwarden.database.connection import get_db_connection
+from dbwarden.database.connection import get_db_connection, get_engine
 from dbwarden.engine.backends.clickhouse.generate_models import (
     _clean_engine_full,
     _extract_ch_meta,
@@ -150,7 +150,8 @@ def generate_models_cmd(
     else:
         exclude_set = set()
 
-    with get_db_connection(database) as connection:
+    engine = get_engine(database)
+    with engine.connect() as connection:
         if actual_dialect == "clickhouse":
             original_execute = connection.execute
 
@@ -160,11 +161,18 @@ def generate_models_cmd(
                 return original_execute(statement, *args, **kwargs)
 
             connection.execute = _clickhouse_execute  # type: ignore[method-assign]
+        elif actual_dialect == "postgresql" and config.postgres_schema:
+            from sqlalchemy import text
+
+            connection.execute(
+                text("SET search_path TO :postgres_schema, public"),
+                parameters={"postgres_schema": config.postgres_schema},
+            )
 
         from sqlalchemy import inspect
 
         inspector = inspect(connection)
-        all_table_names = inspector.get_table_names()
+        all_table_names = inspector.get_table_names(schema=config.postgres_schema)
 
         target_tables = [t for t in all_table_names if not t.startswith(".")]
         if table_filter:
@@ -226,8 +234,9 @@ def generate_models_cmd(
                 col_name = col["name"]
                 col_type_str = str(col["type"])
                 col_nullable = col.get("nullable", True)
-                col_default = col.get("default")
-                if actual_dialect == "postgresql" and str(col_default or "").startswith("nextval("):
+                raw_default = col.get("default")
+                col_default = raw_default
+                if actual_dialect == "postgresql" and str(raw_default or "").startswith("nextval("):
                     col_default = None
                 col_primary = col_name in pk_columns and not pk_was_inferred
                 col_unique = col_name in unique_columns
@@ -235,7 +244,13 @@ def generate_models_cmd(
 
                 autoinc = getattr(col["type"], "autoincrement", None)
                 if autoinc is None:
-                    autoinc = col_primary and col_type_str.upper() in ("INTEGER", "INT", "BIGINT")
+                    # Only treat a PostgreSQL integer PK as autoincrement if the
+                    # database column actually owns a sequence (SERIAL/BIGSERIAL).
+                    # Identity columns are handled separately via pg_meta.
+                    if actual_dialect == "postgresql" and col_primary and col_type_str.upper() in ("INTEGER", "INT", "BIGINT"):
+                        autoinc = bool(raw_default) and str(raw_default).lower().startswith("nextval(")
+                    else:
+                        autoinc = col_primary and col_type_str.upper() in ("INTEGER", "INT", "BIGINT")
 
                 entry = {
                     "name": col_name,

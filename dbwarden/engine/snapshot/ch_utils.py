@@ -50,17 +50,45 @@ def _serialize_clickhouse_engine(engine: Any) -> str | tuple | None:
     return engine
 
 
+def _split_top_level(s: str, delimiter: str = ",") -> list[str]:
+    """Split *s* on *delimiter* respecting balanced parentheses."""
+    parts: list[str] = []
+    depth = 0
+    current: list[str] = []
+    for ch in s:
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        if ch == delimiter and depth == 0:
+            parts.append("".join(current).strip())
+            current = []
+            continue
+        current.append(ch)
+    tail = "".join(current).strip()
+    if tail:
+        parts.append(tail)
+    return parts
+
+
 def _pick_clickhouse_codec(codec_expr: Any) -> str | None:
     if codec_expr is None:
         return None
     codec = str(codec_expr).strip()
     if not codec:
         return None
-    parts = [part.strip() for part in codec.split(",") if part.strip()]
+    # Strip the CODEC(...) wrapper if present.
+    if codec.upper().startswith("CODEC(") and codec.endswith(")"):
+        codec = codec[6:-1].strip()
+    if not codec:
+        return None
+    parts = [part.strip() for part in _split_top_level(codec) if part.strip()]
     if not parts:
         return None
-    non_default = [part for part in parts if not part.upper().startswith("LZ4")]
-    return non_default[-1] if non_default else parts[-1]
+    non_default = [part for part in parts if part.upper() not in {"LZ4", "NONE"}]
+    if not non_default:
+        return None
+    return ", ".join(non_default)
 
 
 def _check_ch_engine_recreate_allowed(snap_spec: dict, model_spec: dict, table_name: str) -> None:

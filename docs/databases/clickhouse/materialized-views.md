@@ -87,8 +87,9 @@ class DailyRollupMV(MaterializedView):
 Generated DDL:
 
 ```sql
-CREATE MATERIALIZED VIEW daily_rollup_mv TO rollup_dest
+CREATE MATERIALIZED VIEW daily_rollup_mv
 REFRESH EVERY 3600 SECONDS
+TO rollup_dest
 AS SELECT sum(amount) AS total FROM events
 ```
 
@@ -105,6 +106,34 @@ refresh="EVERY 3600 SECONDS DEPENDS ON my_other_mv"
 ```
 
 Refresh on cluster is configured at the deployment level via `--cluster-mode`.
+
+### Refresh settings
+
+Refreshable MVs accept a `settings` dict for refresh settings such as
+`refresh_retries`:
+
+```python
+class DailyRollupMV(MaterializedView):
+    __tablename__ = "daily_rollup_mv"
+
+    class Meta(CHViewMeta):
+        ch = materialized_view(
+            select=func.sum(Event.amount).label("total"),
+            to="rollup_dest",
+            refresh="EVERY 3600 SECONDS",
+            settings={"refresh_retries": "5"},
+        )
+```
+
+Generated DDL:
+
+```sql
+CREATE MATERIALIZED VIEW daily_rollup_mv
+REFRESH EVERY 3600 SECONDS
+SETTINGS refresh_retries=5
+TO rollup_dest
+AS SELECT sum(amount) AS total FROM events
+```
 
 ## Additional model examples
 
@@ -125,8 +154,9 @@ class HourlyRollupMV(MaterializedView):
 Generated DDL:
 
 ```sql
-CREATE MATERIALIZED VIEW hourly_rollup_mv TO hourly_rollup_dest
+CREATE MATERIALIZED VIEW hourly_rollup_mv
 REFRESH EVERY 300 SECONDS DEPENDS ON daily_rollup_mv
+TO hourly_rollup_dest
 AS SELECT sum(amount) AS total FROM events
 ```
 
@@ -189,11 +219,34 @@ dbwarden classifies this as:
 | Refreshable | Supported | INFO |
 | Plain (non-refreshable) | Not supported by CH | CRITICAL: requires `--force` |
 
-## `POPULATE` as data operation
+## `POPULATE` as DDL or data operation
 
 `POPULATE` is a one-time statement that inserts existing source data into the
-MV on creation. dbwarden treats it as a
-[data operation](data-operations.md), not a DDL property:
+MV on creation. You can request it inline in the MV declaration:
+
+```python
+class EventCountMV(MaterializedView):
+    __tablename__ = "event_counts_mv"
+
+    class Meta(CHViewMeta):
+        ch = materialized_view(
+            select=func.sum(Event.amount).label("total"),
+            to="events_dest",
+            populate=True,
+        )
+```
+
+Generated DDL:
+
+```sql
+CREATE MATERIALIZED VIEW event_counts_mv TO events_dest
+POPULATE
+AS SELECT sum(amount) AS total FROM events
+```
+
+`POPULATE` cannot be combined with `refresh`. For a separate, reversible data
+migration that runs `INSERT INTO <target> <select>` after the MV is created,
+use [`data_ops.populate`](data-operations.md) instead:
 
 ```python
 from dbwarden.databases.clickhouse import data_ops
@@ -206,9 +259,6 @@ spec = materialized_view(
 )
 pop = data_ops.populate(spec)
 ```
-
-This is because `POPULATE` is a write concern, not a structural declaration:
-it runs once during creation and changes nothing about the schema.
 
 ## What changes are allowed
 

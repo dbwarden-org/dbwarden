@@ -208,7 +208,7 @@ ALTER TABLE users SET (fillfactor = 80, autovacuum_enabled = false);
 
 ## Reverse Engineering
 
-`generate-models` queries `pg_class`, `pg_attribute`, `pg_constraint`, `pg_inherits`, `pg_tablespace`, `pg_partitioned_table`, and `pg_collation` to reverse-engineer all metadata.
+`generate-models` queries `pg_class`, `pg_attribute`, `pg_constraint`, `pg_inherits`, `pg_tablespace`, `pg_partitioned_table`, and `pg_collation` to reverse-engineer all metadata. Array columns are rendered with their element type and dimensions (e.g. `text[]`, `integer[][]`).
 
 ```bash
 $ dbwarden generate-models -d primary

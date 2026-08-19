@@ -4,7 +4,7 @@ import pytest
 
 from dbwarden.databases.clickhouse.cluster import ClusterContext, ClusterMode
 from dbwarden.databases.clickhouse import (
-    ChIndexSpec, ChRaw, ch_raw, agg, aggregating_view, data_op,
+    ChEngineSpec, ChIndexSpec, ChRaw, ch_raw, agg, aggregating_view, data_op,
 )
 from dbwarden.engine.backends.clickhouse.cluster import ClusterableStatement
 from dbwarden.engine.backends.clickhouse.handlers import (
@@ -79,6 +79,14 @@ class TestClusterableStatementFromSqlMore:
         out = cs.render(ctx)
         assert "ON CLUSTER 'c'" in out
         assert "TO events__dbw_old" in out
+
+    def test_backtick_quoted_table(self):
+        cs = ClusterableStatement.from_sql(
+            "RENAME TABLE `analytics`.`events` TO `analytics`.`events_old`"
+        )
+        ctx = ClusterContext(ClusterMode.ON_CLUSTER, "c")
+        out = cs.render(ctx)
+        assert out == "RENAME TABLE `analytics`.`events` ON CLUSTER 'c' TO `analytics`.`events_old`"
 
     def test_detach_table(self):
         cs = ClusterableStatement.from_sql("DETACH TABLE events_mv")
@@ -186,6 +194,14 @@ class TestChDictionaryHandler:
         assert up[0].upgrade_attrs["action"] == "alter"
         stmts = self.h.emit(up[0], cluster_ctx=self.ctx)
         assert "MODIFY LAYOUT" in stmts[0].upgrade_sql
+
+    def test_alter_dictionary_primary_key_is_parenthesized(self):
+        snap = {"d": dict(ch_dictionary=True, ch_dict_primary_key="old_id")}
+        model = {"d": dict(ch_dictionary=True, ch_dict_primary_key="id")}
+        up, _ = self.h.diff(snap, model)
+        stmts = self.h.emit(up[0], cluster_ctx=self.ctx)
+        assert "MODIFY PRIMARY KEY (id)" in stmts[0].upgrade_sql
+        assert "MODIFY PRIMARY KEY (old_id)" in stmts[0].rollback_sql
 
     def test_drop_dictionary(self):
         snap = {"d": dict(ch_dictionary=True, ch_dict_layout="HASHED()")}
@@ -651,6 +667,30 @@ class TestChTableHandler:
         assert len(up) == 1
         assert up[0].object_type == "recreate_ch_table"
         assert "ch_engine" in up[0].upgrade_attrs["reason"]
+
+    def test_chenginespec_normalized_to_snapshot_engine(self):
+        """Model-side ChEngineSpec must serialize to the snapshot's engine string."""
+        snap_opts = {"ch_engine": "MergeTree", "ch_order_by": ["id"]}
+        model_opts = {"ch_engine": ChEngineSpec("MergeTree"), "ch_order_by": ["id"]}
+        snap = {"t": {"ch_options": snap_opts, "snapshot_table": {"name": "t", "columns": {}}}}
+        model = {"t": {"ch_options": model_opts,
+                       "model_table": self._make_table(opts=model_opts)}}
+        snap = self.h.canonicalize(snap)
+        model = self.h.canonicalize(model)
+        up, _ = self.h.diff(snap, model)
+        assert not up, "ChEngineSpec model engine should converge with serialized snapshot engine"
+
+    def test_chenginespec_with_args_normalized(self):
+        """ChEngineSpec with engine args must match a tuple snapshot."""
+        snap_opts = {"ch_engine": ("ReplicatedMergeTree", "'/zk'", "'{replica}'"), "ch_order_by": ["id"]}
+        model_opts = {"ch_engine": ChEngineSpec("ReplicatedMergeTree", args=("'/zk'", "'{replica}'")), "ch_order_by": ["id"]}
+        snap = {"t": {"ch_options": snap_opts, "snapshot_table": {"name": "t", "columns": {}}}}
+        model = {"t": {"ch_options": model_opts,
+                       "model_table": self._make_table(opts=model_opts)}}
+        snap = self.h.canonicalize(snap)
+        model = self.h.canonicalize(model)
+        up, _ = self.h.diff(snap, model)
+        assert not up, "ChEngineSpec with args should converge with tuple snapshot"
 
 
 # ── Cluster matrix tests (all handlers, NONE + ON_CLUSTER) ─────────────────

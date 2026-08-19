@@ -23,6 +23,7 @@ from dbwarden.engine.backends.clickhouse.parse import (
 )
 
 from dbwarden.engine.backends.clickhouse.parse import parse_mv_refresh as _parse_clickhouse_mv_refresh
+from dbwarden.engine.backends.clickhouse.render import _parse_ch_type_wrappers
 
 from .ch_utils import _clean_clickhouse_expression, _pick_clickhouse_codec, _serialize_clickhouse_engine
 
@@ -282,8 +283,7 @@ def _extract_clickhouse_schema_snapshot(connection: Any, db_name: str) -> dict[s
         columns_dict: dict[str, Any] = {}
         for col in columns_by_table.get(table_name, []):
             raw_type = col["type"]
-            ch_nullable = str(raw_type).startswith("Nullable(")
-            ch_low_cardinality = "LowCardinality(" in str(raw_type)
+            _, ch_nullable, ch_low_cardinality = _parse_ch_type_wrappers(str(raw_type))
             default_kind = col.get("default_kind")
             default_expression = col.get("default_expression")
             ch_column: dict[str, Any] = {

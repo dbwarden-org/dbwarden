@@ -13,6 +13,8 @@ $ dbwarden generate-models --database primary --exclude-tables logs,audit
 ```
 
 > **Note:** `generate-models` works for all supported databases: PostgreSQL, MySQL, MariaDB, ClickHouse, and SQLite. For ClickHouse, use `--clickhouse-engines` or rely on auto-detection from `database_type="clickhouse"`. SQLite produces basic table models without backend-specific metadata.
+>
+> For PostgreSQL, `generate-models` respects the config-level `pg_schema` setting and reverse-engineers tables from that schema. Mixed-case or quoted identifiers (e.g. `"MyTable"`, `"weird-col"`) are sanitized into valid Python attribute names while the original SQL name is preserved in `Column(...)`. For ClickHouse, full codec chains are preserved (e.g. `CODEC(Delta(8), ZSTD(1))`) and `LowCardinality(Nullable(T))` round-trips correctly.
 
 ## Options
 
@@ -149,5 +151,7 @@ For the complete feature reference, see [ClickHouse Deep Dive](../databases/clic
 
 ## Warnings
 
-- Generated code requires manual review and cleanup
-- ClickHouse engine metadata is auto-detected; review the generated `ChEngineSpec` to ensure correctness
+- Generated code requires manual review and cleanup.
+- ClickHouse engine metadata is auto-detected; review the generated `ChEngineSpec` to ensure correctness.
+- PostgreSQL `SERIAL` and identity column sequence metadata may not fully round-trip through generated SQLAlchemy models; review generated primary-key columns.
+- ClickHouse materialized views are introspected but not currently emitted as discoverable model tables.

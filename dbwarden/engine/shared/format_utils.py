@@ -1,6 +1,20 @@
 from __future__ import annotations
 
+import keyword
+import re
 from typing import Any
+
+
+def _sanitize_identifier(name: str) -> str:
+    """Convert an arbitrary SQL identifier into a valid Python identifier."""
+    safe = re.sub(r"[^0-9a-zA-Z_]", "_", name)
+    if not safe:
+        safe = "_"
+    if safe[0].isdigit():
+        safe = "_" + safe
+    if keyword.iskeyword(safe):
+        safe = safe + "_"
+    return safe
 
 
 def _format_meta_value(value: Any, indent: str = "        ") -> list[str]:

@@ -88,6 +88,7 @@ def _diff_constraints(
                 fk.get("on_delete", "NO ACTION"),
                 fk.get("on_update", "NO ACTION"),
                 bool(fk.get("deferrable", False)),
+                fk.get("match"),
             )
 
         prev_fk_sigs = {_fk_sig(fk) for fk in prev_fks}
@@ -96,10 +97,12 @@ def _diff_constraints(
             if _fk_sig(fk) not in curr_fk_sigs:
                 upgrade_ops.append({
                     "type": "drop_foreign_key", "table": table_name,
+                    **({"name": fk["name"]} if fk.get("name") else {}),
                     "columns": fk["columns"], "referenced_table": fk["referenced_table"], "referenced_columns": fk["referenced_columns"],
                 })
                 rollback_ops.insert(0, {
                     "type": "add_foreign_key", "table": table_name,
+                    **({"name": fk["name"]} if fk.get("name") else {}),
                     "columns": fk["columns"], "referenced_table": fk["referenced_table"], "referenced_columns": fk["referenced_columns"],
                     "on_delete": fk.get("on_delete", "NO ACTION"), "on_update": fk.get("on_update", "NO ACTION"), "deferrable": bool(fk.get("deferrable", False)),
                 })
@@ -107,11 +110,13 @@ def _diff_constraints(
             if _fk_sig(fk) not in prev_fk_sigs:
                 upgrade_ops.append({
                     "type": "add_foreign_key", "table": table_name,
+                    **({"name": fk["name"]} if fk.get("name") else {}),
                     "columns": fk["columns"], "referenced_table": fk["referenced_table"], "referenced_columns": fk["referenced_columns"],
                     "on_delete": fk.get("on_delete", "NO ACTION"), "on_update": fk.get("on_update", "NO ACTION"), "deferrable": bool(fk.get("deferrable", False)),
                 })
                 rollback_ops.insert(0, {
                     "type": "drop_foreign_key", "table": table_name,
+                    **({"name": fk["name"]} if fk.get("name") else {}),
                     "columns": fk["columns"], "referenced_table": fk["referenced_table"], "referenced_columns": fk["referenced_columns"],
                 })
 

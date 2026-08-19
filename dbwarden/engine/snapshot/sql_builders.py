@@ -18,6 +18,17 @@ from .index_utils import _build_index_name, _index_op_from_info
 from .utils import _missing_def_placeholder, _quote_default_for_sql
 
 
+_SA_TYPE_TOKENS_RE = re.compile(
+    r"VARCHAR|TEXT|BLOB|BINARY|SERIAL|\bINT\b|\bINTEGER\b|\bFLOAT\b|DOUBLE|DECIMAL|NUMERIC|DATETIME|TIMESTAMP|BOOLEAN|JSON|UUID",
+    re.IGNORECASE,
+)
+
+
+def _looks_like_sa_type(type_str: str) -> bool:
+    """Return True if ``type_str`` looks like a SQLAlchemy/generic type, not a CH type."""
+    return bool(_SA_TYPE_TOKENS_RE.search(type_str))
+
+
 def _build_alter_type_sql(
     table: str,
     column: str,
@@ -86,13 +97,18 @@ def _build_alter_nullable_sql(
         rollback = f"-- SQLite: ALTER TABLE {table} ALTER COLUMN {column} {'SET' if nullable else 'DROP'} NOT NULL (not supported)"
     elif backend == "clickhouse":
         base, _, low_cardinality = _parse_ch_type_wrappers(col_type or "")
-        if base:
+        if not base:
+            upgrade = rollback = f"-- ClickHouse: cannot alter nullability for {table}.{column} (no type info)"
+        elif _looks_like_sa_type(base):
+            upgrade = rollback = (
+                f"-- ClickHouse: cannot alter nullability for {table}.{column} "
+                f"using non-CH type {col_type!r} (pass ch_meta['ch_type'])"
+            )
+        else:
             mod_type = _apply_ch_nullable_low_cardinality(base, nullable, low_cardinality)
             rev_type = _apply_ch_nullable_low_cardinality(base, not nullable, low_cardinality)
             upgrade = f"ALTER TABLE {table} MODIFY COLUMN {column} {mod_type}"
             rollback = f"ALTER TABLE {table} MODIFY COLUMN {column} {rev_type}"
-        else:
-            upgrade = rollback = f"-- ClickHouse: cannot alter nullability for {table}.{column} (no type info)"
     else:
         if nullable:
             upgrade = f"ALTER TABLE {table} ALTER COLUMN {column} DROP NOT NULL"
@@ -118,6 +134,16 @@ def _build_alter_default_sql(
             table, column, default,
             col_type=col_type, nullable=nullable, my_meta=my_meta or {},
         )
+    if backend == "clickhouse":
+        ch_type = col_type or _missing_def_placeholder(backend)
+        if default is not None:
+            safe_default = _quote_default_for_sql(str(default))
+            upgrade = f"ALTER TABLE {table} MODIFY COLUMN {column} {ch_type} DEFAULT {safe_default}"
+            rollback = f"ALTER TABLE {table} MODIFY COLUMN {column} {ch_type} REMOVE DEFAULT"
+        else:
+            upgrade = f"ALTER TABLE {table} MODIFY COLUMN {column} {ch_type} REMOVE DEFAULT"
+            rollback = f"ALTER TABLE {table} MODIFY COLUMN {column} {ch_type} DEFAULT {_missing_def_placeholder(backend)}"
+        return upgrade, rollback
     if default is not None:
         safe_default = _quote_default_for_sql(str(default))
         upgrade = f"ALTER TABLE {table} ALTER COLUMN {column} SET DEFAULT {safe_default}"
@@ -142,11 +168,7 @@ def _build_ch_projection_sql(
     for name, snap_p in snap_by_name.items():
         if name not in model_by_name:
             up_stmts.append(f"ALTER TABLE {table} DROP PROJECTION {name}")
-            model_p = model_by_name.get(name)
-            if model_p:
-                rb_stmts.append(f"ALTER TABLE {table} ADD PROJECTION {name} {model_p.get('query', '')}")
-            else:
-                rb_stmts.append(f"ALTER TABLE {table} ADD PROJECTION {name} {snap_p.get('query', '')}")
+            rb_stmts.append(f"ALTER TABLE {table} ADD PROJECTION {name} {snap_p.get('query', '')}")
     for name, model_p in model_by_name.items():
         if name not in snap_by_name:
             up_stmts.append(f"ALTER TABLE {table} ADD PROJECTION {name} {model_p.get('query', '')}")

@@ -105,6 +105,8 @@ def _ch_options_from_meta(model_class: type) -> dict:
         options["ch_ttl"] = raw.ttl
     if raw.settings is not None:
         options["ch_settings"] = raw.settings
+    elif isinstance(raw.engine, ChEngineSpec) and raw.engine.settings is not None:
+        options["ch_settings"] = raw.engine.settings
     if raw.zookeeper_path is not None:
         options["ch_zookeeper_path"] = raw.zookeeper_path
     if raw.replica_name is not None:

@@ -41,8 +41,3 @@ def exclude(
 def normalize_exclude_spec(spec: Any) -> Any:
     """Return a plain dict for an ``ExcludeSpec``, passing dicts through unchanged."""
     return spec.as_dict() if isinstance(spec, ExcludeSpec) else spec
-
-
-def normalize_exclude_spec(spec: Any) -> Any:
-    """Return a plain dict for an ``ExcludeSpec``, passing dicts through unchanged."""
-    return spec.as_dict() if isinstance(spec, ExcludeSpec) else spec

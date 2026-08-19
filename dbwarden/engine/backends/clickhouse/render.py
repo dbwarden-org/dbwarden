@@ -23,14 +23,6 @@ def _apply_ch_nullable_low_cardinality(
     return result
 
 
-def _strip_ch_nullable(type_str: str) -> str:
-    """Remove an outer ``Nullable(...)`` wrapper if present."""
-    s = type_str.strip()
-    if s.startswith("Nullable(") and s.endswith(")"):
-        return s[len("Nullable("):-1].strip()
-    return s
-
-
 def _make_clickhouse_key_type(type_str: str) -> str:
     """Return a non-nullable version of ``type_str`` while preserving LowCardinality.
 
@@ -138,10 +130,24 @@ def _format_clickhouse_engine(
     else:
         raise ValueError("ch_engine must be a string or tuple/list")
 
-    if zookeeper_path is not None:
+    def same_argument(left: str, right: str) -> bool:
+        return left.strip("'\" ") == right.strip("'\" ")
+
+    has_zookeeper_path = (
+        zookeeper_path is not None
+        and bool(extra_args)
+        and same_argument(extra_args[0], zookeeper_path)
+    )
+    if zookeeper_path is not None and not has_zookeeper_path:
         extra_args.insert(0, zookeeper_path)
-    if replica_name is not None:
-        extra_args.insert(1 if zookeeper_path is not None else 0, replica_name)
+    replica_index = 1 if zookeeper_path is not None else 0
+    has_replica_name = (
+        replica_name is not None
+        and len(extra_args) > replica_index
+        and same_argument(extra_args[replica_index], replica_name)
+    )
+    if replica_name is not None and not has_replica_name:
+        extra_args.insert(replica_index, replica_name)
 
     if extra_args:
         return f"{engine_name}({', '.join(extra_args)})"
@@ -156,28 +162,13 @@ def _render_clickhouse_table_suffix(table: Any) -> str:
     parts: list[str] = []
 
     engine_raw = options.get("ch_engine", "MergeTree")
-    if isinstance(engine_raw, str):
-        engine_name = engine_raw
-        engine_args = []
-    elif isinstance(engine_raw, tuple):
-        engine_name = engine_raw[0] if engine_raw else "MergeTree"
-        engine_args = list(str(a) for a in engine_raw[1:])
-    elif isinstance(engine_raw, (list, tuple)):
-        engine_name = engine_raw[0] if engine_raw else "MergeTree"
-        engine_args = list(str(a) for a in engine_raw[1:])
-    else:
-        engine_name = "MergeTree"
-        engine_args = []
-    zk_path = options.get("ch_zookeeper_path")
-    replica_name = options.get("ch_replica_name")
-    if zk_path is not None:
-        engine_args.insert(0, zk_path)
-    if replica_name is not None:
-        engine_args.insert(1 if zk_path is not None else 0, replica_name)
-    if engine_args:
-        parts.append(f"ENGINE = {engine_name}({', '.join(engine_args)})")
-    else:
-        parts.append(f"ENGINE = {engine_name}()")
+    parts.append(
+        "ENGINE = " + _format_clickhouse_engine(
+            engine_raw,
+            options.get("ch_zookeeper_path"),
+            options.get("ch_replica_name"),
+        )
+    )
 
     order_by = options.get("ch_order_by")
     if order_by is not None:
@@ -214,10 +205,22 @@ def _generate_clickhouse_materialized_view_sql(
     options = table.clickhouse_options
     parts = [f"CREATE MATERIALIZED VIEW IF NOT EXISTS {table.name}"]
     to_table = options.get("ch_to_table")
+    settings = options.get("ch_settings")
+    settings_str = ", ".join(f"{k}={v}" for k, v in settings.items()) if settings else ""
+    refresh = options.get("ch_refresh")
+    populate = bool(options.get("ch_populate"))
+
+    # Refreshable MV syntax requires REFRESH before the TO/ENGINE clauses.
+    if refresh:
+        parts.append(f"REFRESH {refresh}")
+        if settings_str:
+            parts.append(f"SETTINGS {settings_str}")
+
     if to_table:
-        parts[0] += f" TO {to_table}"
+        parts.append(f"TO {to_table}")
+
     if columns_sql and not to_table:
-        parts[0] += f" (\n{columns_sql}\n)"
+        parts.append(f"(\n{columns_sql}\n)")
 
     if not to_table:
         engine_raw = options.get("ch_engine", "MergeTree")
@@ -235,25 +238,32 @@ def _generate_clickhouse_materialized_view_sql(
         else:
             parts.append(f"ENGINE = {engine_name}()")
 
-    order_by = options.get("ch_order_by")
-    if order_by is not None:
-        parts.append(f"ORDER BY {_format_clickhouse_expression(order_by)}")
+        order_by = options.get("ch_order_by")
+        if order_by is not None:
+            parts.append(f"ORDER BY {_format_clickhouse_expression(order_by)}")
 
-    primary_key = options.get("ch_primary_key")
-    if primary_key:
-        parts.append(f"PRIMARY KEY {_format_clickhouse_expression(primary_key)}")
+        primary_key = options.get("ch_primary_key")
+        if primary_key:
+            parts.append(f"PRIMARY KEY {_format_clickhouse_expression(primary_key)}")
 
-    partition_by = options.get("ch_partition_by")
-    if partition_by:
-        parts.append(f"PARTITION BY {partition_by}")
+        partition_by = options.get("ch_partition_by")
+        if partition_by:
+            parts.append(f"PARTITION BY {partition_by}")
 
-    sample_by = options.get("ch_sample_by")
-    if sample_by:
-        parts.append(f"SAMPLE BY {sample_by}")
+        sample_by = options.get("ch_sample_by")
+        if sample_by:
+            parts.append(f"SAMPLE BY {sample_by}")
 
-    ttl = options.get("ch_ttl")
-    if ttl:
-        parts.append("TTL " + ", ".join(ttl) if isinstance(ttl, list) else f"TTL {ttl}")
+        ttl = options.get("ch_ttl")
+        if ttl:
+            parts.append("TTL " + ", ".join(ttl) if isinstance(ttl, list) else f"TTL {ttl}")
+
+        # Engine-level SETTINGS for implicit-storage MVs.
+        if settings_str and not refresh:
+            parts.append(f"SETTINGS {settings_str}")
+
+    if populate and not refresh:
+        parts.append("POPULATE")
 
     select = options.get("ch_select_statement")
     if select:
