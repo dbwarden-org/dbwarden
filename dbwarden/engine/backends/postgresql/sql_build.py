@@ -41,17 +41,19 @@ def _build_pg_meta_sql(
             up = f"ALTER TABLE {table} ALTER COLUMN {column} TYPE {col_type} COLLATE \"{to_val}\";" if to_val else f"ALTER TABLE {table} ALTER COLUMN {column} TYPE {col_type};"
             rb = f"ALTER TABLE {table} ALTER COLUMN {column} TYPE {snap_type} COLLATE \"{from_val}\";" if from_val else f"ALTER TABLE {table} ALTER COLUMN {column} TYPE {snap_type};"
         elif key == "storage":
-            up = f"ALTER TABLE {table} ALTER COLUMN {column} SET STORAGE {to_val};" if to_val else f"ALTER TABLE {table} ALTER COLUMN {column} SET STORAGE EXTENDED;"
+            if to_val is None and from_val is None:
+                continue
+            if to_val is None:
+                continue
+            up = f"ALTER TABLE {table} ALTER COLUMN {column} SET STORAGE {to_val};"
             rb = f"ALTER TABLE {table} ALTER COLUMN {column} SET STORAGE {from_val};" if from_val else f"ALTER TABLE {table} ALTER COLUMN {column} SET STORAGE EXTENDED;"
         elif key == "compression":
-            if to_val:
-                up = f"ALTER TABLE {table} ALTER COLUMN {column} SET COMPRESSION {to_val};"
-            else:
-                up = f"ALTER TABLE {table} ALTER COLUMN {column} SET COMPRESSION DEFAULT;"
-            if from_val:
-                rb = f"ALTER TABLE {table} ALTER COLUMN {column} SET COMPRESSION {from_val};"
-            else:
-                rb = f"ALTER TABLE {table} ALTER COLUMN {column} SET COMPRESSION DEFAULT;"
+            if to_val is None and from_val is None:
+                continue
+            if to_val is None:
+                continue
+            up = f"ALTER TABLE {table} ALTER COLUMN {column} SET COMPRESSION {to_val};"
+            rb = f"ALTER TABLE {table} ALTER COLUMN {column} SET COMPRESSION {from_val};" if from_val else f"ALTER TABLE {table} ALTER COLUMN {column} SET COMPRESSION DEFAULT;"
         elif key == "generated":
             if to_val:
                 up = f"ALTER TABLE {table} ALTER COLUMN {column} SET EXPRESSION AS ({to_val});"
@@ -77,9 +79,9 @@ def _build_pg_meta_sql(
                 "identity_min": "MINVALUE",
                 "identity_max": "MAXVALUE",
             }[key]
-            if to_val is None and from_val is None:
+            if to_val is None:
                 continue
-            up = f"ALTER TABLE {table} ALTER COLUMN {column} SET {pg_key} {to_val};" if to_val is not None else f"-- No ALTER needed: remove {pg_key} for {table}.{column}"
+            up = f"ALTER TABLE {table} ALTER COLUMN {column} SET {pg_key} {to_val};"
             rb = f"ALTER TABLE {table} ALTER COLUMN {column} SET {pg_key} {from_val};" if from_val is not None else f"-- No ALTER needed: remove {pg_key} for {table}.{column}"
         else:
             continue

@@ -597,9 +597,87 @@ class TestClickHouseGenerateModels:
                 "ch_order_by": ["group_col"],
             },
         )
-        assert "class MvName(Base):" in code
-        assert "ch_select_statement" in code
+        assert "class MvName(MaterializedView):" in code
+        assert "class Meta(CHViewMeta):" in code
+        assert "ch = materialized_view(" in code
+        assert "select='SELECT group_col, count() AS total FROM source GROUP BY group_col'" in code
+        assert "engine=ChEngineSpec('SummingMergeTree')" in code
+        assert "order_by=['group_col']" in code
         assert "__tablename__ = 'mv_name'" in code
+
+    def test_generate_table_code_ch_materialized_view_to_target(self):
+        # Mode B: MV writes into an existing target table via TO [db.]table.
+        columns = [
+            {"name": "group_col", "type": "String", "nullable": False, "default": None, "primary_key": False, "unique": False, "foreign_key": None},
+            {"name": "total", "type": "UInt64", "nullable": False, "default": None, "primary_key": False, "unique": False, "foreign_key": None},
+        ]
+        code = _generate_table_code(
+            "mv_to_target",
+            columns,
+            object_type="materialized_view",
+            ch_options={
+                "ch_object_type": "materialized_view",
+                "ch_select_statement": "SELECT group_col, count() AS total FROM source GROUP BY group_col",
+                "ch_to_table": "mv_target",
+            },
+        )
+        assert "class MvToTarget(MaterializedView):" in code
+        assert "class Meta(CHViewMeta):" in code
+        assert "ch = materialized_view(" in code
+        assert "select='SELECT group_col, count() AS total FROM source GROUP BY group_col'" in code
+        assert "to='mv_target'" in code
+        # Engine/order_by/partition_by must not be emitted when a TO target exists.
+        assert "engine=" not in code
+        assert "order_by=" not in code
+        assert "partition_by=" not in code
+
+    def test_write_models_clickhouse_materialized_view_imports_single_file(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            from dbwarden.commands.generate_models import _write_models
+
+            tables = [
+                {
+                    "name": "mv_events",
+                    "columns": [
+                        {"name": "group_col", "type": "String", "nullable": False, "default": None, "primary_key": False, "unique": False, "foreign_key": None},
+                    ],
+                    "ch_options": {
+                        "ch_object_type": "materialized_view",
+                        "ch_select_statement": "SELECT group_col FROM source GROUP BY group_col",
+                        "ch_engine": "MergeTree",
+                        "ch_order_by": ["group_col"],
+                    },
+                    "object_type": "materialized_view",
+                }
+            ]
+            _write_models(tmpdir, tables, single_file=True)
+            content = Path(tmpdir, "models.py").read_text()
+            assert "from dbwarden.databases.clickhouse import CHColumnMeta, CHViewMeta, ChEngineSpec, MaterializedView, materialized_view" in content
+            assert "CHTableMeta" not in content
+
+    def test_write_models_clickhouse_materialized_view_imports_per_file(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            from dbwarden.commands.generate_models import _write_models
+
+            tables = [
+                {
+                    "name": "mv_events",
+                    "columns": [
+                        {"name": "group_col", "type": "String", "nullable": False, "default": None, "primary_key": False, "unique": False, "foreign_key": None},
+                    ],
+                    "ch_options": {
+                        "ch_object_type": "materialized_view",
+                        "ch_select_statement": "SELECT group_col FROM source GROUP BY group_col",
+                        "ch_engine": "MergeTree",
+                        "ch_order_by": ["group_col"],
+                    },
+                    "object_type": "materialized_view",
+                }
+            ]
+            _write_models(tmpdir, tables, single_file=False)
+            content = Path(tmpdir, "mv_events.py").read_text()
+            assert "from dbwarden.databases.clickhouse import CHColumnMeta, CHViewMeta, ChEngineSpec, MaterializedView, materialized_view" in content
+            assert "CHTableMeta" not in content
 
 
 class TestPkFallbackInference:

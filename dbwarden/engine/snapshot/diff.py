@@ -88,7 +88,14 @@ def diff_models_against_snapshot(
         for op in ops:
             target.append(op_to_dict(op))
 
-    from dbwarden.engine.backends.postgresql.handlers import ConstraintHandler
+    from dbwarden.engine.backends.postgresql.handlers import ConstraintHandler, TypeHandler
+    _type_handler = TypeHandler()
+    _type_driver = RegistryDriver(include_plugins=False)
+    _type_driver.register(_type_handler)
+    _type_up, _type_rb = _type_driver.run(snapshot, model_tables, None)
+    _extend_ops(upgrade_ops, _type_up)
+    _extend_ops(rollback_ops, _type_rb)
+
     _con_handler = ConstraintHandler()
     _con_handler._snapshot = snapshot
     _con_handler._view_tables = {t.name for t in model_tables if getattr(t, 'object_type', None) == 'view'}

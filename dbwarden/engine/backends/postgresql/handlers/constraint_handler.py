@@ -70,7 +70,13 @@ class ConstraintHandler(ObjectHandler):
                 result[table]["fks"].append(fk)
         return result
 
+    _snapshot: dict[str, Any] | None = None
+    _view_tables: set[str] | None = None
+    _model_table_names: set[str] | None = None
+
     def model_spec_from_tables(self, model_tables: list[Any]) -> dict[str, Any]:
+        self._model_table_names = {getattr(t, "name", None) for t in model_tables}
+        self._model_table_names.discard(None)
         result: dict[str, Any] = {}
         for table in model_tables:
             uniques: dict[str, Any] = {}
@@ -122,9 +128,6 @@ class ConstraintHandler(ObjectHandler):
                 if "referenced_columns" in fk and "referred_columns" not in fk:
                     fk["referred_columns"] = fk.pop("referenced_columns")
         return spec
-
-    _snapshot: dict[str, Any] | None = None
-    _view_tables: set[str] | None = None
 
     def diff(
         self,
@@ -316,10 +319,9 @@ class ConstraintHandler(ObjectHandler):
                     _ref_table = fk.get("referenced_table") or fk.get("referred_table", "")
                     _snap_tables = (self._snapshot or {}).get("tables", {})
                     _snap_tbl = _snap_tables.get(_ref_table)
-                    _model_ref = model_spec.get(_ref_table)
                     _ref_cols_check = fk.get("referred_columns", fk.get("referenced_columns", []))
                     if _snap_tbl is None:
-                        if _model_ref is None:
+                        if self._model_table_names is not None and _ref_table not in self._model_table_names:
                             continue
                         _snap_ref_cols = set(_ref_cols_check)
                     else:

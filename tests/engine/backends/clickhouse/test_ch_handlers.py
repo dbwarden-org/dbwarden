@@ -692,6 +692,48 @@ class TestChTableHandler:
         up, _ = self.h.diff(snap, model)
         assert not up, "ChEngineSpec with args should converge with tuple snapshot"
 
+    def test_default_settings_stripped_for_convergence(self):
+        """Server-reported default settings are stripped so omitted model settings converge."""
+        snap_opts = {"ch_engine": "MergeTree", "ch_order_by": ["id"], "ch_settings": {"index_granularity": "8192"}}
+        model_opts = {"ch_engine": "MergeTree", "ch_order_by": ["id"]}
+        snap = {"t": {"ch_options": snap_opts, "snapshot_table": {"name": "t", "columns": {}},
+                       "ch_setting_defaults": {"index_granularity": "8192"}}}
+        model = {"t": {"ch_options": model_opts,
+                       "model_table": self._make_table(opts=model_opts)}}
+        snap = self.h.canonicalize(snap)
+        model = self.h.canonicalize(model)
+        up, _ = self.h.diff(snap, model)
+        assert not up, "Default settings should be stripped and converge with omitted model settings"
+
+    def test_non_default_settings_preserved(self):
+        """Settings that differ from defaults are still detected as changes."""
+        snap_opts = {"ch_engine": "MergeTree", "ch_order_by": ["id"], "ch_settings": {"index_granularity": "4096"}}
+        model_opts = {"ch_engine": "MergeTree", "ch_order_by": ["id"]}
+        snap = {"t": {"ch_options": snap_opts, "snapshot_table": {"name": "t", "columns": {}},
+                       "ch_setting_defaults": {"index_granularity": "8192"}}}
+        model = {"t": {"ch_options": model_opts,
+                       "model_table": self._make_table(opts=model_opts)}}
+        snap = self.h.canonicalize(snap)
+        model = self.h.canonicalize(model)
+        up, _ = self.h.diff(snap, model)
+        assert any(op.upgrade_attrs.get("changes", {}).get("ch_settings") for op in up), "Non-default settings should produce a change"
+
+    def test_default_settings_stripped_both_sides_no_false_positive(self):
+        """Snapshot and model carrying the same default setting must converge.
+
+        Regression guard: both sides are stripped with the snapshot's defaults
+        before comparison, so a model that repeats a server default does not
+        drift against a snapshot that reports it.
+        """
+        snap_opts = {"ch_engine": "MergeTree", "ch_order_by": ["id"], "ch_settings": {"index_granularity": "8192"}}
+        model_opts = {"ch_engine": "MergeTree", "ch_order_by": ["id"], "ch_settings": {"index_granularity": "8192"}}
+        snap = {"t": {"ch_options": snap_opts, "snapshot_table": {"name": "t", "columns": {}},
+                       "ch_setting_defaults": {"index_granularity": "8192"}}}
+        model = {"t": {"ch_options": model_opts,
+                       "model_table": self._make_table(opts=model_opts)}}
+        up, _ = self.h.diff(snap, model)
+        assert not up, "Identical default settings should not produce ops"
+
 
 # ── Cluster matrix tests (all handlers, NONE + ON_CLUSTER) ─────────────────
 

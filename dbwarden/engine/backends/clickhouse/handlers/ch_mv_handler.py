@@ -67,6 +67,12 @@ class ChMaterializedViewHandler(ObjectHandler):
     # ── canonicalize ──────────────────────────────────────────────────────────
 
     def canonicalize(self, spec: dict[str, Any]) -> dict[str, Any]:
+        import re
+
+        for entry in spec.values():
+            select = entry.get("ch_select_statement")
+            if isinstance(select, str):
+                entry["ch_select_statement"] = re.sub(r"\s+", " ", select).strip()
         return spec
 
     # ── diff ──────────────────────────────────────────────────────────────────

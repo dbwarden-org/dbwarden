@@ -3,7 +3,10 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from dbwarden.engine.backends.clickhouse.generate_models import _render_ch_meta
+from dbwarden.engine.backends.clickhouse.generate_models import (
+    _render_ch_meta,
+    _render_ch_mv_meta,
+)
 from dbwarden.engine.backends.mysql.generate_models import _render_mysql_meta
 from dbwarden.engine.backends.postgresql.generate_models import (
     _format_pg_type,
@@ -68,8 +71,12 @@ def _generate_table_code(
     if not class_name:
         class_name = table_name.capitalize()
 
+    is_ch_mv = bool(ch_options and object_type == "materialized_view")
+    effective_base = "MaterializedView" if is_ch_mv else base_class_name
+    meta_class = "CHViewMeta" if is_ch_mv else "CHTableMeta"
+
     lines: list[str] = []
-    lines.append(f"class {class_name}({base_class_name}):")
+    lines.append(f"class {class_name}({effective_base}):")
     lines.append(f"    __tablename__ = {table_name!r}")
     for col in columns:
         col_line = _format_column(col)
@@ -86,8 +93,11 @@ def _generate_table_code(
 
     if ch_options:
         lines.append("")
-        lines.append("    class Meta(CHTableMeta):")
-        lines.extend(_render_ch_meta(columns, ch_options, object_type))
+        if is_ch_mv:
+            lines.extend(_render_ch_mv_meta(columns, ch_options))
+        else:
+            lines.append(f"    class Meta({meta_class}):")
+            lines.extend(_render_ch_meta(columns, ch_options, object_type))
     if pg_meta or any(col.get("pg_meta") for col in columns):
         lines.append("")
         lines.extend(_render_postgresql_meta(columns, pg_meta))

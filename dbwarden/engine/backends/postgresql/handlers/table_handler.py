@@ -22,6 +22,11 @@ class TableHandler(ObjectHandler):
     def extract(self, snapshot: dict[str, Any]) -> dict[str, Any]:
         result: dict[str, Any] = {}
         for tname, tdata in snapshot.get("tables", {}).items():
+            # AggregatingMergeTree target tables are managed by ChAggTargetHandler;
+            # including them here would produce spurious drop_table operations.
+            ch_engine = (tdata.get("ch_options") or {}).get("ch_engine", "")
+            if "AggregatingMergeTree" in str(ch_engine):
+                continue
             result[tname] = {
                 "comment": tdata.get("comment"),
                 "object_type": tdata.get("object_type", "table"),

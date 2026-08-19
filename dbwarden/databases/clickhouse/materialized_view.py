@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import warnings
 from dataclasses import dataclass, field as dc_field
 from typing import Any
@@ -49,7 +50,10 @@ class MaterializedViewSpec:
             ) if self.select is not None else None,
         }
         if self.to is not None:
-            d["ch_to_table"] = self.to
+            to_value = self.to
+            if isinstance(to_value, type) and hasattr(to_value, "__tablename__"):
+                to_value = to_value.__tablename__
+            d["ch_to_table"] = to_value
         if self.refresh is not None:
             d["ch_refresh"] = self.refresh
         if self.populate:
@@ -274,19 +278,53 @@ class AggregatingViewSpec:
         mv_name = self.mv_name if self.target_name else ""
         source_name = _resolve_source(self.source)
 
-        # Resolve source column types for cascade combinator detection
+        # Resolve source column types for cascade combinator detection and for
+        # deriving the target AggregateFunction signature from plain source columns.
         source_col_types = _resolve_source_column_types(self.source)
 
-        group_parts = [render_expr(g) for g in group_by]
+        # Build effective aggregate expressions.  When the source is a plain
+        # table, the default Float64 arg type is replaced by the resolved CH
+        # type of the source column so the target column matches the state
+        # combinator (e.g. sum over an Int32 column -> AggregateFunction(sum, Int32)).
+        from dbwarden.databases.clickhouse.agg import AggExpr, _classify_column_type
+        from dbwarden.engine.backends.clickhouse.extract import _render_ch_type_from_sa
+
+        effective_aggregates: list[AggExpr] = []
+        aggregate_source_types: list[str | None] = []
+        for a in aggregates:
+            src_type: str | None = None
+            if a.arg is not None:
+                arg_name = getattr(a.arg, "name", None) or getattr(a.arg, "key", None)
+                if isinstance(a.arg, str):
+                    arg_name = a.arg
+                if arg_name:
+                    src_type = source_col_types.get(arg_name)
+            aggregate_source_types.append(src_type)
+
+            effective = a
+            if src_type is not None and _classify_column_type(src_type)[0] == "plain":
+                ch_type = _render_ch_type_from_sa(None, src_type.upper().strip())
+                effective = AggExpr(a.func, a.arg, (ch_type,), a.alias)
+            effective_aggregates.append(effective)
+
+        group_parts: list[str] = []
+        for g in group_by:
+            rendered = render_expr(g)
+            alias = column_name_from_expr(g)
+            # Labels and plain column references compile without the AS alias;
+            # add it so the select item matches the target column and GROUP BY.
+            if not re.search(r"\s+AS\s+", rendered, re.IGNORECASE):
+                rendered = f"{rendered} AS {alias}"
+            group_parts.append(rendered)
         select_items = list(group_parts) + [
-            a.state_combinator(source_column_type=source_col_types.get(a.alias))
-            for a in aggregates
+            a.state_combinator(source_column_type=src_type)
+            for a, src_type in zip(effective_aggregates, aggregate_source_types)
         ]
 
         select_sql = (
-            "SELECT\n    " + ",\n    ".join(select_items) +
-            "\nFROM " + source_name +
-            "\nGROUP BY " + ", ".join(
+            "SELECT " + ", ".join(select_items) +
+            " FROM " + source_name +
+            " GROUP BY " + ", ".join(
                 column_name_from_expr(g) for g in group_by
             )
         )
@@ -296,7 +334,7 @@ class AggregatingViewSpec:
         target_opts: dict[str, Any] = {
             "name": target,
             "columns": target_columns,
-            "aggregates": aggregates,
+            "aggregates": effective_aggregates,
             "order_by": render_expr_list(order_by if isinstance(order_by, list) else [order_by]),
         }
         if self.partition_by is not None:

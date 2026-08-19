@@ -544,6 +544,76 @@ class TestExtractClickhouseSchemaSnapshot:
         result = _extract_clickhouse_schema_snapshot(conn, "test_db")
         assert result["tables"]["my_mv"]["ch_options"]["ch_order_by"] == "id"
 
+    def test_materialized_view_strips_db_qualifier(self):
+        from dbwarden.engine.snapshot.extract_ch import _extract_clickhouse_schema_snapshot
+
+        table_row = _mock_row(name="my_mv", engine="MaterializedView",
+                              engine_full="",
+                              create_table_query="CREATE MATERIALIZED VIEW my_mv ENGINE = MergeTree() ORDER BY id AS SELECT * FROM test_db.src",
+                              sorting_key="id", primary_key=None,
+                              partition_key=None, sampling_key=None,
+                              comment=None)
+        conn = MagicMock()
+
+        def _execute_side(*args, **kwargs):
+            result = MagicMock()
+            sql = str(args[0]) if args else ""
+            if sql.strip() == "SELECT currentDatabase()":
+                result.scalar.return_value = "test_db"
+                result.fetchall.return_value = []
+            elif "FROM system.tables" in sql:
+                result.fetchall.return_value = [table_row]
+            elif "FROM system.columns" in sql and "ttl_expression" not in sql:
+                result.fetchall.return_value = []
+            elif "FROM system.data_skipping_indices" in sql:
+                result.fetchall.return_value = []
+            elif "FROM system.merge_tree_settings" in sql:
+                result.fetchall.return_value = []
+            else:
+                result.fetchall.return_value = []
+            return result
+
+        conn.execute.side_effect = _execute_side
+        result = _extract_clickhouse_schema_snapshot(conn, "test_db")
+        select = result["tables"]["my_mv"]["ch_options"]["ch_select_statement"]
+        assert "test_db." not in select
+        assert select == "SELECT * FROM src"
+
+    def test_materialized_view_to_target_extracted(self):
+        from dbwarden.engine.snapshot.extract_ch import _extract_clickhouse_schema_snapshot
+
+        table_row = _mock_row(name="my_mv", engine="MaterializedView",
+                              engine_full="",
+                              create_table_query="CREATE MATERIALIZED VIEW my_mv TO test_db.mv_target AS SELECT * FROM src",
+                              sorting_key=None, primary_key=None,
+                              partition_key=None, sampling_key=None,
+                              comment=None)
+        conn = MagicMock()
+
+        def _execute_side(*args, **kwargs):
+            result = MagicMock()
+            sql = str(args[0]) if args else ""
+            if sql.strip() == "SELECT currentDatabase()":
+                result.scalar.return_value = "test_db"
+                result.fetchall.return_value = []
+            elif "FROM system.tables" in sql:
+                result.fetchall.return_value = [table_row]
+            elif "FROM system.columns" in sql and "ttl_expression" not in sql:
+                result.fetchall.return_value = []
+            elif "FROM system.data_skipping_indices" in sql:
+                result.fetchall.return_value = []
+            elif "FROM system.merge_tree_settings" in sql:
+                result.fetchall.return_value = []
+            else:
+                result.fetchall.return_value = []
+            return result
+
+        conn.execute.side_effect = _execute_side
+        result = _extract_clickhouse_schema_snapshot(conn, "test_db")
+        opts = result["tables"]["my_mv"]["ch_options"]
+        assert opts["ch_object_type"] == "materialized_view"
+        assert opts["ch_to_table"] == "mv_target"
+
     def test_with_regular_table(self):
         from dbwarden.engine.snapshot.extract_ch import _extract_clickhouse_schema_snapshot
 
@@ -638,3 +708,38 @@ class TestExtractClickhouseSchemaSnapshot:
         conn.execute.side_effect = _execute_side
         result = _extract_clickhouse_schema_snapshot(conn, "test_db")
         assert "tables" in result
+
+
+class TestStripClickhouseDbQualifier:
+    def test_strips_current_db_prefix(self):
+        from dbwarden.engine.snapshot.extract_ch import _strip_clickhouse_db_qualifier
+
+        assert _strip_clickhouse_db_qualifier(
+            "SELECT id, payload FROM dbwarden_test.events", "dbwarden_test"
+        ) == "SELECT id, payload FROM events"
+
+    def test_preserves_cross_db_prefix(self):
+        from dbwarden.engine.snapshot.extract_ch import _strip_clickhouse_db_qualifier
+
+        assert _strip_clickhouse_db_qualifier(
+            "SELECT id FROM other_db.events", "dbwarden_test"
+        ) == "SELECT id FROM other_db.events"
+
+    def test_skips_quoted_literals(self):
+        from dbwarden.engine.snapshot.extract_ch import _strip_clickhouse_db_qualifier
+
+        assert _strip_clickhouse_db_qualifier(
+            "SELECT * FROM dbwarden_test.events WHERE x = 'dbwarden_test.events'", "dbwarden_test"
+        ) == "SELECT * FROM events WHERE x = 'dbwarden_test.events'"
+
+    def test_handles_backtick_quoted_identifiers(self):
+        from dbwarden.engine.snapshot.extract_ch import _strip_clickhouse_db_qualifier
+
+        assert _strip_clickhouse_db_qualifier(
+            "SELECT id FROM dbwarden_test.`weird-table`", "dbwarden_test"
+        ) == "SELECT id FROM `weird-table`"
+
+    def test_none_returns_none(self):
+        from dbwarden.engine.snapshot.extract_ch import _strip_clickhouse_db_qualifier
+
+        assert _strip_clickhouse_db_qualifier(None, "dbwarden_test") is None

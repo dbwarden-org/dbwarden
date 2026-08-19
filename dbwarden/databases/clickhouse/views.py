@@ -310,24 +310,30 @@ def ch_view_tables_from_models(
     for tablename in sorted_names:
         model_class, view_type, spec = view_info[tablename]
 
-        # Build columns from MappedColumn descriptors on the class (Mode A).
+        # Build columns from Column / MappedColumn descriptors on the class (Mode A).
         columns: list[ModelColumn] = []
+        from sqlalchemy import Column as _SAColumn
         from sqlalchemy.orm import MappedColumn as _MappedColumn
         for attr_name, val in model_class.__dict__.items():
             if attr_name.startswith("_"):
                 continue
+            sa_col = None
             if isinstance(val, _MappedColumn):
                 col_pairs = getattr(val, "columns_to_assign", None)
                 if col_pairs:
                     sa_col = col_pairs[0][0]
-                    ch_type = _map_sa_type_to_clickhouse(sa_col) if sa_col is not None else "String"
-                    columns.append(ModelColumn(
-                        name=attr_name,
-                        type=ch_type,
-                        nullable=getattr(sa_col, "nullable", True),
-                        primary_key=getattr(sa_col, "primary_key", False),
-                        unique=False, default=None, foreign_key=None,
-                    ))
+            elif isinstance(val, _SAColumn):
+                sa_col = val
+            if sa_col is not None:
+                ch_type = _map_sa_type_to_clickhouse(sa_col) if sa_col is not None else "String"
+                columns.append(ModelColumn(
+                    name=attr_name,
+                    type=ch_type,
+                    nullable=getattr(sa_col, "nullable", True),
+                    primary_key=getattr(sa_col, "primary_key", False),
+                    unique=False, default=None, foreign_key=None,
+                    ch_meta={"ch_type": ch_type},
+                ))
 
         # Build clickhouse_options from spec
         clickhouse_options = spec.to_dict()
@@ -337,19 +343,15 @@ def ch_view_tables_from_models(
             target_table = _expand_agg_target(model_class, spec)
             if target_table:
                 tables.append(target_table)
-            # Flatten agg_mv into top-level keys for the MV handler
+            # Use the full materialized-view spec so handlers see ch_object_type
+            # and any other options; only the aggregating target is separate.
             agg_mv = clickhouse_options.get("ch_agg_mv", {})
-            mv_opts: dict[str, Any] = {}
-            to_table = agg_mv.get("ch_to_table")
-            if to_table:
-                mv_opts["ch_to_table"] = to_table
-            select = agg_mv.get("ch_select_statement")
-            if select:
-                mv_opts["ch_select_statement"] = select
+            mv_opts: dict[str, Any] = dict(agg_mv)
             mv_name = spec.mv_name
         else:
             mv_opts = clickhouse_options
             mv_name = tablename
+        mv_opts.setdefault("ch_object_type", "materialized_view")
         mv_table = ModelTable(
             name=mv_name,
             columns=columns,
@@ -496,19 +498,22 @@ def _make_target_columns(
                 default=str(sa_col.default) if sa_col.default is not None else None,
                 foreign_key=None,
                 comment=sa_col.comment or None,
+                ch_meta={"ch_type": col_type},
             ))
 
     for name in column_names:
         if name not in {c.name for c in columns}:
             src_type = _source_column_types.get(name) if _source_column_types else None
+            col_type = agg_map.get(name, src_type or "String")
             columns.append(ModelColumn(
                 name=name,
-                type=agg_map.get(name, src_type or "String"),
+                type=col_type,
                 nullable=True,
                 primary_key=False,
                 unique=False,
                 default=None,
                 foreign_key=None,
+                ch_meta={"ch_type": col_type},
             ))
 
     return columns

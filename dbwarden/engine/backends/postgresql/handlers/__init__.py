@@ -7,6 +7,7 @@ from .rename_table_handler import RenameTableHandler
 from .schema_handler import SchemaHandler
 from .statistics_handler import StatisticsHandler
 from .table_handler import TableHandler
+from .type_handler import TypeHandler
 from .view_handler import ViewHandler
 
 __all__ = [
@@ -19,5 +20,6 @@ __all__ = [
     "SchemaHandler",
     "StatisticsHandler",
     "TableHandler",
+    "TypeHandler",
     "ViewHandler",
 ]

@@ -28,6 +28,56 @@ from dbwarden.engine.backends.clickhouse.render import _parse_ch_type_wrappers
 from .ch_utils import _clean_clickhouse_expression, _pick_clickhouse_codec, _serialize_clickhouse_engine
 
 
+def _strip_clickhouse_db_qualifier(sql: str | None, db_name: str) -> str | None:
+    """Remove the current database qualifier from identifiers in a SQL string.
+
+    ClickHouse reports MV SELECT statements with the database qualifier
+    (``SELECT ... FROM dbwarden_test.events``).  Models are normally written
+    without it, so reverse-engineering must strip it to avoid a spurious
+    ``MODIFY QUERY`` diff.  Replacements are skipped inside quoted literals.
+    """
+    if sql is None or not db_name or not isinstance(db_name, str):
+        return sql
+    db_prefix = db_name + "."
+    n = len(sql)
+    prefix_len = len(db_prefix)
+    result: list[str] = []
+    i = 0
+    quote: str | None = None
+    ident_before = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_`")
+    while i < n:
+        ch = sql[i]
+        if quote is None and ch in ("'", '"', '`'):
+            quote = ch
+            result.append(ch)
+            i += 1
+        elif quote is not None:
+            result.append(ch)
+            # Handle escaped quote (doubled or backslash-escaped).
+            if ch == quote:
+                if i + 1 < n and sql[i + 1] == quote:
+                    result.append(sql[i + 1])
+                    i += 2
+                else:
+                    quote = None
+                    i += 1
+            elif ch == "\\" and i + 1 < n:
+                result.append(sql[i + 1])
+                i += 2
+            else:
+                i += 1
+        elif sql.startswith(db_prefix, i):
+            if i == 0 or sql[i - 1] not in ident_before:
+                i += prefix_len
+            else:
+                result.append(ch)
+                i += 1
+        else:
+            result.append(ch)
+            i += 1
+    return "".join(result)
+
+
 def _extract_setting_defaults(connection: Any) -> dict[str, str]:
     """Snapshot MergeTree setting defaults so canonicalization works offline.
 
@@ -45,6 +95,15 @@ def _extract_setting_defaults(connection: Any) -> dict[str, str]:
 
 def _extract_clickhouse_schema_snapshot(connection: Any, db_name: str) -> dict[str, Any]:
     from dbwarden.databases.clickhouse.engine import ChEngineSpec
+
+    # Use the actual ClickHouse database name for qualifier stripping; the
+    # logical db_name may differ from the database in the connection URL.
+    try:
+        actual_db = connection.execute(text("SELECT currentDatabase()")).scalar()
+        if not isinstance(actual_db, str):
+            actual_db = db_name
+    except Exception:
+        actual_db = db_name
 
     tables: dict[str, Any] = {}
     enums: dict[str, Any] = {}
@@ -267,8 +326,12 @@ def _extract_clickhouse_schema_snapshot(connection: Any, db_name: str) -> dict[s
             "ch_ttl": _parse_clickhouse_ttl_expressions(create_query),
             "ch_settings": _parse_clickhouse_settings(create_query),
             "ch_object_type": object_type,
-            "ch_select_statement": _parse_clickhouse_mv_query(create_query),
-            "ch_to_table": _parse_clickhouse_mv_to_table(create_query),
+            "ch_select_statement": _strip_clickhouse_db_qualifier(
+                _parse_clickhouse_mv_query(create_query), actual_db
+            ),
+            "ch_to_table": _strip_clickhouse_db_qualifier(
+                _parse_clickhouse_mv_to_table(create_query), actual_db
+            ),
             "ch_refresh": _parse_clickhouse_mv_refresh(create_query) if object_type == "materialized_view" else None,
             "ch_dictionary": object_type == "dictionary",
             "ch_dict_layout": _parse_clickhouse_dict_layout(create_query),
@@ -280,32 +343,38 @@ def _extract_clickhouse_schema_snapshot(connection: Any, db_name: str) -> dict[s
             "ch_replica_name": _parse_clickhouse_replica_name(create_query, engine_name),
         }
 
-        columns_dict: dict[str, Any] = {}
-        for col in columns_by_table.get(table_name, []):
-            raw_type = col["type"]
-            _, ch_nullable, ch_low_cardinality = _parse_ch_type_wrappers(str(raw_type))
-            default_kind = col.get("default_kind")
-            default_expression = col.get("default_expression")
-            ch_column: dict[str, Any] = {
-                "ch_codec": _pick_clickhouse_codec(col.get("codec_expression")),
-                "ch_default_expression": default_expression if default_kind == "DEFAULT" else None,
-                "ch_materialized": default_expression if default_kind == "MATERIALIZED" else None,
-            "ch_alias": default_expression if default_kind == "ALIAS" else None,
-            "ch_ephemeral": default_expression if default_kind == "EPHEMERAL" else None,
-            "ch_ttl": col.get("ttl_expression"),
-            "ch_low_cardinality": ch_low_cardinality,
-                "ch_nullable": ch_nullable,
-                "ch_type": raw_type,
-            }
+        # Mode B MVs write into an existing target table; columns belong to the
+        # target, not the MV.  Keeping them here would make diff try to drop
+        # columns from a class that is not allowed to declare them.
+        is_mode_b_mv = object_type == "materialized_view" and ch_options.get("ch_to_table")
 
-            columns_dict[col["name"]] = {
-                "type": raw_type,
-                "nullable": ch_nullable,
-                "primary_key": bool(col.get("is_in_primary_key", False)),
-                "default": default_expression if default_kind == "DEFAULT" else None,
-                "comment": col.get("comment"),
-                "ch_column": ch_column,
-            }
+        columns_dict: dict[str, Any] = {}
+        if not is_mode_b_mv:
+            for col in columns_by_table.get(table_name, []):
+                raw_type = col["type"]
+                _, ch_nullable, ch_low_cardinality = _parse_ch_type_wrappers(str(raw_type))
+                default_kind = col.get("default_kind")
+                default_expression = col.get("default_expression")
+                ch_column: dict[str, Any] = {
+                    "ch_codec": _pick_clickhouse_codec(col.get("codec_expression")),
+                    "ch_default_expression": default_expression if default_kind == "DEFAULT" else None,
+                    "ch_materialized": default_expression if default_kind == "MATERIALIZED" else None,
+                    "ch_alias": default_expression if default_kind == "ALIAS" else None,
+                    "ch_ephemeral": default_expression if default_kind == "EPHEMERAL" else None,
+                    "ch_ttl": col.get("ttl_expression"),
+                    "ch_low_cardinality": ch_low_cardinality,
+                    "ch_nullable": ch_nullable,
+                    "ch_type": raw_type,
+                }
+
+                columns_dict[col["name"]] = {
+                    "type": raw_type,
+                    "nullable": ch_nullable,
+                    "primary_key": bool(col.get("is_in_primary_key", False)),
+                    "default": default_expression if default_kind == "DEFAULT" else None,
+                    "comment": col.get("comment"),
+                    "ch_column": ch_column,
+                }
 
         table_entry: dict[str, Any] = {
             "object_type": object_type,

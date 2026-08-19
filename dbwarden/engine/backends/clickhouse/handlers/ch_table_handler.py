@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from dbwarden.engine.backends.clickhouse.cluster import emit_with_cluster
@@ -48,12 +49,14 @@ class ChTableHandler(ObjectHandler):
 
     def extract(self, snapshot: dict[str, Any]) -> dict[str, Any]:
         result: dict[str, Any] = {}
+        setting_defaults = snapshot.get("ch_setting_defaults") or {}
         for tname, tdata in snapshot.get("tables", {}).items():
             ch_opts = tdata.get("ch_options") or {}
             if ch_opts:
                 result[tname] = {
                     "ch_options": dict(ch_opts),
                     "snapshot_table": tdata,
+                    "ch_setting_defaults": dict(setting_defaults),
                 }
         return result
 
@@ -85,11 +88,31 @@ class ChTableHandler(ObjectHandler):
                 opts["ch_engine"] = engine
             if isinstance(engine, (list, tuple)) and len(engine) == 1:
                 opts["ch_engine"] = engine[0]
+            select = opts.get("ch_select_statement")
+            if isinstance(select, str):
+                opts["ch_select_statement"] = re.sub(r"\s+", " ", select).strip()
             opts = canonicalize_primary_key(opts)
             for key in ("ch_order_by", "ch_primary_key"):
                 val = opts.get(key)
                 if isinstance(val, str) and val:
                     opts[key] = [part.strip() for part in val.split(",") if part.strip()]
+
+            # Strip settings that equal the server's reported defaults, so a
+            # hand-written model that omits settings does not drift against a
+            # snapshot that contains ClickHouse-reported defaults.
+            setting_defaults = entry.get("ch_setting_defaults") or {}
+            if setting_defaults and opts.get("ch_settings"):
+                settings = opts["ch_settings"]
+                if isinstance(settings, dict):
+                    stripped = {
+                        k: v for k, v in settings.items()
+                        if str(setting_defaults.get(k)) != str(v)
+                    }
+                    if stripped:
+                        opts["ch_settings"] = stripped
+                    else:
+                        opts.pop("ch_settings", None)
+
             opts = {k: v for k, v in opts.items() if v is not None and v is not False and v != []}
             entry["ch_options"] = opts
         return spec
@@ -102,6 +125,23 @@ class ChTableHandler(ObjectHandler):
         upgrade_ops: list[Op] = []
         rollback_ops: list[Op] = []
 
+        def _strip_default_settings(opts: dict[str, Any], defaults: dict[str, str]) -> dict[str, Any]:
+            if not defaults or not opts.get("ch_settings"):
+                return opts
+            settings = opts["ch_settings"]
+            if not isinstance(settings, dict):
+                return opts
+            stripped = {
+                k: v for k, v in settings.items()
+                if str(defaults.get(k)) != str(v)
+            }
+            new_opts = dict(opts)
+            if stripped:
+                new_opts["ch_settings"] = stripped
+            else:
+                new_opts.pop("ch_settings", None)
+            return new_opts
+
         all_tables = set(snap_spec.keys()) | set(model_spec.keys())
         for tname in sorted(all_tables):
             snap_entry = snap_spec.get(tname, {})
@@ -110,6 +150,10 @@ class ChTableHandler(ObjectHandler):
             model_opts = model_entry.get("ch_options", {})
             if not snap_opts and not model_opts:
                 continue
+
+            setting_defaults = snap_entry.get("ch_setting_defaults") or {}
+            snap_opts = _strip_default_settings(snap_opts, setting_defaults)
+            model_opts = _strip_default_settings(model_opts, setting_defaults)
 
             snapshot_table = snap_entry.get("snapshot_table")
             model_table = model_entry.get("model_table")

@@ -38,7 +38,15 @@ def _write_models(
             if table.get("dialect") in ("mysql", "mariadb"):
                 my_dialect_imports |= _resolve_mysql_imports(table["columns"])
             if table.get("ch_options"):
-                ch_meta_imports.update({"CHColumnMeta", "CHTableMeta", "ChEngineSpec", "ProjectionSpec"})
+                if table.get("object_type") == "materialized_view":
+                    ch_meta_imports.update({
+                        "MaterializedView", "CHViewMeta", "materialized_view",
+                        "CHColumnMeta", "ChEngineSpec",
+                    })
+                else:
+                    ch_meta_imports.update({
+                        "CHColumnMeta", "CHTableMeta", "ChEngineSpec", "ProjectionSpec",
+                    })
             all_classes.append(
                 _generate_table_code(
                     table["name"],
@@ -168,7 +176,13 @@ def _write_models(
             content_lines.append("from dbwarden.databases.mysql import " + imports + "\n")
             content_lines.append("\n")
         if table.get("ch_options"):
-            ch_imports_set: set[str] = {"CHColumnMeta", "CHTableMeta", "ChEngineSpec", "ProjectionSpec"}
+            if table.get("object_type") == "materialized_view":
+                ch_imports_set: set[str] = {
+                    "MaterializedView", "CHViewMeta", "materialized_view",
+                    "CHColumnMeta", "ChEngineSpec",
+                }
+            else:
+                ch_imports_set = {"CHColumnMeta", "CHTableMeta", "ChEngineSpec", "ProjectionSpec"}
             needs_ch_spec = any(col.get("ch_meta") for col in table["columns"])
             if needs_ch_spec:
                 ch_imports_set.add("ch")

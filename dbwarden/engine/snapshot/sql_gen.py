@@ -117,6 +117,7 @@ def snapshot_diff_to_sql(
         SchemaHandler,
         StatisticsHandler,
         TableHandler,
+        TypeHandler,
         ViewHandler,
     )
     from dbwarden.engine.backends.clickhouse.handlers import (
@@ -157,6 +158,7 @@ def snapshot_diff_to_sql(
         ChSkipIndexHandler(),
         StatisticsHandler(),
         TableHandler(),
+        TypeHandler(),
         ViewHandler(),
     ):
         for _ot in getattr(_h, "op_types", (_h.object_type,)):

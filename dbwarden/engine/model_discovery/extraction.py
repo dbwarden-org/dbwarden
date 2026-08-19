@@ -398,9 +398,28 @@ def extract_column_info(
                     default = default_str
             else:
                 default = default_str
+        identity_info: dict[str, Any] = {}
         if column.server_default is not None:
-            default = str(column.server_default.arg)
+            from sqlalchemy.schema import Identity as _SAIdentity
 
+            if isinstance(column.server_default, _SAIdentity):
+                identity_info["pg_identity"] = (
+                    "always" if column.server_default.always else "by_default"
+                )
+                if column.server_default.start is not None:
+                    identity_info["pg_identity_start"] = column.server_default.start
+                if column.server_default.increment is not None:
+                    identity_info["pg_identity_increment"] = column.server_default.increment
+                if column.server_default.minvalue is not None:
+                    identity_info["pg_identity_min"] = column.server_default.minvalue
+                if column.server_default.maxvalue is not None:
+                    identity_info["pg_identity_max"] = column.server_default.maxvalue
+            else:
+                default = str(column.server_default.arg)
+        for k, v in identity_info.items():
+            column.info[k] = v
+
+        original_type_str = type_str
         type_str = _map_sqlalchemy_type_to_backend(
             type_str,
             is_primary_key=primary_key,
@@ -408,6 +427,10 @@ def extract_column_info(
             autoincrement=autoincrement,
             backend=backend,
         )
+        if identity_info:
+            # Identity columns keep their base integer type; the identity
+            # metadata carries the generated-always semantics.
+            type_str = original_type_str
 
         if _get_backend_name(db_name) == "sqlite":
             strict = is_strict_translation()
@@ -499,6 +522,8 @@ def extract_column_info(
                 val = column.info[key]
                 if key == "pg_storage" and val in ("PLAIN", "EXTENDED"):
                     continue
+                if key == "pg_identity" and isinstance(val, str):
+                    val = val.lower().replace(" ", "_")
                 pg_meta[key] = val
         if backend == "postgresql":
             if item_type is not None:

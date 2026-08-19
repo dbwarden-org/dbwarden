@@ -317,33 +317,39 @@ def generate_models_cmd(
             ch_options: dict = {}
             if actual_dialect == "clickhouse" and clickhouse_engines:
                 ch_options = _extract_ch_meta(connection, table_name)
-                ch_columns_map: dict[str, dict] = {}
-                for ch_col in ch_options.get("columns", []):
-                    ch_columns_map[ch_col["name"]] = ch_col
-                for col_entry in columns_info:
-                    cname = col_entry["name"]
-                    if cname in ch_columns_map:
-                        ch_col = ch_columns_map[cname]
-                        if ch_col.get("ch_meta"):
-                            col_entry["ch_meta"] = ch_col["ch_meta"]
-                        if ch_col.get("comment"):
-                            col_entry["comment"] = col_entry.get("comment") or ch_col["comment"]
-                ch_pk_cols = set()
-                for key in ("ch_primary_key", "ch_order_by"):
-                    pk_list = ch_options.get(key, [])
-                    if pk_list:
-                        if isinstance(pk_list, list):
-                            ch_pk_cols.update(pk_list)
-                        else:
-                            ch_pk_cols.add(pk_list)
-                if ch_pk_cols:
+                # Mode B MVs (explicit TO target) must not declare columns in the
+                # class API; discard reflected columns so the generated model only
+                # carries the materialized_view(...) spec.
+                if ch_options.get("ch_object_type") == "materialized_view" and ch_options.get("ch_to_table"):
+                    columns_info = []
+                else:
+                    ch_columns_map: dict[str, dict] = {}
+                    for ch_col in ch_options.get("columns", []):
+                        ch_columns_map[ch_col["name"]] = ch_col
                     for col_entry in columns_info:
-                        if col_entry["name"] in ch_pk_cols:
+                        cname = col_entry["name"]
+                        if cname in ch_columns_map:
+                            ch_col = ch_columns_map[cname]
+                            if ch_col.get("ch_meta"):
+                                col_entry["ch_meta"] = ch_col["ch_meta"]
+                            if ch_col.get("comment"):
+                                col_entry["comment"] = col_entry.get("comment") or ch_col["comment"]
+                    ch_pk_cols = set()
+                    for key in ("ch_primary_key", "ch_order_by"):
+                        pk_list = ch_options.get(key, [])
+                        if pk_list:
+                            if isinstance(pk_list, list):
+                                ch_pk_cols.update(pk_list)
+                            else:
+                                ch_pk_cols.add(pk_list)
+                    if ch_pk_cols:
+                        for col_entry in columns_info:
+                            if col_entry["name"] in ch_pk_cols:
+                                col_entry["primary_key"] = True
+                    elif actual_dialect == "clickhouse":
+                        for col_entry in columns_info:
                             col_entry["primary_key"] = True
-                elif actual_dialect == "clickhouse":
-                    for col_entry in columns_info:
-                        col_entry["primary_key"] = True
-                        break
+                            break
                 ch_options.pop("columns", None)
 
             my_meta: dict[str, Any] | None = None

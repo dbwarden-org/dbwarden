@@ -974,6 +974,21 @@ class TestColumnExtraction:
         assert col.type == "jsonb"
         assert col.pg_meta.get("pg_type") == {"kind": "jsonb"}
 
+    def test_extract_identity_column_normalizes_case(self, monkeypatch):
+        """Regression: SQLAlchemy Identity(always=True) must produce lowercase pg_identity."""
+        from sqlalchemy import Column, Integer
+        from sqlalchemy.schema import Identity
+
+        monkeypatch.setattr(model_discovery.type_mapping, "_get_backend_name", lambda db_name=None: "postgresql")
+
+        col_obj = Column("id", Integer, Identity(always=True, start=10), primary_key=True)
+
+        col = extract_column_info(col_obj)
+
+        assert col is not None
+        assert col.pg_meta.get("pg_identity") == "always"
+        assert col.pg_meta.get("pg_identity_start") == 10
+
     def test_extract_column_falls_back_unknown_type_to_text_for_sqlite(self, monkeypatch):
         from sqlalchemy import Column
         from sqlalchemy.types import UserDefinedType

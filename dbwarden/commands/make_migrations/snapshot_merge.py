@@ -4,7 +4,7 @@ from typing import Any
 
 
 _ALTER_ADD_COLUMN_RE = re.compile(
-    r"ALTER\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\S+)\s+ADD\s+(?:COLUMN\s+)?(\S+)",
+    r"ALTER\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\S+)\s+ADD\s+(?:COLUMN\s+)?(?!CONSTRAINT\b|PRIMARY\b|FOREIGN\b|UNIQUE\b|CHECK\b|EXCLUDE\b)(\S+)",
     re.IGNORECASE,
 )
 

@@ -1063,6 +1063,36 @@ class TestForeignKeyDiff:
         fk_ops = [op for op in upgrade if "foreign_key" in op["type"]]
         assert len(fk_ops) == 0
 
+    def test_fk_diff_add_when_referenced_table_has_no_constraints(self):
+        """Regression: FK creation must work even when the referenced table has no constraints of its own."""
+        snapshot = {
+            "tables": {
+                "orders": {"columns": {"id": {"type": "integer"}, "event_id": {"type": "integer"}}},
+                "events": {"columns": {"id": {"type": "integer"}}},
+            },
+            "constraints": {},
+            "indexes": {},
+        }
+        model_tables = [
+            ModelTable(
+                name="orders",
+                columns=[
+                    ModelColumn("id", "INTEGER", False, True, False, None, None),
+                    ModelColumn("event_id", "INTEGER", False, False, False, None, None),
+                ],
+                foreign_keys=[{"columns": ["event_id"], "referred_table": "events", "referred_columns": ["id"]}],
+            ),
+            ModelTable(
+                name="events",
+                columns=[ModelColumn("id", "INTEGER", False, True, False, None, None)],
+            ),
+        ]
+        upgrade, rollback = diff_models_against_snapshot(model_tables, snapshot)
+        fk_ops = [op for op in upgrade if op["type"] == "add_foreign_key"]
+        assert len(fk_ops) == 1
+        assert fk_ops[0]["columns"] == ["event_id"]
+        assert fk_ops[0]["referenced_table"] == "events"
+
     def test_fk_add_sql_postgresql(self, monkeypatch):
         monkeypatch.setattr("dbwarden.engine.snapshot._get_backend", lambda db_name=None: "postgresql")
         op = Op(object_type="add_foreign_key", upgrade_attrs={"table": "users", "columns": ["group_id"], "referenced_table": "groups", "referenced_columns": ["id"]})
