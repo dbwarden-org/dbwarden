@@ -1,7 +1,7 @@
 # dbwarden Documentation
 > Full documentation for dbwarden - a SQL-first database migration system
 > Source: https://docs.dbwarden.org
-> Pages: 133
+> Pages: 134
 
 ========================================================================
 PAGE: https://docs.dbwarden.org/advanced/checksum-integrity/
@@ -906,7 +906,70 @@ PAGE: https://docs.dbwarden.org/changelog/
 
 All notable changes to dbwarden, newest first. Versions follow semantic versioning and are tagged in the repository.
 
-## [Unreleased]
+## Unreleased
+
+### Added
+
+- **SQLite is a first-class backend.** Changes SQLite's `ALTER TABLE` cannot express - column type, nullability, default, table constraints, `WITHOUT ROWID`, `STRICT`, generated expressions and collation - are emitted as a table rebuild (create, copy, drop, rename, recreate indexes) with the reverse rebuild as the rollback, instead of a comment. All changes to one table collapse into a single rebuild.
+- **SQLite table and column metadata.** `SqTableMeta` supports `sq_without_rowid`, `sq_strict` and `sq_indexes`; the new `SqColumnMeta` plus `sq.field(generated=..., generated_mode=..., collate=...)` cover generated columns and per-column collation. Both are emitted in `CREATE TABLE`, captured by schema snapshots, and written back by `generate-models`.
+- **SQLite impact analysis.** `check-impact` reports table-option, generated-column and collation changes as warnings, because each rebuilds the table.
+
+### Fixed
+
+- **PostgreSQL reverse-engineering now works with mixed-case and quoted identifiers.** `generate-models` and snapshot queries use quoted `regclass` references, so tables and columns such as `"MyTable"` and `"weird-col"` no longer silently fail metadata extraction.
+- **`generate-models` no longer crashes against PostgreSQL.** The command now opens a raw SQLAlchemy connection instead of a transactional one, avoiding the closed-transaction error during SQLAlchemy reflection.
+- **Generated model imports are complete.** Models that only have column-level metadata now correctly import the required table-meta class (`PGTableMeta`, `MyTableMeta`, `SqTableMeta`).
+- **Python identifier sanitization.** SQL column names containing hyphens or other non-identifier characters are converted into valid Python attribute and nested-class names while preserving the original SQL name in `Column(...)`.
+- **PostgreSQL array columns render correctly.** Array types are emitted as `text[]`, `integer[]`, etc. instead of bare `array`.
+- **ClickHouse codec extraction is parenthesis-aware.** Multi-codec chains like `CODEC(Delta(8), ZSTD(1))` are preserved in order, and the implicit default `LZ4` codec is omitted.
+- **ClickHouse `LowCardinality(Nullable(T))` is preserved.** Reverse-engineering now correctly captures both `low_cardinality=True` and `nullable=True` for nested wrappers.
+- **PostgreSQL `SERIAL`/`BIGSERIAL` and identity columns round-trip cleanly.** `generate-models` only marks columns as `autoincrement=True` when the live default is a `nextval(...)` sequence; identity columns are left as `autoincrement=False` and rely on `pg_meta`. `make-migrations` now treats both `SERIAL` types and identity columns as autoincrement-equivalent.
+- **PostgreSQL identity column ALTER syntax is valid.** Identity changes now emit `ALTER TABLE ... ALTER COLUMN ... SET START WITH ...`, `SET INCREMENT BY ...`, `SET MINVALUE ...`, `SET MAXVALUE ...` instead of the invalid `SET (...)` form.
+- **ClickHouse default changes generate valid DDL.** `_build_alter_default_sql` now emits `ALTER TABLE ... MODIFY COLUMN ... DEFAULT ...` and `... REMOVE DEFAULT` instead of falling through to PostgreSQL `ALTER COLUMN SET DEFAULT` syntax.
+- **ClickHouse nullability changes are type-safe.** The shared nullable builder guards against generic SQLAlchemy type strings and requires a ClickHouse type such as `Int64` or `String`.
+- **ClickHouse materialized view DDL is complete.** `CREATE MATERIALIZED VIEW` now includes `POPULATE`, `REFRESH ...`, and `SETTINGS ...` when declared, and omits engine/`ORDER BY`/`PARTITION BY` clauses when a `TO` target is set.
+- **ClickHouse `ChEngineSpec` engines converge with snapshot engines.** Model-side `ChEngineSpec('MergeTree')` and similar specs are serialized to the same string/tuple representation stored in snapshots, so `make-migrations` no longer emits spurious `alter_ch_options` operations for engine-only differences.
+- **ClickHouse implicit MV backing tables are excluded from diffs.** Internal `.inner_id.*` tables created by ClickHouse for materialized views with implicit storage are filtered out of model-to-snapshot diffs.
+- **ClickHouse default `MergeTree` settings no longer cause drift.** Snapshot extraction records the server's default setting values; both sides strip never-declared defaults so hand-written models that omit settings converge with snapshots.
+- **ClickHouse materialized view `SELECT` database qualifier is stripped during reverse-engineering.** `FROM dbwarden_test.events` becomes `FROM events` in the snapshot, preventing spurious `MODIFY QUERY` diffs when models are written without qualifiers.
+- **ClickHouse materialized views reverse-engineer to `MaterializedView` models.** `generate-models` now emits `MaterializedView` base classes with `CHViewMeta` and `materialized_view(...)` specs for both implicit-storage and `TO`-target MVs, including correct imports for single-file and per-file output.
+- **PostgreSQL enum types are created before tables in migrations.** `make-migrations` now emits `CREATE TYPE ... AS ENUM (...)` before any `CREATE TABLE` that references the enum, both when diffing against a snapshot and when generating the very first migration.
+- **PostgreSQL foreign keys round-trip when the referenced table has no constraints.** The constraint handler now recognizes the referenced table from the full model set rather than only from tables that declare their own constraints.
+- **PostgreSQL migration parsing no longer invents a `constraint` column.** `ALTER TABLE ... ADD CONSTRAINT ...` statements in pending migrations are ignored by snapshot merging; previously they were misread as `ADD COLUMN constraint`.
+- **PostgreSQL identity and storage metadata no longer drift after reverse-engineering.** `make-migrations` only emits `ALTER TABLE ... SET STORAGE ...` or identity-sequence parameter changes when the model explicitly requests them, so models produced by `generate-models` converge cleanly with the database.
+- **PostgreSQL identity values are normalized to lowercase.** `Identity(always=True)` and `pg.field(identity="ALWAYS")` both normalize to `pg_identity="always"`, eliminating spurious identity diffs.
+
+- **Official plugin provenance recognizes renamed publisher workflows.** `dbwarden plugin add` now verifies the trusted-publishing attestations for the ClickHouse RBAC, PostgreSQL extensions, PostgreSQL RBAC, and PostgreSQL types plugins against their `publishing.yml` workflows.
+- **A migration generated without a snapshot no longer drops every table constraint.** `make-migrations` falls back to generating from the models alone when there is no schema snapshot, the database is unreachable, or the snapshot diff raises. That path emitted columns, indexes and foreign keys but silently omitted `UNIQUE` and `CHECK` constraints, so the schema applied cleanly and then failed at runtime with *there is no unique or exclusion constraint matching the ON CONFLICT specification*.
+- **`EXCLUDE` constraints survive model-only generation.** They are rendered by the PostgreSQL table handler, which the fallback path does not run.
+- **A single-column foreign key is emitted once on MySQL and MariaDB.** It was rendered inline as `REFERENCES` in the column definition *and* as a named `ADD CONSTRAINT`, which MariaDB honours as two constraints.
+- **An unnamed `CHECK` constraint keeps the name the database gave it.** PostgreSQL names an inline `CHECK (age >= 0)` itself while dbwarden's generated name is index-based, so every unnamed check was dropped and recreated on every run - and reordering a model's checks renamed them. Checks the model does not name are now matched by expression, with casts and parentheses normalized away; a changed expression is still detected.
+- **An aggregating view's target table is emitted as ClickHouse DDL.** When the model declared its dimension columns, the target was built from the SQLAlchemy types, producing `VARCHAR(50)` and `INTEGER` instead of `String` and `Int32`, and giving the aggregate column its declared type instead of the `AggregateFunction(...)` signature it needs to accept `-State` rows.
+- **PostgreSQL roles are no longer lost when a table has a row-level security policy.** The policy loop bound its list of policy roles to the same name as the snapshot's role accumulator, so every later role lookup raised `TypeError` and the snapshot recorded no roles at all.
+- **An aggregating view keeps a declared ClickHouse aggregate type.** Only the default `Float64` that `agg.sum()` / `agg.avg()` fall back to is replaced by the source column's resolved type; an explicit type such as `agg.raw("quantile(0.95)", col, "UInt32")` was being rewritten to the source column's `Int32`, changing the `AggregateFunction` signature.
+- **Falling back to model-only generation is announced.** The snapshot diff failing used to be swallowed, leaving no way to tell a degraded migration from a correct one; it now logs the cause and warns.
+- **A column-level `unique=True` produces one constraint, not two.** The column was rendered `UNIQUE` inline *and* emitted again as a named table constraint, leaving two unique constraints - and two indexes - on the same column.
+- **A unique constraint dbwarden named itself no longer renames the database's.** When a model declares a unique constraint without a name, an existing constraint on the same columns - `users_email_key`, say - is now left alone instead of being renamed to `uq_users_email` and, in some orderings, dropped.
+- **Column defaults are compared without their cast.** PostgreSQL reports a default as `'queued'::character varying` while the model spells it `'queued'`, so every run re-emitted the default and the rollback re-quoted the cast into `'''queued''::character varying'`.
+- **Default index sort options are no longer recorded.** `ASC NULLS LAST` and `DESC NULLS FIRST` are what PostgreSQL implies; recording them made plain indexes differ from the models and be dropped and recreated on every run.
+- **A column-level `unique=True` is read from every model.** The constraint was only collected when the model also declared a `class Meta`, so a diff against a database that had the constraint emitted a `DROP CONSTRAINT` for it.
+- **Column storage is compared against the type's own default.** `NUMERIC` defaults to `MAIN` and `TEXT` to `EXTENDED`; recording those made untouched columns differ from the models.
+- **Foreign keys are matched regardless of how the action is spelled.** `ondelete="cascade"` in a model and `CASCADE` in the database no longer read as different constraints.
+- **Constraint canonicalization no longer edits the snapshot it was given.** The diff rewrote the caller's snapshot in place, so anything reading the snapshot after a diff saw constraints it could no longer classify.
+- **Unnamed `CHECK` constraints get a stable key.** The generated name used `hash()`, which is salted per process, so the same schema produced a different snapshot on every run.
+- **SQLite migrations no longer fail the rollback contract.** A column type change or foreign key change on SQLite previously raised `RollbackContractError` because the generated rollback was a placeholder.
+- **SQLite primary keys no longer churn.** A primary key column is recorded as `NOT NULL` when reading a SQLite schema, which SQLite itself reports as nullable, and autoincrement changes are no longer generated for SQLite primary keys where `AUTOINCREMENT` is either implicit or illegal.
+- **Generated SQLite models import cleanly.** `generate-models` writes `sq = sq.field(...)` specs instead of flat `sq_*` attributes, which the metadata reader rejects.
+- **Rebuilt tables keep their column order.** Reconstructing a table from model state preserved sorted order rather than declaration order.
+- **A SQLite rebuild preserves what reflection cannot see.** Declared types keep their length and case (`VARCHAR(255)`, not `varchar`), and `AUTOINCREMENT`, foreign key `ON DELETE` / `ON UPDATE`, unnamed `UNIQUE (...)` constraints, partial indexes, `DESC` / `COLLATE` inside an index, and expression indexes all survive the rebuild.
+- **SQLite partial indexes are recorded.** The index predicate was read only under PostgreSQL's dialect key, so `WHERE` was dropped from every SQLite index.
+
+## [0.17.1] - 2026-08-15
+
+### Added
+
+- **Declarative configuration as the default scaffold.** `dbwarden init` now generates `DbwardenDatabase` subclasses, while discovery supports inherited configuration, aliases, indirect imports, and the existing function-based API.
+- **Migration convergence and replay hardening.** Migration generation and execution now share stronger convergence checks, replay handling, connection cleanup, and PostgreSQL column behavior coverage.
 
 ### Changed
 
@@ -1833,7 +1896,7 @@ The `dbwarden/databases/` package is the concrete backend layer. It contains dia
 - `mysql/`: `MyFieldSpec`, `MyTableSpec`
 - `pgsql/`: `PgFieldSpec`, `PgIndexSpec`, `PgTableSpec`, exclude/partition helpers
 - `mariadb/`: `MdbFieldSpec`, `MdbTableSpec`
-- `sqlite/`: `SqFieldSpec`, `SqTableSpec`
+- `sqlite/`: `SqFieldSpec`, `SqTableSpec`, re-exported `SqTableMeta` / `SqColumnMeta`
 
 ### The Import Contract
 
@@ -1884,7 +1947,7 @@ The orphan `__pycache__` directories under `schema/{clickhouse,mysql,pgsql,maria
 1. Create a new subpackage under `databases/<name>/` with `__init__.py`, `field.py`, and any backend-specific specs.
 2. Define a `*TableSpec` dataclass and a `*FieldSpec` dataclass matching the existing backends.
 3. Register the backend in `databases/__init__.py` and add the shortcut import (`sq`, `my`, etc.).
-4. If the backend needs no column-level `Meta` attributes (like SQLite), add no `*ColumnMeta` class.
+4. If the backend needs no column-level `Meta` attributes, add no `*ColumnMeta` class.
 5. Do not touch files in `schema/` unless you are adding cross-database metadata fields.
 
 ========================================================================
@@ -2103,6 +2166,8 @@ $ dbwarden generate-models --database primary --exclude-tables logs,audit
 ```
 
 > **Note:** `generate-models` works for all supported databases: PostgreSQL, MySQL, MariaDB, ClickHouse, and SQLite. For ClickHouse, use `--clickhouse-engines` or rely on auto-detection from `database_type="clickhouse"`. SQLite produces basic table models without backend-specific metadata.
+>
+> For PostgreSQL, `generate-models` respects the config-level `pg_schema` setting and reverse-engineers tables from that schema. Mixed-case or quoted identifiers (e.g. `"MyTable"`, `"weird-col"`) are sanitized into valid Python attribute names while the original SQL name is preserved in `Column(...)`. For ClickHouse, full codec chains are preserved (e.g. `CODEC(Delta(8), ZSTD(1))`) and `LowCardinality(Nullable(T))` round-trips correctly.
 
 ## Options
 
@@ -2175,6 +2240,9 @@ The following metadata is reverse-engineered:
 - **Collation**: per-column `COLLATE` setting
 - **Storage**: per-column `STORAGE` (PLAIN, MAIN, EXTERNAL, EXTENDED)
 - **Generated columns**: `GENERATED ALWAYS AS (...) STORED`
+- **Enum columns**: `Enum(..., name='type_name')` with the PostgreSQL enum type name
+- **Array columns**: `ARRAY(Text)`, `ARRAY(Integer)`, etc.
+- **JSONB / TSVECTOR columns**: native PostgreSQL types preserved
 - **Table fillfactor**: `WITH (fillfactor = N)`
 - **Tablespace**: `SET TABLESPACE`
 - **Inheritance**: `INHERITS (parent)`
@@ -2217,13 +2285,47 @@ class Event(Base):
             ch = ch.field(codec="ZSTD(3)")
 ```
 
+### Materialized views
+
+Materialized views are reverse-engineered as `MaterializedView` subclasses with a `CHViewMeta` block. The current database qualifier is stripped from both the `SELECT` source tables and the `TO` target, so hand-written models without qualifiers converge with snapshots.
+
+```python
+from dbwarden.databases.clickhouse import MaterializedView, CHViewMeta, materialized_view, ChEngineSpec
+
+class EventCountsMv(MaterializedView):
+    __tablename__ = "event_counts_mv"
+
+    date: Mapped[date] = mapped_column(primary_key=True)
+    count: Mapped[int] = mapped_column()
+
+    class Meta(CHViewMeta):
+        ch = materialized_view(
+            select="SELECT event_date AS date, count() AS count FROM events GROUP BY event_date",
+            engine=ChEngineSpec("MergeTree"),
+            order_by=["date"],
+        )
+```
+
+Mode B (explicit `TO` target) omits `engine`, `order_by`, and `partition_by` in the generated model:
+
+```python
+class EventCountsMv(MaterializedView):
+    __tablename__ = "event_counts_mv"
+
+    class Meta(CHViewMeta):
+        ch = materialized_view(
+            select="SELECT event_date AS date, count() AS count FROM events GROUP BY event_date",
+            to="event_counts",
+        )
+```
+
 The following metadata is reverse-engineered:
 
 - **Engine spec**: engine name, arguments, ZooKeeper path, replica name, settings via `ChEngineSpec`
 - **Ordering and partitioning**: `ch_order_by`, `ch_primary_key`, `ch_partition_by`, `ch_sample_by`
 - **TTL**: table-level TTL expressions
 - **Projections**: named projections via `ProjectionSpec`
-- **Materialized views**: `ch_select_statement`, `ch_to_table`
+- **Materialized views**: `SELECT` statement, `TO` target, `REFRESH` schedule, `POPULATE`, and `SETTINGS`; the current database qualifier is stripped from identifiers
 - **Dictionaries**: `ch_dictionary`, `ch_dict_layout`, `ch_dict_source`, `ch_dict_lifetime`, `ch_dict_primary_key`
 - **Column metadata**: codec, default expression, LowCardinality/Nullable wrappers via `CHColumnMeta`
 - **Skip indexes**: `ChIndexSpec` entries in `ch_indexes`
@@ -2239,8 +2341,10 @@ For the complete feature reference, see [ClickHouse Deep Dive](../databases/clic
 
 ## Warnings
 
-- Generated code requires manual review and cleanup
-- ClickHouse engine metadata is auto-detected; review the generated `ChEngineSpec` to ensure correctness
+- Generated code requires manual review and cleanup.
+- ClickHouse engine metadata is auto-detected; review the generated `ChEngineSpec` to ensure correctness.
+- PostgreSQL `SERIAL` columns are reverse-engineered as `Integer` with `autoincrement=True`; identity columns are reverse-engineered as `Integer` with `pg_identity` metadata. Both forms round-trip cleanly with `make-migrations`.
+- ClickHouse materialized views are introspected but not currently emitted as discoverable model tables.
 
 ========================================================================
 PAGE: https://docs.dbwarden.org/commands/history/
@@ -3387,7 +3491,7 @@ $ dbwarden seed list --prune              # clean up orphaned tracking records
 
 ## `seed rollback`
 
-Roll back applied seeds. Removes the tracking record, allowing the seed to be re-applied. Does **not** reverse data changes.
+Reverse applied seeds and then remove their tracking records. SQL file seeds require a `-- rollback` section; Python file and procedural code seeds require `reverse(connection, session)`. Seeds without reverse logic are irreversible and rollback fails without changing tracking.
 
 ### Usage
 
@@ -3430,7 +3534,7 @@ $ dbwarden seed export --database clickhouse --output-dir ./seeds
 ### Behavior
 
 - **Row-based seeds** (`rows = [...]`): each row is rendered as an `INSERT` statement with `ON CONFLICT` matching the seed's `__seed_on_conflict__`
-- **Logic-based seeds** (`generate(session)`): executed in a temporary SQLite database with FK-closure tables created and preceding row-based seeds pre-loaded. The resulting rows are exported as INSERT statements
+- **Procedural seeds** (`forward(connection, session)`): cannot be exported because executing arbitrary code under a different database backend could produce incorrect SQL
 - Seeds are ordered by FK dependency (topological sort) so foreign-key-safe insert order is preserved
 
 ### Dialect requirement
@@ -3440,8 +3544,7 @@ Exporting requires the same dialect packages as connecting to that database. For
 ### Non-handled problems
 
 - Removed rows are not deleted (no purge on re-export)
-- Logic seeds that depend on other logic seeds' output are unsupported
-- Non-deterministic `generate()` methods produce a new checksum every export
+- Procedural seeds must be applied directly to their configured database
 
 ========================================================================
 PAGE: https://docs.dbwarden.org/commands/settings/
@@ -8906,6 +9009,7 @@ Create a seed file in your models directory (e.g. `models/seeds.py`):
 from dbwarden.seed import Seed
 
 class CountrySeed(Seed):
+    __seed_version__ = "C0001"
     __seed_database__ = "primary"
     __seed_description__ = "initial countries"
     __seed_on_conflict__ = "update"
@@ -8925,19 +9029,20 @@ Notice:
 - **Keyword arguments required**: SQLAlchemy 2.0's `DeclarativeBase` does not accept positional args; always use `Model(col=val)` syntax
 - **`__seed_database__`**: route the seed to the correct database
 
-### Logic-Based Seeds
+### Procedural Seeds
 
-Define a `generate(session)` method for programmatic data:
+Define `forward(connection, session)` and `reverse(connection, session)` for programmatic data:
 
 ```python
 class PermissionSeed(Seed):
+    __seed_version__ = "C0002"
     __seed_database__ = "primary"
     __seed_description__ = "load permissions"
 
     model = Permission
 
     @staticmethod
-    def generate(session):
+    def forward(connection, session):
         for resource in ["users", "orders"]:
             for action in ["read", "write", "delete"]:
                 session.add(Permission(name=f"{resource}:{action}"))
@@ -9042,14 +9147,14 @@ Creates `seeds/V0002__generate_sample_data.py` with a `seed(connection, session)
 $ dbwarden seed rollback --database primary --count 1
 ```
 
-Seed rollback removes the tracking record, allowing the seed to be re-applied. It does **not** reverse the data changes; that is your responsibility if needed.
+Seed rollback executes the configured inverse operation and removes the tracking record only after it succeeds. SQL file seeds require a `-- rollback` section; Python and procedural code seeds require `reverse(connection, session)`.
 
 After rollback:
 
 ```
 Seeds for database 'primary':
   C0001  initial countries                 applied  2025-01-15 10:30:00  (code seed)
-  V0001  initial_admin_users              pending
+   V0001  initial_admin_users              pending
 ```
 
 ## Step 7: Prune Orphaned Records
@@ -9062,11 +9167,11 @@ $ dbwarden seed list --prune
 
 ## Key Takeaways
 
-- **Code seeds (`Seed` base class) are the recommended approach**: no manual versions, full IDE support, stays in sync with models
+- **Code seeds (`Seed` base class) are the recommended approach**: immutable explicit versions, full IDE support, stays in sync with models
 - `auto_apply_seeds: True` or `dbwarden migrate --apply-seeds` applies seeds automatically after migrations
 - File seeds (`.sql` / `.py`) are still available for complex multi-statement SQL
 - `seed list --prune` cleans up orphaned tracking records
-- Seed rollback removes the tracking record; it does not undo data
+- Seed rollback executes the seed's explicit reverse operation
 
 ## Related Documentation
 
@@ -11764,6 +11869,8 @@ dbwarden diff --database primary --out table
 
 The expected diff is empty. If dbwarden emits a migration every time from the generated model, some part of extraction, canonicalization, or emission is losing information.
 
+Known PostgreSQL gaps: `SERIAL` / identity column sequence metadata may not fully round-trip through generated SQLAlchemy models, producing spurious `DROP DEFAULT` / `DROP SEQUENCE` operations. Mixed-case or quoted identifiers are now handled, but some index sort-option canonicalization (e.g. default `NULLS LAST`) can still produce noise.
+
 ## ClickHouse Example
 
 Start with a ClickHouse table that uses a `MergeTree` engine, partitioning, a projection, and a skip index:
@@ -11830,6 +11937,8 @@ dbwarden diff --database analytics --out table
 ```
 
 The diff should be empty. If the engine settings, projection, or skip index are missing after extraction, the round trip fails and the handler needs a fix.
+
+Known ClickHouse gaps: materialized views are not emitted as discoverable model tables; some native types (`Enum8`/`Enum16`, `DateTime64`, `FixedString`, `UUID`) may map to generic SQLAlchemy types; and Replicated engine string arguments / MV `SETTINGS` require manual review.
 
 ## Manual Round-Trip Checklist
 
@@ -12532,6 +12641,30 @@ CREATE TABLE user_sessions (
     duration Int64 DEFAULT 0 TTL now() - toIntervalDay(30)
 ) ENGINE = MergeTree() ORDER BY user_id
 ```
+
+Codec chains are preserved in order:
+
+```python
+class Event(Base):
+    __tablename__ = "events"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    value: Mapped[float] = mapped_column()
+
+    class Meta(CHTableMeta):
+        ch = ch_table(engine=merge_tree(), order_by="id")
+
+        class value(CHColumnMeta):
+            ch = ch.field(codec="Delta(8), ZSTD(1)")
+```
+
+```sql
+CREATE TABLE events (
+    id Int64,
+    value Float64 CODEC(Delta(8), ZSTD(1))
+) ENGINE = MergeTree() ORDER BY id
+```
+
+The default `LZ4` codec is treated as implicit and is omitted from generated models. `LowCardinality(Nullable(T))` round-trips as `low_cardinality=True, nullable=True`.
 
 ### Column with alias and comment
 
@@ -14153,7 +14286,8 @@ The canonicalizer has **zero version branching**: a single code path covers 24.3
 | | Comments (table + column) | Done |
 | | Projections, skip indexes | Done |
 | Materialized views | Class-based API (`materialized_view()` + `CHViewMeta`) | Done |
-| | TO target, implicit `.inner`, refreshable | Done |
+| | Forward DDL: TO target, implicit `.inner`, refreshable, POPULATE | Done |
+| | Reverse engineering (`generate-models`) | Partial (see [Known gaps](#known-gaps)) |
 | | MODIFY QUERY vs recreate | Done |
 | | POPULATE (data-op) | Done |
 | Dictionaries | CREATE DICTIONARY via ch_dict_* | Done |
@@ -14188,6 +14322,16 @@ These are not gaps: they are deliberate boundaries, documented with reasoning so
 | **SYSTEM commands** | Operational concern, not schema management. Not declarable in a model. |
 | **Server config (`config.xml`)** | Infrastructure. Same boundary as PostgreSQL's `postgresql.conf`. |
 | **Secret values** | Declare-only by design (see [named-collections](named-collections.md)). Values are not diffed. |
+
+## Known gaps
+
+These are real reverse-engineering / round-trip gaps, not deliberate exclusions. They are documented so they can be closed systematically.
+
+| Gap | What happens today | How to close it |
+|-----|-------------------|-----------------|
+| **Materialized view reverse engineering** | `generate-models` emits a plain `Base` subclass with `ch_engine = ChEngineSpec('MaterializedView')` and the implicit result columns. `make-migrations` then wants to drop/recreate the MV because it does not recognize the class as a `MaterializedView` and the stored spec differs. | Make `generate-models` emit `class Foo(MaterializedView):` and reconstruct the `materialized_view(...)` spec (`select`, `to`, `engine`, `order_by`, `populate`, `settings`, `refresh`) instead of emitting the implicit `.inner` columns. |
+| **Default `MergeTree` settings drift** | A hand-written model that omits `ch_settings` is compared against a snapshot that contains ClickHouse's reported defaults (e.g. `index_granularity=8192`), producing a spurious `alter_ch_options`. | Either canonicalize known default settings away in `ChTableHandler.canonicalize`, or always emit settings in generated models (already done) and document that hand-written models should declare them. |
+| **MV `SELECT` database qualifier** | Reverse-engineered `ch_select_statement` includes the database qualifier (`SELECT ... FROM dbwarden_test.events`), while hand-written models usually omit it, so `make-migrations` tries to `MODIFY QUERY`. | Strip the current database prefix from `ch_select_statement` during extraction, or normalize it away during canonicalization/diff. |
 
 ## Config keys
 
@@ -14556,8 +14700,9 @@ class DailyRollupMV(MaterializedView):
 Generated DDL:
 
 ```sql
-CREATE MATERIALIZED VIEW daily_rollup_mv TO rollup_dest
+CREATE MATERIALIZED VIEW daily_rollup_mv
 REFRESH EVERY 3600 SECONDS
+TO rollup_dest
 AS SELECT sum(amount) AS total FROM events
 ```
 
@@ -14574,6 +14719,34 @@ refresh="EVERY 3600 SECONDS DEPENDS ON my_other_mv"
 ```
 
 Refresh on cluster is configured at the deployment level via `--cluster-mode`.
+
+### Refresh settings
+
+Refreshable MVs accept a `settings` dict for refresh settings such as
+`refresh_retries`:
+
+```python
+class DailyRollupMV(MaterializedView):
+    __tablename__ = "daily_rollup_mv"
+
+    class Meta(CHViewMeta):
+        ch = materialized_view(
+            select=func.sum(Event.amount).label("total"),
+            to="rollup_dest",
+            refresh="EVERY 3600 SECONDS",
+            settings={"refresh_retries": "5"},
+        )
+```
+
+Generated DDL:
+
+```sql
+CREATE MATERIALIZED VIEW daily_rollup_mv
+REFRESH EVERY 3600 SECONDS
+SETTINGS refresh_retries=5
+TO rollup_dest
+AS SELECT sum(amount) AS total FROM events
+```
 
 ## Additional model examples
 
@@ -14594,8 +14767,9 @@ class HourlyRollupMV(MaterializedView):
 Generated DDL:
 
 ```sql
-CREATE MATERIALIZED VIEW hourly_rollup_mv TO hourly_rollup_dest
+CREATE MATERIALIZED VIEW hourly_rollup_mv
 REFRESH EVERY 300 SECONDS DEPENDS ON daily_rollup_mv
+TO hourly_rollup_dest
 AS SELECT sum(amount) AS total FROM events
 ```
 
@@ -14658,11 +14832,34 @@ dbwarden classifies this as:
 | Refreshable | Supported | INFO |
 | Plain (non-refreshable) | Not supported by CH | CRITICAL: requires `--force` |
 
-## `POPULATE` as data operation
+## `POPULATE` as DDL or data operation
 
 `POPULATE` is a one-time statement that inserts existing source data into the
-MV on creation. dbwarden treats it as a
-[data operation](data-operations.md), not a DDL property:
+MV on creation. You can request it inline in the MV declaration:
+
+```python
+class EventCountMV(MaterializedView):
+    __tablename__ = "event_counts_mv"
+
+    class Meta(CHViewMeta):
+        ch = materialized_view(
+            select=func.sum(Event.amount).label("total"),
+            to="events_dest",
+            populate=True,
+        )
+```
+
+Generated DDL:
+
+```sql
+CREATE MATERIALIZED VIEW event_counts_mv TO events_dest
+POPULATE
+AS SELECT sum(amount) AS total FROM events
+```
+
+`POPULATE` cannot be combined with `refresh`. For a separate, reversible data
+migration that runs `INSERT INTO <target> <select>` after the MV is created,
+use [`data_ops.populate`](data-operations.md) instead:
 
 ```python
 from dbwarden.databases.clickhouse import data_ops
@@ -14675,9 +14872,6 @@ spec = materialized_view(
 )
 pop = data_ops.populate(spec)
 ```
-
-This is because `POPULATE` is a write concern, not a structural declaration:
-it runs once during creation and changes nothing about the schema.
 
 ## What changes are allowed
 
@@ -15506,7 +15700,7 @@ PAGE: https://docs.dbwarden.org/databases/
 
 # Supported Databases
 
-dbwarden supports PostgreSQL (the default and first-class backend), MySQL, MariaDB, SQLite, and ClickHouse.
+dbwarden supports PostgreSQL (the default backend), MySQL, MariaDB, SQLite, and ClickHouse.
 
 A **round-trip** backend is one where dbwarden can both read schema (via `generate-models`) and write schema (via `make-migrations` / `migrate`).
 
@@ -15518,7 +15712,7 @@ A **round-trip** backend is one where dbwarden can both read schema (via `genera
 | MySQL | `mysql` | `mysql://user:pass@host:3306/db` | Yes |
 | MariaDB | `mariadb` | `mariadb://user:pass@host:3306/db` | No |
 | ClickHouse | `clickhouse` | `clickhouse://user:pass@host:8123/db` | Yes |
-| SQLite | `sqlite` | `sqlite:///./app.db` | Dev only |
+| SQLite | `sqlite` | `sqlite:///./app.db` | Yes |
 
 ## Optional Dependency Groups
 
@@ -18684,6 +18878,8 @@ primary = database_config(
 
 All unqualified table references use this schema. The `_dbwarden_seeds` tracking table is created in the schema specified by `search_path`.
 
+`generate-models` also uses this schema: it sets `search_path` before introspection and lists tables from the configured schema. Snapshot queries against `pg_catalog` use quoted schema/table identifiers, so mixed-case or quoted table names are resolved correctly.
+
 ## Model-Level Schema
 
 Set `pg_schema` on `PGTableMeta` or `PGViewMeta`:
@@ -19253,7 +19449,7 @@ ALTER TABLE users SET (fillfactor = 80, autovacuum_enabled = false);
 
 ## Reverse Engineering
 
-`generate-models` queries `pg_class`, `pg_attribute`, `pg_constraint`, `pg_inherits`, `pg_tablespace`, `pg_partitioned_table`, and `pg_collation` to reverse-engineer all metadata.
+`generate-models` queries `pg_class`, `pg_attribute`, `pg_constraint`, `pg_inherits`, `pg_tablespace`, `pg_partitioned_table`, and `pg_collation` to reverse-engineer all metadata. Array columns are rendered with their element type and dimensions (e.g. `text[]`, `integer[][]`).
 
 ```bash
 $ dbwarden generate-models -d primary
@@ -19822,7 +20018,7 @@ A **round-trip** backend is one where dbwarden can both read schema (via `genera
 | PostgreSQL | `postgresql` | Yes |
 | MySQL | `mysql` | Yes |
 | ClickHouse | `clickhouse` | Yes |
-| SQLite | `sqlite` | Dev only |
+| SQLite | `sqlite` | Yes |
 | MariaDB | `mariadb` | No |
 
 ## How Round-Trip Verification Works
@@ -19847,11 +20043,21 @@ See [MySQL Deep Dive](mysql.md) for the complete list of supported features.
 
 ClickHouse has full round-trip support: `generate-models` reads schema from a live ClickHouse server, and `make-migrations` / `migrate` auto-generates DDL for table operations.
 
+Known edge cases:
+
+- Materialized views are introspected but are not currently emitted as discoverable model tables.
+- Some native types (`Enum8`/`Enum16`, `DateTime64`, `FixedString`, `UUID`) may map to generic SQLAlchemy types in generated models; the underlying CH types are preserved in `CHColumnMeta` where possible.
+- Replicated engine string arguments and `SETTINGS` on materialized views require manual review.
+
 See [ClickHouse Deep Dive](clickhouse/index.md) for the complete list of supported features.
 
 ### SQLite
 
-SQLite is supported for **development workflows only** (`--dev` flag). It uses the same snapshot format as PostgreSQL but with SQLite-compatible DDL. SQLite is ideal for local iteration before running migrations against production.
+SQLite is a **first-class backend** with full round-trip support. Table options (`WITHOUT ROWID`, `STRICT`), generated columns and column collations are captured by the snapshot, diffed correctly, and emitted as valid DDL. Changes SQLite's `ALTER TABLE` cannot express are emitted as a table rebuild, and the rollback is the rebuild in the other direction.
+
+SQLite remains the usual choice for a `dev_database_url` as well; see [SQL Translation](../sql-translation.md).
+
+See [SQLite Deep Dive](sqlite.md) for the complete list of supported features.
 
 ### MariaDB
 
@@ -19898,21 +20104,13 @@ PostgreSQL and SQLite (3.25+) support `RENAME COLUMN` natively. dbwarden emits t
 |---------|--------|-----------|
 | PostgreSQL | `ALTER TABLE t ALTER COLUMN c TYPE newtype` (commented-out `USING` by default, active with `--postgres-auto-using`) | Yes |
 | MySQL / MariaDB | `ALTER TABLE t MODIFY COLUMN c newtype` | Yes |
-| SQLite | Not supported | Comment emitted |
+| SQLite | Table rebuild | Yes |
 
 **PostgreSQL**: Emits `ALTER TABLE t ALTER COLUMN c TYPE newtype` with a commented-out `-- USING col::newtype` line. Pass `--postgres-auto-using` on `make-migrations` to emit an active `USING` clause.
 
 **MySQL / MariaDB**: Emits `ALTER TABLE t MODIFY COLUMN c newtype`. Note that `MODIFY COLUMN` requires specifying the entire column definition, not just the type. dbwarden includes only the type in the `MODIFY` statement; if you need additional attributes (e.g., `NOT NULL`, `DEFAULT`), add them manually.
 
-**SQLite**: `ALTER COLUMN TYPE` is not supported. dbwarden emits a comment:
-
-```sql
--- SQLite does not support ALTER COLUMN TYPE.
--- Use 'dbwarden new' to write a manual migration for:
--- ALTER TABLE users ALTER COLUMN name TYPE TEXT
-```
-
-Table recreation is required to change a column's type in SQLite.
+**SQLite**: `ALTER COLUMN TYPE` does not exist, so dbwarden rebuilds the table: create the new shape under a temporary name, copy the rows, drop the original, rename into place, recreate the indexes. The rollback is the rebuild in the other direction. See [SQLite Deep Dive](sqlite.md#table-rebuilds).
 
 ## Column Nullable Change
 
@@ -19920,21 +20118,17 @@ Table recreation is required to change a column's type in SQLite.
 |---------|--------|-----------|
 | PostgreSQL | `ALTER TABLE t ALTER COLUMN c [SET/DROP] NOT NULL` | Yes |
 | MySQL / MariaDB | `ALTER TABLE t MODIFY COLUMN c coltype [NOT] NULL` | Yes |
-| SQLite | Not supported | Comment emitted |
+| SQLite | Table rebuild | Yes |
 
 **PostgreSQL**: Uses `SET NOT NULL` / `DROP NOT NULL`. No column type needed.
 
 **MySQL / MariaDB**: Uses `MODIFY COLUMN` which requires the full column type. dbwarden includes the type from the model column definition. If the type is not available, nullable changes for MySQL/MariaDB may produce incomplete SQL.
 
-**SQLite**: Not supported. A comment is emitted:
-
-```sql
--- SQLite: ALTER TABLE users ALTER COLUMN email SET NOT NULL (not supported)
-```
+**SQLite**: Nullability is part of the column definition and can only change by rebuilding the table, which dbwarden generates. See [SQLite Deep Dive](sqlite.md#table-rebuilds).
 
 ## Column Default Change
 
-All four backends support `ALTER TABLE t ALTER COLUMN c SET DEFAULT value` and `ALTER TABLE t ALTER COLUMN c DROP DEFAULT`. Default changes work uniformly across all SQL backends.
+PostgreSQL, MySQL and MariaDB support `ALTER TABLE t ALTER COLUMN c SET DEFAULT value` and `ALTER TABLE t ALTER COLUMN c DROP DEFAULT`. SQLite has no `ALTER COLUMN`, so a default change is emitted as a table rebuild.
 
 ## Foreign Key Handling
 
@@ -19943,7 +20137,7 @@ All four backends support `ALTER TABLE t ALTER COLUMN c SET DEFAULT value` and `
 | PostgreSQL | `ADD CONSTRAINT ... FOREIGN KEY` | `DROP CONSTRAINT ...` | Supports `ON DELETE`, `ON UPDATE`, `DEFERRABLE` |
 | MySQL | `ADD CONSTRAINT ... FOREIGN KEY` | `DROP FOREIGN KEY ...` | Uses constraint name, not FK name |
 | MariaDB | `ADD CONSTRAINT ... FOREIGN KEY` | `DROP FOREIGN KEY ...` | Same as MySQL |
-| SQLite | Not supported (comment) | Not supported (comment) | Recreate table |
+| SQLite | Table rebuild | Table rebuild | Constraint is inlined in the rebuilt CREATE TABLE |
 | ClickHouse | Not supported (error) | Not supported (error) | `ForeignKey()` raises `DBWardenConfigError` |
 
 **PostgreSQL FK options**: `ON DELETE`, `ON UPDATE`, and `DEFERRABLE INITIALLY DEFERRED` are fully supported. See [PostgreSQL Deep Dive](postgresql/index.md).
@@ -19976,7 +20170,7 @@ All four backends support `ALTER TABLE t ALTER COLUMN c SET DEFAULT value` and `
 |---------|-----------|----------|
 | PostgreSQL | Yes | Multi-step: add temp column, backfill comment, verify, drop+rename |
 | MySQL / MariaDB | Yes | Multi-step: add temp column, backfill comment, verify, drop+rename |
-| SQLite | No | Comment emitted |
+| SQLite | Not needed | The rebuild already copies the table atomically |
 
 The `--safe-type-change` flag generates a multi-step strategy:
 1. Add a temporary column with the new type
@@ -19984,7 +20178,7 @@ The `--safe-type-change` flag generates a multi-step strategy:
 3. Emit a verification comment
 4. After manual verification, drop the old column and rename the temporary column
 
-On SQLite, this strategy is not supported because SQLite cannot drop columns (before 3.35.0) and has limited ALTER TABLE support. A comment is emitted instead.
+On SQLite the flag has no effect: a type change is already emitted as a table rebuild, which copies every row into the new column definition in one statement sequence rather than in manually verified steps.
 
 ## Table Rename
 
@@ -20056,13 +20250,240 @@ The plan JSON `resolved_from` field indicates how a rename was confirmed:
 - Foreign key drop uses `DROP FOREIGN KEY` (constraint name is still the auto-generated name)
 
 ### SQLite
-- `ALTER COLUMN TYPE` is not supported (comment emitted)
-- `ALTER COLUMN [SET/DROP] NOT NULL` is not supported (comment emitted)
-- `--safe-type-change` is not supported (comment emitted)
-- FK constraints are not directly alterable (comment suggesting table recreation)
-- Column rename supported since 3.25.0; older versions need manual migration
-- Type affinity differs from server databases (e.g., `VARCHAR(255)` becomes `TEXT`)
+- Column type, nullability, default and constraint changes are emitted as a table rebuild; the migration copies every row and holds a write lock for its duration
+- `DROP COLUMN` in a rebuild discards the column's data; the rollback restores the column, not the values
+- Column rename supported since 3.25.0; `DROP COLUMN` since 3.35.0
+- Declared types are preserved as written; inside a `STRICT` table they collapse to `INTEGER` / `REAL` / `TEXT` / `BLOB`
+- Foreign key enforcement is off by default, which the rebuild relies on; do not enable `PRAGMA foreign_keys` on the migration connection
 - Limited to single-writer; no concurrent writes
+
+========================================================================
+PAGE: https://docs.dbwarden.org/databases/sqlite/
+========================================================================
+
+# SQLite
+
+dbwarden treats SQLite as a **first-class backend**: every natively supported feature is reverse-engineered, diffed, and emitted as correct DDL, and every change SQLite's `ALTER TABLE` cannot express is emitted as a table rebuild rather than as a comment telling you to write the migration yourself.
+
+Database declarations use `DbwardenDatabase` subclasses by default. The equivalent `database_config(...)` function API remains supported for existing projects.
+
+## First-Class Features
+
+"First-class" means the round-trip is verified: reverse-engineer a live database with `generate-models`, feed the output back into `make-migrations`, and get **zero diff**.
+
+```bash
+# Step 1: reverse-engineer your live SQLite database
+$ dbwarden generate-models -d primary
+
+# Step 2: feed the generated models back in, zero diff
+$ dbwarden make-migrations -d primary
+# -> "No new migrations to generate"  (your models match the DB exactly)
+```
+
+| Category | Features |
+|----------|----------|
+| Table options | `WITHOUT ROWID`, `STRICT` via `sq_without_rowid`, `sq_strict` |
+| Generated columns | `GENERATED ALWAYS AS (expr) STORED / VIRTUAL` via `sq.field(generated=..., generated_mode=...)` |
+| Collation | Per-column `COLLATE` via `sq.field(collate="NOCASE")` |
+| Keys | `INTEGER PRIMARY KEY AUTOINCREMENT`, composite primary keys, `UNIQUE` and `CHECK` table constraints |
+| Foreign keys | Column-level and multi-column `FOREIGN KEY` clauses with `ON DELETE` / `ON UPDATE` |
+| Indexes | `CREATE [UNIQUE] INDEX`, partial indexes (`WHERE`), expression indexes |
+| Native ALTER | `RENAME TO`, `RENAME COLUMN`, `ADD COLUMN`, `DROP COLUMN` |
+| Everything else | Emitted as a table rebuild (see below) |
+
+## Installation
+
+SQLite ships with Python, so no extra dependency group is needed:
+
+```bash
+uv add dbwarden
+```
+
+## Configuration
+
+```python
+from dbwarden import DbwardenDatabase
+
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "sqlite"
+    database_url_sync = "sqlite:///./app.db"
+```
+
+## Table Rebuilds
+
+SQLite's `ALTER TABLE` supports only `RENAME TO`, `RENAME COLUMN`, `ADD COLUMN` and `DROP COLUMN`. Anything else - a column's type, its nullability, its default, a table constraint, `WITHOUT ROWID`, `STRICT` - is expressed by rebuilding the table.
+
+dbwarden generates that rebuild for you, following the procedure from the SQLite documentation:
+
+```sql
+CREATE TABLE users__dbw_new (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    email VARCHAR(255) NOT NULL,
+    age TEXT,
+    CONSTRAINT uq_users_email UNIQUE (email)
+);
+INSERT INTO users__dbw_new (id, email, age) SELECT id, email, age FROM users;
+DROP TABLE users;
+ALTER TABLE users__dbw_new RENAME TO users;
+CREATE INDEX IF NOT EXISTS ix_users_email ON users (email);
+```
+
+Notes on the generated sequence:
+
+- **All changes to one table collapse into one rebuild.** Changing three columns and adding a constraint produces a single copy of the table, not four.
+- **The rollback is a rebuild in the other direction**, so a SQLite migration satisfies the [rollback contract](../correctness/rollback-generation.md) instead of emitting a placeholder.
+- **The staging table is created without `IF NOT EXISTS`.** A leftover `*__dbw_new` table from a failed run fails the migration rather than silently receiving the copied rows.
+- **Indexes are recreated** after the rename, because `DROP TABLE` takes the original table's indexes with it.
+- **Generated columns are not copied**; SQLite recomputes them.
+- **Dropped columns lose their data.** The rollback restores the column but not its contents, and the migration is reported as a conditional rollback for that reason.
+- **Foreign key enforcement.** dbwarden never issues `PRAGMA foreign_keys=ON`, and SQLite defaults it to off, so the `DROP TABLE` step is not blocked by other tables referencing this one. If your deployment enables foreign keys on the migration connection, turn them off for the duration of the migration.
+- **Index statements for a rebuilt table are folded into the rebuild.** A rebuild recreates the table's indexes itself, so a migration that both rebuilds a table and changes one of its indexes emits the rebuild alone rather than an index statement that the rebuild would immediately discard.
+
+### What the rebuild preserves
+
+A rebuild reproduces the table from what dbwarden reads back from the database. Reflection alone is lossy, so several things are read from the `CREATE TABLE` and `CREATE INDEX` text SQLite stores in `sqlite_master`:
+
+| Preserved | Read from |
+|-----------|-----------|
+| Declared type, exactly as written (`VARCHAR(255)`, not `varchar`) | stored table DDL |
+| `AUTOINCREMENT` | stored table DDL |
+| Generated columns and their `STORED` / `VIRTUAL` mode | stored table DDL |
+| Column `COLLATE` | stored table DDL |
+| `ON DELETE` / `ON UPDATE` on foreign keys | `PRAGMA foreign_key_list` |
+| Unnamed `UNIQUE (...)` table constraints | reflection, named `uq_<table>_<columns>` |
+| Partial indexes (`WHERE`), `DESC` and `COLLATE` inside an index, expression indexes | stored index DDL |
+
+An index the migration does not change is recreated from its stored DDL rather than from the reflected shape, so index details SQLAlchemy cannot report survive the rebuild. An index the model changes is rendered from the model.
+
+### What Triggers a Rebuild
+
+| Change | Emitted as |
+|--------|-----------|
+| Column type change | Rebuild |
+| Column nullability change | Rebuild |
+| Column default change | Rebuild |
+| Add / drop `UNIQUE`, `CHECK` or `FOREIGN KEY` constraint | Rebuild |
+| `WITHOUT ROWID` or `STRICT` change | Rebuild |
+| Generated expression or collation change | Rebuild |
+| Add column that is a primary key, `UNIQUE`, `NOT NULL` without a default, a STORED generated column, or has a non-constant default | Rebuild |
+| Drop column that is part of the primary key, is indexed, is named by a table constraint, or is referenced by a generated column | Rebuild |
+| Add column (otherwise) | `ALTER TABLE ... ADD COLUMN` |
+| Drop column (otherwise) | `ALTER TABLE ... DROP COLUMN` |
+| Rename table / rename column | `ALTER TABLE ... RENAME` |
+| Add / drop index | `CREATE INDEX` / `DROP INDEX` |
+
+A rebuild copies every row and holds a write lock for the duration. `dbwarden check-impact` reports SQLite table-option, generated-column and collation changes as warnings for that reason.
+
+## Table Metadata
+
+```python
+from dbwarden import SqTableMeta
+from dbwarden.databases.sqlite import sq
+
+
+class Session(Base):
+    __tablename__ = "sessions"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    value: Mapped[str] = mapped_column(String)
+
+    class Meta(SqTableMeta):
+        sq_without_rowid = True
+        sq_strict = True
+```
+
+| Attribute | Effect |
+|-----------|--------|
+| `sq_without_rowid` | Appends `WITHOUT ROWID`. The table must have a primary key, and `AUTOINCREMENT` is not available on it. |
+| `sq_strict` | Appends `STRICT`. Column types are collapsed to the set SQLite accepts (see below). |
+| `sq_indexes` | SQLite-specific index specs, merged with `indexes` |
+
+## Column Metadata
+
+```python
+from dbwarden import SqColumnMeta, SqTableMeta
+from dbwarden.databases.sqlite import sq
+
+
+class Article(Base):
+    __tablename__ = "articles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String)
+    slug: Mapped[str] = mapped_column(String)
+    code: Mapped[str] = mapped_column(String)
+
+    class Meta(SqTableMeta):
+        class slug(SqColumnMeta):
+            sq = sq.field(generated="lower(title)")
+
+        class code(SqColumnMeta):
+            sq = sq.field(collate="NOCASE")
+```
+
+| `sq.field(...)` argument | Effect |
+|--------------------------|--------|
+| `generated` | `GENERATED ALWAYS AS (<expr>)` |
+| `generated_mode` | `STORED` (default) or `VIRTUAL` |
+| `collate` | `COLLATE <name>` |
+
+A `VIRTUAL` generated column can be added to an existing table with `ALTER TABLE ADD COLUMN`; a `STORED` one cannot, and forces a rebuild.
+
+## Types and STRICT Tables
+
+Outside a `STRICT` table, SQLite accepts any type name and reads it only to pick a column affinity, so dbwarden emits the declared type unchanged: `VARCHAR(255)` stays `VARCHAR(255)`. This keeps the schema readable and keeps `generate-models` round-trips stable.
+
+Inside a `STRICT` table only `INT`, `INTEGER`, `REAL`, `TEXT`, `BLOB` and `ANY` are legal, so the declared type is collapsed to the closest one:
+
+| Declared | STRICT |
+|----------|--------|
+| `VARCHAR(n)`, `CHAR(n)`, `CLOB` | `TEXT` |
+| `BOOLEAN` | `INTEGER` |
+| `DATE`, `DATETIME`, `TIMESTAMP`, `TIME` | `TEXT` |
+| `NUMERIC(p,s)`, `DECIMAL(p,s)` | `REAL` |
+| `BIGINT`, `SMALLINT`, `INT` | `INTEGER` |
+| `FLOAT`, `DOUBLE PRECISION` | `REAL` |
+
+## AUTOINCREMENT
+
+`AUTOINCREMENT` is emitted only where SQLite permits it: a single-column `INTEGER PRIMARY KEY` on a rowid table. On a composite key, a non-integer key, or a `WITHOUT ROWID` table it is omitted, because the declaration would be rejected.
+
+A SQLite `INTEGER PRIMARY KEY` is the rowid alias whether or not `AUTOINCREMENT` is written, so dbwarden does not generate autoincrement changes for primary key columns on SQLite.
+
+## Primary Key Nullability
+
+SQLite reports a primary key column as nullable unless it was declared `NOT NULL`, while a mapped model always declares its primary key `NOT NULL`. dbwarden records primary key columns as `NOT NULL` when reading a SQLite schema, so a table does not report a nullability change on its key column on every run.
+
+## SQLite as a Development Database
+
+SQLite is also the usual choice for `dev_database_url`, where the production schema is generated for another backend and translated for local use. That path is unchanged and documented separately in [SQL Translation](../sql-translation.md).
+
+## Data Conversion in a Rebuild
+
+The rebuild copies rows with `INSERT INTO ... SELECT`, so SQLite's own rules apply to the data:
+
+- In an ordinary table, SQLite converts values to the new column's affinity where it can and stores them as-is where it cannot; a type change never fails for the data's sake.
+- In a `STRICT` table, SQLite rejects a value that does not fit the new type, and the migration fails:
+
+    ```
+    cannot store REAL value in INTEGER column sales__dbw_new.total
+    ```
+
+    That is the table doing its job. Convert the data first - in a `data_op()` or a hand-written migration - and then narrow the column.
+
+- A column that becomes `NOT NULL` while existing rows hold NULL fails the same way. Give the column a default, or backfill first.
+
+## Limitations
+
+- DDL runs inside the migration transaction, but a rebuild rewrites the whole table: expect the migration to take time proportional to table size.
+- SQLite allows a single writer; a rebuild blocks other writers for its duration.
+- Column comments have no SQLite equivalent and are emitted as SQL comments.
+- Schemas (`ATTACH`ed databases) are not modelled; `pg_schema`-style qualification does not apply.
+- Dropping a column in a rebuild discards its data; the rollback restores the column, not the values.
+- Views are not rebuilt with their table. A view over a rebuilt table survives because SQLite resolves it by name, but a view that names a dropped column breaks at query time.
+- `--safe-type-change` has no effect: the rebuild is already a single copy of the table.
 
 ========================================================================
 PAGE: https://docs.dbwarden.org/features/
@@ -21973,7 +22394,7 @@ By default each generated file declares its own `Base = declarative_base()`. Use
 | PostgreSQL | Full       | Primary backend, full schema fidelity       |
 | MySQL      | Full       | DDL parity focus                            |
 | ClickHouse | Full       | Analytics backend, MergeTree engine family  |
-| SQLite     | Dev only   | Local development and SQL translation       |
+| SQLite     | Full       | Table rebuilds, WITHOUT ROWID/STRICT, generated columns |
 | MariaDB    | No         | Schema layer complete; snapshot gaps remain |
 
 ### PostgreSQL
@@ -21995,6 +22416,10 @@ First-class analytics backend support. MergeTree engine family via `ChEngineSpec
 ```bash
 uv add "dbwarden[clickhouse]"
 ```
+
+### SQLite
+
+Full round-trip support with `SqTableMeta` / `SqColumnMeta` and `sq.field()` spec objects. `WITHOUT ROWID` and `STRICT` tables, generated columns (`STORED` / `VIRTUAL`), per-column collation, and model reverse-engineering via `generate-models`. Changes SQLite's `ALTER TABLE` cannot express - column types, nullability, defaults, table constraints - are emitted as a table rebuild with a rebuild in the other direction as the rollback.
 
 ### MariaDB
 
@@ -22557,7 +22982,7 @@ dbwarden organizes backend-specific types into subpackages under `dbwarden.datab
 | `ch` | `dbwarden.databases.clickhouse` | `ChFieldSpec`, `ChIndexSpec`, `ChTableSpec` |
 | `my` | `dbwarden.databases.mysql` | `MyFieldSpec`, `MyTableSpec` |
 | `mdb` | `dbwarden.databases.mariadb` | `MdbFieldSpec`, `MdbTableSpec` |
-| `sq` | `dbwarden.databases.sqlite` | `SqFieldSpec`, `SqTableSpec` |
+| `sq` | `dbwarden.databases.sqlite` | `SqFieldSpec`, `SqTableSpec`, `SqTableMeta`, `SqColumnMeta` |
 
 Only `IndexSpec`, `PgIndexSpec`, and `ChIndexSpec` exist as typed index spec classes. MySQL, MariaDB, and SQLite use the base `IndexSpec` with the `indexes` attribute or plain dicts in their backend-specific index list (`my_indexes`, `sq_indexes`).
 
@@ -23540,7 +23965,7 @@ version = "0.2.0"
 description = "Example dbwarden plugin"
 readme = "README.md"
 requires-python = ">=3.12.7"
-dependencies = ["dbwarden>=0.15.0"]
+dependencies = ["dbwarden>=0.15.0,<0.18.0"]
 
 [project.entry-points."dbwarden.plugins"]
 example = "dbwarden_example:setup"
@@ -23556,13 +23981,13 @@ The entry point is `dbwarden_example:setup` because `setup` is defined in the pa
 
 ## Compatibility
 
-Depend on dbwarden with a lower bound, as the official plugins do:
+Declare both the oldest core version you test and the next untested compatibility boundary:
 
 ```toml
-dependencies = ["dbwarden>=0.15.0"]
+dependencies = ["dbwarden>=0.15.0,<0.18.0"]
 ```
 
-The plugin API is stable within the `0.x` series. To guarantee a core update never silently breaks your plugin, you can also cap the upper bound (`"dbwarden>=0.15.0,<1.0"`), though the official plugins currently pin only the lower bound.
+`DBWARDEN_PLUGIN_API` protects the explicit plugin contract, but it does not prove compatibility with every core release. Update the upper bound after testing each new DBWarden minor release. Official plugins should follow the same policy.
 
 ## CI/CD Example
 
@@ -25430,7 +25855,7 @@ dbwarden provides seed data management for populating databases with initial or 
 
 There are two ways to define seeds, listed in order of preference:
 
-1. **Code seeds** (recommended): define seeds inline alongside your SQLAlchemy models using the `Seed` base class or `@seed_data` decorator. No separate files, no manual versioning.
+1. **Code seeds** (recommended): define seeds inline alongside your SQLAlchemy models using the `Seed` base class. Each seed has an immutable explicit version.
 2. **File seeds**: traditional `.sql` or `.py` files in a `seeds/` directory, useful for complex multi-statement SQL.
 
 Both are tracked in the `_dbwarden_seeds` table and applied via `dbwarden seed apply`.
@@ -25449,6 +25874,7 @@ Inherit from `Seed` and set a `model` + `rows`:
 from dbwarden.seed import Seed
 
 class CountrySeed(Seed):
+    __seed_version__ = "C0001"
     __seed_database__ = "primary"
     __seed_description__ = "initial countries"
     __seed_on_conflict__ = "update"
@@ -25464,7 +25890,7 @@ class CountrySeed(Seed):
 Key advantages over the old decorator approach:
 
 - **Full IDE autocompletion**: `rows` uses model instances directly, so your editor knows the column names and types
-- **No `version` parameter**: versions are auto-assigned (`C0001`, `C0002`, ...) based on deterministic class ordering
+- **Immutable versioning**: declare a permanent `__seed_version__` such as `C0001`; never change or reuse a released version
 - **No manual import of `SeedRow`**: though `SeedRow` is still available if you prefer dict-like rows
 
 ### Seed Class Reference
@@ -25559,10 +25985,11 @@ The schema is resolved in this order: `Meta.pg_schema`, then `Meta.backend_table
 
 ### Logic-Based Seeds
 
-Define a `generate(session)` static/class method for programmatic data:
+Define `forward(connection, session)` and `reverse(connection, session)` for procedural data, analogous to Django's `RunPython`:
 
 ```python
 class PermissionSeed(Seed):
+    __seed_version__ = "C0002"
     __seed_database__ = "primary"
     __seed_description__ = "load permissions"
     __seed_on_conflict__ = "ignore"
@@ -25570,10 +25997,14 @@ class PermissionSeed(Seed):
     model = Permission
 
     @staticmethod
-    def generate(session):
+    def forward(connection, session):
         for resource in ["users", "orders"]:
             for action in ["read", "write", "delete"]:
                 session.add(Permission(name=f"{resource}:{action}"))
+
+    @staticmethod
+    def reverse(connection, session):
+        session.execute("DELETE FROM permissions")
 ```
 
 ### `@seed_data` Decorator (Deprecated)
@@ -25594,11 +26025,11 @@ class CountrySeed:
     rows = [SeedRow(code="UY", name="Uruguay")]
 ```
 
-Note that `version` is **no longer required**; it is auto-assigned.
+The deprecated decorator does not provide the required immutable version contract; use `Seed` subclasses for new code seeds.
 
 ### Discovery and Ordering
 
-Code seeds are discovered through the same `model_paths` scan as models. They use auto-assigned versions in the `C` namespace (`C0001`, `C0002`, ...) and are sorted deterministically by module and class name. Pending detection compares the class qualified name against the `_dbwarden_seeds` tracking table.
+Code seeds are discovered through the same `model_paths` scan as models. They declare immutable versions in the `C` namespace (`C0001`, `C0002`, ...) and duplicate versions are rejected. Pending detection compares versions against the `_dbwarden_seeds` tracking table.
 
 ---
 
@@ -25639,13 +26070,13 @@ Creates a file like `seeds/V0001__seed_initial_users.sql`:
 $ dbwarden seed create "generate sample data" --database primary --type python
 ```
 
-Creates `seeds/V0001__generate_sample_data.py` with a `seed(connection, session)` function.
+Creates `seeds/V0001__generate_sample_data.py` with `forward(connection, session)` and `reverse(connection, session)` functions.
 
-The `seed()` function receives both a raw SQLAlchemy `Connection` and an ORM `Session` bound to the same transaction:
+Both functions receive a raw SQLAlchemy `Connection` and an ORM `Session` bound to the same transaction:
 
 ```python
 # Using raw connection
-def seed(connection, session):
+def forward(connection, session):
     for i in range(100):
         connection.execute(
             "INSERT INTO users (name) VALUES (:name)",
@@ -25653,7 +26084,7 @@ def seed(connection, session):
         )
 
 # Using ORM session
-def seed(connection, session):
+def forward(connection, session):
     for i in range(100):
         session.add(User(name=f"user_{i}"))
     session.flush()
@@ -25744,7 +26175,7 @@ $ dbwarden seed list --prune
 
 ## Rolling Back Seeds
 
-Rollback removes the applied tracking record, allowing the seed to be re-applied. It does **not** reverse data changes.
+Rollback executes the seed's inverse operation and removes its tracking record only after that succeeds. SQL files require a `-- rollback` section; Python and procedural code seeds require `reverse(connection, session)`. Missing reverse logic makes a seed irreversible.
 
 ```bash
 # Rollback the most recent seed
@@ -25776,10 +26207,10 @@ The tracking table is created automatically on first seed apply. Each version ca
 
 ### Checksum Drift
 
-When a seed file has been modified since it was last applied, dbwarden emits a warning:
+When a seed file has been modified since it was last applied, dbwarden raises an error and blocks seed operations:
 
 ```
-Warning: Seed V0001 has been modified since last apply (checksum mismatch).
+SeedError: Seed V0001 has been modified since it was applied (checksum mismatch).
 ```
 
 This helps detect accidental changes to already-applied seeds.
@@ -25803,8 +26234,7 @@ Because the file is ROC, updating the code seed and re-exporting produces a new 
 **Non-handled problems:**
 
 - Rows removed from a code seed are not automatically deleted in the target database
-- Logic seeds that depend on other logic seeds' output are not supported (preceding row-based seeds are pre-loaded, but logic-to-logic ordering is not)
-- Non-deterministic `generate()` methods (e.g. using `datetime.now()`) produce a new checksum every export, causing re-apply on every deploy: acceptable for idempotent upserts, wasteful for pure inserts. Use deterministic `generate()` where possible
+- Procedural `forward()` seeds cannot be exported, because executing arbitrary code against SQLite would not reliably reproduce behavior on the configured backend
 
 **Dialect requirement:** Exporting requires the same dialect packages as connecting to that database. For ClickHouse, install `clickhouse-sqlalchemy`. Missing packages produce a clear error at export time.
 
@@ -25870,13 +26300,22 @@ dbwarden translation solves this by adapting generated SQL for SQLite compatibil
 
 ## When translation is active
 
-Translation is applied when all are true:
+Translation runs whenever the **resolved backend is SQLite** and SQL is being
+generated from models (`make-migrations`, `export-models`). That covers both:
 
-- command runs with `--dev`
-- selected database resolves to a SQLite `dev_database_url`
-- command path generates SQL from models (`make-migrations`)
+- a `--dev` run whose `dev_database_url` is SQLite, and
+- a database whose `database_type` is `sqlite` in its own right.
 
-It is not a runtime SQL proxy for arbitrary manual SQL.
+It is not a runtime SQL proxy for arbitrary manual SQL, and it is not applied to
+migration files you write by hand.
+
+!!! note "Translation and first-class SQLite are different layers"
+
+    Translation adapts a *type or default written for another backend* so it is
+    legal in SQLite. [First-class SQLite support](databases/sqlite.md) is about
+    the shape of the migration itself - table rebuilds, `WITHOUT ROWID`,
+    `STRICT`, generated columns. They compose: a translated type is what the
+    rebuild then renders.
 
 ## How It Works
 
@@ -25904,9 +26343,24 @@ Common conversions:
 |-------------|---------------|
 | `UUID` | `TEXT` |
 | `JSON` / `JSONB` | `TEXT` |
-| `TIMESTAMPTZ` | `DATETIME` |
+| `BYTEA` | `BLOB` |
+| `TIMESTAMPTZ` / `TIMESTAMP WITH TIME ZONE` | `DATETIME` |
 | `SERIAL` / `BIGSERIAL` | `INTEGER` |
-| ClickHouse nullable numeric forms | `INTEGER`/`REAL` depending on source |
+| `BOOL` | `BOOLEAN` |
+| `INT8` / `INT16` / `INT32` / `INT64` | `INTEGER` |
+| `UINT8` / `UINT16` / `UINT32` / `UINT64` | `INTEGER` |
+| `FLOAT32` / `FLOAT64` | `REAL` |
+| `DATETIME64` / `DATETIME64(n)` | `DATETIME` |
+| `DECIMAL(p,s)` / `NUMERIC(p,s)` | `NUMERIC` |
+| `FIXEDSTRING(n)` | `TEXT` |
+| `ARRAY(...)` | `TEXT` (or an error in strict mode) |
+
+ClickHouse `Nullable(...)` and `LowCardinality(...)` wrappers are unwrapped
+before the inner type is translated.
+
+Types SQLite already understands - `INTEGER`, `VARCHAR(n)`, `TEXT`, `BOOLEAN`,
+`REAL`, `DATE`, `DATETIME`, `BLOB`, `NUMERIC` and friends - pass through
+unchanged, keeping their declared length.
 
 If a type cannot be translated safely:
 
@@ -25916,6 +26370,10 @@ If a type cannot be translated safely:
 ## Default expression handling
 
 Backend expressions such as `now()` or `gen_random_uuid()` may not have direct SQLite equivalents.
+
+`CURRENT_TIMESTAMP`, `CURRENT_DATE` and `CURRENT_TIME` pass through unchanged.
+`NOW()`, `UUID_GENERATE_V4()`, `GEN_RANDOM_UUID()` and `NEXTVAL(...)` have no
+SQLite equivalent.
 
 In non-strict mode, unsupported defaults are dropped with warning.
 
@@ -25935,6 +26393,13 @@ In strict mode:
 - Unsupported default expression conversions raise errors
 
 Use this when you want to catch every lossy conversion early.
+
+!!! warning "`--strict-translation` is not a `STRICT` table"
+
+    `--strict-translation` controls what dbwarden does with a type it cannot
+    translate. SQLite's `STRICT` keyword is a table option, set with
+    `sq_strict` on the model, that makes SQLite itself enforce column types.
+    See [SQLite](databases/sqlite.md#types-and-strict-tables).
 
 ## Recommended team workflow
 
@@ -25964,3 +26429,6 @@ Generated SQL differs from production expectations:
 - Translation focuses on compatibility for local development.
 - Some backend features cannot be represented exactly in SQLite.
 - For production accuracy, always test migrations against your production-like database too.
+- Translation converts a type name; it does not convert stored data. Narrowing a
+  column against existing rows can still be rejected by SQLite when the target
+  table is `STRICT`.

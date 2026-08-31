@@ -35,21 +35,13 @@ PostgreSQL and SQLite (3.25+) support `RENAME COLUMN` natively. dbwarden emits t
 |---------|--------|-----------|
 | PostgreSQL | `ALTER TABLE t ALTER COLUMN c TYPE newtype` (commented-out `USING` by default, active with `--postgres-auto-using`) | Yes |
 | MySQL / MariaDB | `ALTER TABLE t MODIFY COLUMN c newtype` | Yes |
-| SQLite | Not supported | Comment emitted |
+| SQLite | Table rebuild | Yes |
 
 **PostgreSQL**: Emits `ALTER TABLE t ALTER COLUMN c TYPE newtype` with a commented-out `-- USING col::newtype` line. Pass `--postgres-auto-using` on `make-migrations` to emit an active `USING` clause.
 
 **MySQL / MariaDB**: Emits `ALTER TABLE t MODIFY COLUMN c newtype`. Note that `MODIFY COLUMN` requires specifying the entire column definition, not just the type. dbwarden includes only the type in the `MODIFY` statement; if you need additional attributes (e.g., `NOT NULL`, `DEFAULT`), add them manually.
 
-**SQLite**: `ALTER COLUMN TYPE` is not supported. dbwarden emits a comment:
-
-```sql
--- SQLite does not support ALTER COLUMN TYPE.
--- Use 'dbwarden new' to write a manual migration for:
--- ALTER TABLE users ALTER COLUMN name TYPE TEXT
-```
-
-Table recreation is required to change a column's type in SQLite.
+**SQLite**: `ALTER COLUMN TYPE` does not exist, so dbwarden rebuilds the table: create the new shape under a temporary name, copy the rows, drop the original, rename into place, recreate the indexes. The rollback is the rebuild in the other direction. See [SQLite Deep Dive](sqlite.md#table-rebuilds).
 
 ## Column Nullable Change
 
@@ -57,21 +49,17 @@ Table recreation is required to change a column's type in SQLite.
 |---------|--------|-----------|
 | PostgreSQL | `ALTER TABLE t ALTER COLUMN c [SET/DROP] NOT NULL` | Yes |
 | MySQL / MariaDB | `ALTER TABLE t MODIFY COLUMN c coltype [NOT] NULL` | Yes |
-| SQLite | Not supported | Comment emitted |
+| SQLite | Table rebuild | Yes |
 
 **PostgreSQL**: Uses `SET NOT NULL` / `DROP NOT NULL`. No column type needed.
 
 **MySQL / MariaDB**: Uses `MODIFY COLUMN` which requires the full column type. dbwarden includes the type from the model column definition. If the type is not available, nullable changes for MySQL/MariaDB may produce incomplete SQL.
 
-**SQLite**: Not supported. A comment is emitted:
-
-```sql
--- SQLite: ALTER TABLE users ALTER COLUMN email SET NOT NULL (not supported)
-```
+**SQLite**: Nullability is part of the column definition and can only change by rebuilding the table, which dbwarden generates. See [SQLite Deep Dive](sqlite.md#table-rebuilds).
 
 ## Column Default Change
 
-All four backends support `ALTER TABLE t ALTER COLUMN c SET DEFAULT value` and `ALTER TABLE t ALTER COLUMN c DROP DEFAULT`. Default changes work uniformly across all SQL backends.
+PostgreSQL, MySQL and MariaDB support `ALTER TABLE t ALTER COLUMN c SET DEFAULT value` and `ALTER TABLE t ALTER COLUMN c DROP DEFAULT`. SQLite has no `ALTER COLUMN`, so a default change is emitted as a table rebuild.
 
 ## Foreign Key Handling
 
@@ -80,7 +68,7 @@ All four backends support `ALTER TABLE t ALTER COLUMN c SET DEFAULT value` and `
 | PostgreSQL | `ADD CONSTRAINT ... FOREIGN KEY` | `DROP CONSTRAINT ...` | Supports `ON DELETE`, `ON UPDATE`, `DEFERRABLE` |
 | MySQL | `ADD CONSTRAINT ... FOREIGN KEY` | `DROP FOREIGN KEY ...` | Uses constraint name, not FK name |
 | MariaDB | `ADD CONSTRAINT ... FOREIGN KEY` | `DROP FOREIGN KEY ...` | Same as MySQL |
-| SQLite | Not supported (comment) | Not supported (comment) | Recreate table |
+| SQLite | Table rebuild | Table rebuild | Constraint is inlined in the rebuilt CREATE TABLE |
 | ClickHouse | Not supported (error) | Not supported (error) | `ForeignKey()` raises `DBWardenConfigError` |
 
 **PostgreSQL FK options**: `ON DELETE`, `ON UPDATE`, and `DEFERRABLE INITIALLY DEFERRED` are fully supported. See [PostgreSQL Deep Dive](postgresql/index.md).
@@ -113,7 +101,7 @@ All four backends support `ALTER TABLE t ALTER COLUMN c SET DEFAULT value` and `
 |---------|-----------|----------|
 | PostgreSQL | Yes | Multi-step: add temp column, backfill comment, verify, drop+rename |
 | MySQL / MariaDB | Yes | Multi-step: add temp column, backfill comment, verify, drop+rename |
-| SQLite | No | Comment emitted |
+| SQLite | Not needed | The rebuild already copies the table atomically |
 
 The `--safe-type-change` flag generates a multi-step strategy:
 1. Add a temporary column with the new type
@@ -121,7 +109,7 @@ The `--safe-type-change` flag generates a multi-step strategy:
 3. Emit a verification comment
 4. After manual verification, drop the old column and rename the temporary column
 
-On SQLite, this strategy is not supported because SQLite cannot drop columns (before 3.35.0) and has limited ALTER TABLE support. A comment is emitted instead.
+On SQLite the flag has no effect: a type change is already emitted as a table rebuild, which copies every row into the new column definition in one statement sequence rather than in manually verified steps.
 
 ## Table Rename
 
@@ -193,10 +181,9 @@ The plan JSON `resolved_from` field indicates how a rename was confirmed:
 - Foreign key drop uses `DROP FOREIGN KEY` (constraint name is still the auto-generated name)
 
 ### SQLite
-- `ALTER COLUMN TYPE` is not supported (comment emitted)
-- `ALTER COLUMN [SET/DROP] NOT NULL` is not supported (comment emitted)
-- `--safe-type-change` is not supported (comment emitted)
-- FK constraints are not directly alterable (comment suggesting table recreation)
-- Column rename supported since 3.25.0; older versions need manual migration
-- Type affinity differs from server databases (e.g., `VARCHAR(255)` becomes `TEXT`)
+- Column type, nullability, default and constraint changes are emitted as a table rebuild; the migration copies every row and holds a write lock for its duration
+- `DROP COLUMN` in a rebuild discards the column's data; the rollback restores the column, not the values
+- Column rename supported since 3.25.0; `DROP COLUMN` since 3.35.0
+- Declared types are preserved as written; inside a `STRICT` table they collapse to `INTEGER` / `REAL` / `TEXT` / `BLOB`
+- Foreign key enforcement is off by default, which the rebuild relies on; do not enable `PRAGMA foreign_keys` on the migration connection
 - Limited to single-writer; no concurrent writes

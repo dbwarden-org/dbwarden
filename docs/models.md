@@ -122,7 +122,7 @@ dbwarden organizes backend-specific types into subpackages under `dbwarden.datab
 | `ch` | `dbwarden.databases.clickhouse` | `ChFieldSpec`, `ChIndexSpec`, `ChTableSpec` |
 | `my` | `dbwarden.databases.mysql` | `MyFieldSpec`, `MyTableSpec` |
 | `mdb` | `dbwarden.databases.mariadb` | `MdbFieldSpec`, `MdbTableSpec` |
-| `sq` | `dbwarden.databases.sqlite` | `SqFieldSpec`, `SqTableSpec` |
+| `sq` | `dbwarden.databases.sqlite` | `SqFieldSpec`, `SqTableSpec`, `SqTableMeta`, `SqColumnMeta` |
 
 Only `IndexSpec`, `PgIndexSpec`, and `ChIndexSpec` exist as typed index spec classes. MySQL, MariaDB, and SQLite use the base `IndexSpec` with the `indexes` attribute or plain dicts in their backend-specific index list (`my_indexes`, `sq_indexes`).
 

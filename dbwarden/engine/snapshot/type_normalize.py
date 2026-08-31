@@ -144,10 +144,31 @@ def normalize_type(raw_type: str) -> dict[str, Any]:
     return {"type": raw_type.strip(), "raw": True}
 
 
+_TRAILING_CAST_RE = re.compile(r"::\s*[A-Za-z_][A-Za-z0-9_ ]*(\[\])?\s*$")
+
+
+def _strip_trailing_cast(s: str) -> str:
+    """Drop a trailing ``::type`` cast from a default expression.
+
+    PostgreSQL reports a column default with its cast attached, as in
+    ``'queued'::character varying``.  The model spells the same default
+    ``'queued'``, so without this the two never compare equal: every run would
+    emit an ALTER for a default that did not change, and the rollback would
+    re-quote the cast text into ``'''queued''::character varying'``.  Only a
+    cast at the very end is removed, so ``nextval('s'::regclass)`` is untouched.
+    """
+    previous = None
+    while previous != s:
+        previous = s
+        s = _TRAILING_CAST_RE.sub("", s).strip()
+    return s
+
+
 def _normalize_default(d: Any) -> str | None:
     if d is None:
         return None
     s = str(d).strip()
+    s = _strip_trailing_cast(s)
     while len(s) >= 2 and s[0] == s[-1] and s[0] in ("'", '"'):
         s = s[1:-1]
     s = s.replace("\\'", "'").replace('\\"', '"')

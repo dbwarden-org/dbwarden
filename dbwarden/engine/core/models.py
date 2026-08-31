@@ -24,6 +24,7 @@ class ModelColumn:
         pg_meta: Optional[dict[str, Any]] = None,
         ch_meta: Optional[dict[str, Any]] = None,
         my_meta: Optional[dict[str, Any]] = None,
+        sq_meta: Optional[dict[str, Any]] = None,
         autoincrement: Optional[bool] = None,
         fk_on_delete: Optional[str] = None,
         fk_on_update: Optional[str] = None,
@@ -40,6 +41,7 @@ class ModelColumn:
         self.pg_meta = pg_meta or {}
         self.ch_meta = ch_meta or {}
         self.my_meta = my_meta or {}
+        self.sq_meta = sq_meta or {}
         self.autoincrement = autoincrement
         self.fk_on_delete = fk_on_delete
         self.fk_on_update = fk_on_update
@@ -62,11 +64,44 @@ class ModelColumn:
             d["ch_meta"] = self.ch_meta
         if self.my_meta:
             d["my_meta"] = self.my_meta
+        if self.sq_meta:
+            d["sq_meta"] = self.sq_meta
         if self.fk_on_delete is not None:
             d["fk_on_delete"] = self.fk_on_delete
         if self.fk_on_update is not None:
             d["fk_on_update"] = self.fk_on_update
         return d
+
+
+def column_unique_is_table_constraint(table: Any, column_name: str) -> bool:
+    """True when this column's UNIQUE is already declared as a table constraint.
+
+    ``mapped_column(unique=True)`` is collected into ``table.uniques`` so the
+    constraint gets a deterministic name.  The column definition must then not
+    repeat ``UNIQUE`` inline, or the table ends up with two unique constraints
+    on the same column - the anonymous one the database names itself, plus the
+    named one.
+    """
+    for unique in getattr(table, "uniques", None) or []:
+        columns = unique.get("columns") or []
+        if len(columns) == 1 and columns[0] == column_name:
+            return True
+    return False
+
+
+def column_foreign_key_is_table_constraint(table: Any, column_name: str) -> bool:
+    """True when this column's foreign key is also declared at table level.
+
+    A single-column ``ForeignKey`` reaches the model twice: once on the column
+    and once in ``table.foreign_keys``.  Backends that emit foreign keys as
+    named ``ADD CONSTRAINT`` statements must not also render ``REFERENCES``
+    inline, or the table ends up with the constraint twice.
+    """
+    for foreign_key in getattr(table, "foreign_keys", None) or []:
+        columns = foreign_key.get("columns") or []
+        if len(columns) == 1 and columns[0] == column_name:
+            return True
+    return False
 
 
 @dataclass
@@ -162,6 +197,7 @@ class ModelTable:
         excludes: Optional[list[dict[str, Any]]] = None,
         pg_table: Optional[dict[str, Any]] = None,
         my_table: Optional[dict[str, Any]] = None,
+        sq_table: Optional[dict[str, Any]] = None,
         schema: str | None = None,
         pg_view_definition: str | None = None,
         pg_view_materialized: bool = False,
@@ -184,6 +220,7 @@ class ModelTable:
         self.excludes = [normalize_exclude_spec(ex) for ex in (excludes or [])]
         self.pg_table = pg_table or {}
         self.my_table = my_table or {}
+        self.sq_table = sq_table or {}
         self.schema = schema
         self.pg_view_definition = pg_view_definition
         self.pg_view_materialized = pg_view_materialized
@@ -205,6 +242,7 @@ class ModelTable:
             "excludes": self.excludes,
             "pg_table": self.pg_table,
             "my_table": self.my_table,
+            "sq_table": self.sq_table,
             "schema": self.schema,
             "pg_view_definition": self.pg_view_definition,
             "pg_view_materialized": self.pg_view_materialized,

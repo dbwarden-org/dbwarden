@@ -173,7 +173,7 @@ def _run_offline_migrations(
     current_tables = filter_model_tables_by_name(current_tables, config.model_tables)
     current_state = model_state_to_dict(current_tables, dbwarden_version=_dw_version)
 
-    upgrade_ops, rollback_ops = diff_model_states(prev_state, current_state)
+    upgrade_ops, rollback_ops = diff_model_states(prev_state, current_state, db_name=db_name)
 
     rename_intents: list[RenameIntent] = []
     if rename_flags:
@@ -355,13 +355,37 @@ def _drop_sequence_sql(seq: dict) -> str:
     return f"DROP SEQUENCE IF EXISTS {qname};"
 
 
+# The object kinds the PostgreSQL preamble handlers read out of a snapshot.
+# Listing them keeps a handler from seeing a missing key when the snapshot came
+# from an older dbwarden version or a partial extraction.
+_EMPTY_PREAMBLE_SNAPSHOT: dict[str, Any] = {
+    "domains": {},
+    "sequences": {},
+    "functions": {},
+    "tables": {},
+    "roles": {},
+    "default_privileges": {},
+    "composite_types": {},
+    "extended_stats": {},
+    "event_triggers": {},
+    "pg_extensions": {},
+}
+
+
 def _prepend_pg_preamble(
     upgrade_sql: str,
     rollback_sql: str,
     changes: list[Change],
     database: str | None,
+    snapshot: dict[str, Any] | None = None,
 ) -> tuple[str, str, list[Change]]:
-    """Prepend PostgreSQL preamble SQL (extensions, domains, sequences) to upgrade/rollback SQL."""
+    """Prepend PostgreSQL preamble SQL (extensions, domains, sequences) to upgrade/rollback SQL.
+
+    ``snapshot`` is the schema snapshot the caller diffed against, when it has
+    one. Preamble objects are declared in configuration rather than in models,
+    so they are diffed here; without the snapshot they would be compared
+    against an empty state and recreated on every run.
+    """
     try:
         mc = get_multi_db_config()
         db_name = database or mc.default
@@ -381,7 +405,18 @@ def _prepend_pg_preamble(
 
         if has_pg_preamble or has_pg_extension:
             _reg = RegistryDriver()
-            _up_ops, _rb_ops = _reg.run({"domains": {}, "sequences": {}, "functions": {}, "tables": {}, "roles": {}, "default_privileges": {}, "composite_types": {}, "extended_stats": {}, "event_triggers": {}, "pg_extensions": {}}, [], config)
+            # Diff the preamble against the database, not against nothing. With
+            # an empty snapshot every declared role, domain, sequence, function
+            # and trigger reads as new, so each generation emits CREATE for
+            # objects that already exist: the second `migrate` fails with
+            # "already exists", and an attribute change never becomes an ALTER.
+            # The empty shape is still the right input when there is no
+            # snapshot - offline generation cannot see the server, and creating
+            # is then the only honest instruction.
+            _preamble_snapshot = dict(_EMPTY_PREAMBLE_SNAPSHOT)
+            if isinstance(snapshot, dict):
+                _preamble_snapshot.update(snapshot)
+            _up_ops, _rb_ops = _reg.run(_preamble_snapshot, [], config)
             if _up_ops:
                 _stmts = _reg.emit_all(_up_ops, db_name=db_name)
                 _pg_up = "\n".join(s.upgrade_sql for s in _stmts)
@@ -578,6 +613,18 @@ def generate_migration_sql(
         except RollbackContractError:
             raise
         except Exception:
+            # Falling back means generating from the models alone, which cannot
+            # see the database and so cannot diff. Say why: this used to be
+            # silent, and the degraded migration is hard to tell apart from a
+            # correct one.
+            logger.exception(
+                "Snapshot diff failed; falling back to generating from models only. "
+                "The generated migration may not reflect the current database."
+            )
+            warning(
+                "Could not diff against the schema snapshot; generating from models "
+                "only. Review the generated SQL before applying it."
+            )
             snapshot = None
 
     if snapshot is None:
@@ -668,22 +715,115 @@ def generate_migration_sql(
                 idx_cols = idx.expression or ", ".join(idx.columns)
                 if not idx_cols:
                     continue
+                if backend == "postgresql":
+                    idx_name = _quote_pg(idx.name)
+                    if idx.expression:
+                        idx_cols = idx.expression
+                    else:
+                        idx_cols = ", ".join(_quote_pg(c) for c in idx.columns)
+                else:
+                    idx_name = idx.name
                 if backend == "clickhouse":
                     ch_type = idx.clickhouse_type or "minmax"
                     ch_granularity = idx.clickhouse_granularity or 1
                     upgrade_parts.append(
-                        f"ALTER TABLE {qname} ADD INDEX IF NOT EXISTS {idx.name} "
+                        f"ALTER TABLE {qname} ADD INDEX IF NOT EXISTS {idx_name} "
                         f"({idx_cols}) "
                         f"TYPE {ch_type} "
                         f"GRANULARITY {ch_granularity};"
                     )
                     rollback_parts.append(
-                        f"ALTER TABLE {qname} DROP INDEX {idx.name};"
+                        f"ALTER TABLE {qname} DROP INDEX {idx_name};"
                     )
                 else:
-                    upgrade_parts.append(f"CREATE INDEX IF NOT EXISTS {idx.name} ON {qname} ({idx_cols});")
-                    rollback_parts.append(f"DROP INDEX IF EXISTS {idx.name};")
+                    upgrade_parts.append(f"CREATE INDEX IF NOT EXISTS {idx_name} ON {qname} ({idx_cols});")
+                    rollback_parts.append(f"DROP INDEX IF EXISTS {idx_name};")
                 changes.append(Change(operation="add_index", table=table.name, target=idx.name))
+            # UNIQUE and CHECK constraints are part of the table's definition.
+            # The snapshot path emits them through ConstraintHandler; this path
+            # has no handler, so without these two loops a migration generated
+            # without a snapshot silently creates every table with its
+            # constraints missing - and ON CONFLICT against them then fails.
+            for unique in table.uniques or []:
+                unique_columns = list(unique.get("columns") or [])
+                if not unique_columns:
+                    continue
+                uq_name = unique.get("name") or f"uq_{table.name}_{'_'.join(unique_columns)}"
+                if backend == "postgresql":
+                    uq_name_sql = _quote_pg(uq_name)
+                    uq_cols_sql = ", ".join(_quote_pg(c) for c in unique_columns)
+                else:
+                    uq_name_sql = uq_name
+                    uq_cols_sql = ", ".join(unique_columns)
+                defer_clause = ""
+                if backend == "postgresql" and unique.get("deferrable"):
+                    defer_clause = (
+                        " DEFERRABLE INITIALLY DEFERRED"
+                        if unique.get("initially_deferred")
+                        else " DEFERRABLE INITIALLY IMMEDIATE"
+                    )
+                upgrade_parts.append(
+                    f"ALTER TABLE {qname} ADD CONSTRAINT {uq_name_sql} "
+                    f"UNIQUE ({uq_cols_sql}){defer_clause};"
+                )
+                rollback_parts.append(
+                    f"ALTER TABLE {qname} DROP CONSTRAINT {uq_name_sql};"
+                )
+                changes.append(Change(
+                    operation="add_unique_constraint",
+                    table=table.name,
+                    target=",".join(unique_columns),
+                ))
+
+            for index, check in enumerate(table.checks or []):
+                expression = check.get("expression") or check.get("sql_expression")
+                if not expression:
+                    continue
+                ck_name = check.get("name") or f"ck_{table.name}_{index}"
+                ck_name_sql = _quote_pg(ck_name) if backend == "postgresql" else ck_name
+                no_inherit = (
+                    " NO INHERIT"
+                    if check.get("no_inherit") and backend == "postgresql"
+                    else ""
+                )
+                upgrade_parts.append(
+                    f"ALTER TABLE {qname} ADD CONSTRAINT {ck_name_sql} "
+                    f"CHECK ({expression}){no_inherit};"
+                )
+                rollback_parts.append(
+                    f"ALTER TABLE {qname} DROP CONSTRAINT IF EXISTS {ck_name_sql};"
+                )
+                changes.append(Change(
+                    operation="add_check_constraint",
+                    table=table.name,
+                    target=ck_name,
+                ))
+
+            if backend == "postgresql":
+                pg_excludes = (table.pg_table or {}).get("pg_excludes") or table.excludes or []
+                for exclude in pg_excludes:
+                    expression = exclude.get("expression")
+                    if not expression:
+                        continue
+                    ex_name = exclude.get("name") or f"ex_{table.name}_{len(upgrade_parts)}"
+                    ex_name_sql = _quote_pg(ex_name)
+                    clause = (
+                        expression
+                        if str(expression).lstrip().upper().startswith("EXCLUDE")
+                        else f"EXCLUDE {expression}"
+                    )
+                    upgrade_parts.append(
+                        f"ALTER TABLE {qname} ADD CONSTRAINT {ex_name_sql} {clause};"
+                    )
+                    rollback_parts.append(
+                        f"ALTER TABLE {qname} DROP CONSTRAINT {ex_name_sql};"
+                    )
+                    changes.append(Change(
+                        operation="add_exclude_constraint",
+                        table=table.name,
+                        target=ex_name,
+                    ))
+
             for fk in table.foreign_keys:
                 local_cols = ", ".join(fk.get("columns", []))
                 ref_table = _quote_pg(fk.get("referred_table", "")) if backend == "postgresql" else fk.get("referred_table", "")
@@ -747,7 +887,7 @@ def generate_migration_sql(
             )
 
     upgrade_sql, rollback_sql, changes = _prepend_pg_preamble(
-        upgrade_sql, rollback_sql, changes, database,
+        upgrade_sql, rollback_sql, changes, database, snapshot,
     )
 
     upgrade_sql, rollback_sql, changes = _prepend_ch_preamble(

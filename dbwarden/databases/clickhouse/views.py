@@ -478,17 +478,26 @@ def _make_target_columns(
 
     table = getattr(model_class, "__table__", None)
     if table is not None:
+        from dbwarden.engine.backends.clickhouse.extract import _map_sa_type_to_clickhouse
+
         for sa_col in table.columns:
             if sa_col.name not in col_name_set:
                 continue
-            col_type = str(sa_col.type)
-            if (
-                sa_col.name not in agg_map
-                and _source_column_types
-                and col_type == "String"
-                and sa_col.name in _source_column_types
-            ):
-                col_type = _source_column_types[sa_col.name]
+            if sa_col.name in agg_map:
+                # An aggregate column stores partial states: its type is the
+                # AggregateFunction signature, never the SQLAlchemy type the
+                # class happens to declare for it.
+                col_type = agg_map[sa_col.name]
+            else:
+                # A dimension column carries a SQLAlchemy type, which is not
+                # ClickHouse DDL - emitting it raw produced `VARCHAR(50)` and
+                # `INTEGER` in the target table instead of `String` and `Int32`.
+                resolved = (_source_column_types or {}).get(sa_col.name)
+                col_type = (
+                    _ch_ddl_type_from_resolved(resolved)
+                    if resolved
+                    else _map_sa_type_to_clickhouse(sa_col)
+                )
             columns.append(ModelColumn(
                 name=sa_col.name,
                 type=col_type,

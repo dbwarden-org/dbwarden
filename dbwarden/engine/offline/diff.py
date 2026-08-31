@@ -25,7 +25,9 @@ from dbwarden.engine.backends.clickhouse.handlers.ch_table_handler import _CH_OP
 from .constraints import _diff_constraints, _diff_enums
 
 
-def diff_model_states(prev_state: dict, curr_state: dict) -> tuple[list[dict], list[dict]]:
+def diff_model_states(
+    prev_state: dict, curr_state: dict, db_name: str | None = None,
+) -> tuple[list[dict], list[dict]]:
     prev_state = normalize_model_state(prev_state)
     curr_state = normalize_model_state(curr_state)
 
@@ -233,6 +235,18 @@ def diff_model_states(prev_state: dict, curr_state: dict) -> tuple[list[dict], l
                 rollback_ops,
             )
 
+            prev_sq_col = prev_col.get("sq_column", {}) or {}
+            curr_sq_col = curr_col.get("sq_column", {}) or {}
+            if prev_sq_col != curr_sq_col:
+                upgrade_ops.append({
+                    "type": "alter_sq_column_meta", "table": table_name, "column": col_name,
+                    "from_value": prev_sq_col, "to_value": curr_sq_col,
+                })
+                rollback_ops.insert(0, {
+                    "type": "alter_sq_column_meta", "table": table_name, "column": col_name,
+                    "from_value": curr_sq_col, "to_value": prev_sq_col,
+                })
+
             prev_my_col = prev_col.get("my_column", {}) or {}
             curr_my_col = curr_col.get("my_column", {}) or {}
             if prev_my_col != curr_my_col:
@@ -351,6 +365,21 @@ def diff_model_states(prev_state: dict, curr_state: dict) -> tuple[list[dict], l
                     "from_value": curr_my_table.get(key), "to_value": prev_my_table.get(key),
                 })
 
+        prev_sq_table = prev_spec if prev_spec.get("backend") == "sqlite" else {}
+        curr_sq_table = curr_spec if curr_spec.get("backend") == "sqlite" else {}
+        for key in ("sq_without_rowid", "sq_strict"):
+            prev_val = bool(prev_sq_table.get(key, False))
+            curr_val = bool(curr_sq_table.get(key, False))
+            if prev_val != curr_val:
+                upgrade_ops.append({
+                    "type": "alter_sq_table", "table": table_name, "key": key,
+                    "from_value": prev_val, "to_value": curr_val,
+                })
+                rollback_ops.insert(0, {
+                    "type": "alter_sq_table", "table": table_name, "key": key,
+                    "from_value": curr_val, "to_value": prev_val,
+                })
+
         if prev_entry.get("comment") != curr_entry.get("comment"):
             upgrade_ops.append({
                 "type": "alter_table_comment", "table": table_name,
@@ -450,5 +479,20 @@ def diff_model_states(prev_state: dict, curr_state: dict) -> tuple[list[dict], l
         allowed = {"recreate_ch_table", "drop_table", "create_table", "rename_table", "alter_enum_add_value"}
         upgrade_ops = [op for op in upgrade_ops if op.get("table") not in recreate_tables or op.get("type") in allowed]
         rollback_ops = [op for op in rollback_ops if op.get("table") not in recreate_tables or op.get("type") in allowed]
+
+    from dbwarden.engine.model_discovery.type_mapping import is_sqlite_target
+
+    if is_sqlite_target(db_name):
+        from dbwarden.engine.backends.sqlite.collapse import (
+            collapse_sqlite_ops,
+            snapshot_state_entries,
+        )
+
+        upgrade_ops, rollback_ops = collapse_sqlite_ops(
+            upgrade_ops,
+            rollback_ops,
+            from_entries=snapshot_state_entries(prev_state),
+            to_entries=snapshot_state_entries(curr_state),
+        )
 
     return upgrade_ops, rollback_ops

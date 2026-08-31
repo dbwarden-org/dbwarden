@@ -19,13 +19,22 @@ dbwarden translation solves this by adapting generated SQL for SQLite compatibil
 
 ## When translation is active
 
-Translation is applied when all are true:
+Translation runs whenever the **resolved backend is SQLite** and SQL is being
+generated from models (`make-migrations`, `export-models`). That covers both:
 
-- command runs with `--dev`
-- selected database resolves to a SQLite `dev_database_url`
-- command path generates SQL from models (`make-migrations`)
+- a `--dev` run whose `dev_database_url` is SQLite, and
+- a database whose `database_type` is `sqlite` in its own right.
 
-It is not a runtime SQL proxy for arbitrary manual SQL.
+It is not a runtime SQL proxy for arbitrary manual SQL, and it is not applied to
+migration files you write by hand.
+
+!!! note "Translation and first-class SQLite are different layers"
+
+    Translation adapts a *type or default written for another backend* so it is
+    legal in SQLite. [First-class SQLite support](databases/sqlite.md) is about
+    the shape of the migration itself - table rebuilds, `WITHOUT ROWID`,
+    `STRICT`, generated columns. They compose: a translated type is what the
+    rebuild then renders.
 
 ## How It Works
 
@@ -53,9 +62,24 @@ Common conversions:
 |-------------|---------------|
 | `UUID` | `TEXT` |
 | `JSON` / `JSONB` | `TEXT` |
-| `TIMESTAMPTZ` | `DATETIME` |
+| `BYTEA` | `BLOB` |
+| `TIMESTAMPTZ` / `TIMESTAMP WITH TIME ZONE` | `DATETIME` |
 | `SERIAL` / `BIGSERIAL` | `INTEGER` |
-| ClickHouse nullable numeric forms | `INTEGER`/`REAL` depending on source |
+| `BOOL` | `BOOLEAN` |
+| `INT8` / `INT16` / `INT32` / `INT64` | `INTEGER` |
+| `UINT8` / `UINT16` / `UINT32` / `UINT64` | `INTEGER` |
+| `FLOAT32` / `FLOAT64` | `REAL` |
+| `DATETIME64` / `DATETIME64(n)` | `DATETIME` |
+| `DECIMAL(p,s)` / `NUMERIC(p,s)` | `NUMERIC` |
+| `FIXEDSTRING(n)` | `TEXT` |
+| `ARRAY(...)` | `TEXT` (or an error in strict mode) |
+
+ClickHouse `Nullable(...)` and `LowCardinality(...)` wrappers are unwrapped
+before the inner type is translated.
+
+Types SQLite already understands - `INTEGER`, `VARCHAR(n)`, `TEXT`, `BOOLEAN`,
+`REAL`, `DATE`, `DATETIME`, `BLOB`, `NUMERIC` and friends - pass through
+unchanged, keeping their declared length.
 
 If a type cannot be translated safely:
 
@@ -65,6 +89,10 @@ If a type cannot be translated safely:
 ## Default expression handling
 
 Backend expressions such as `now()` or `gen_random_uuid()` may not have direct SQLite equivalents.
+
+`CURRENT_TIMESTAMP`, `CURRENT_DATE` and `CURRENT_TIME` pass through unchanged.
+`NOW()`, `UUID_GENERATE_V4()`, `GEN_RANDOM_UUID()` and `NEXTVAL(...)` have no
+SQLite equivalent.
 
 In non-strict mode, unsupported defaults are dropped with warning.
 
@@ -84,6 +112,13 @@ In strict mode:
 - Unsupported default expression conversions raise errors
 
 Use this when you want to catch every lossy conversion early.
+
+!!! warning "`--strict-translation` is not a `STRICT` table"
+
+    `--strict-translation` controls what dbwarden does with a type it cannot
+    translate. SQLite's `STRICT` keyword is a table option, set with
+    `sq_strict` on the model, that makes SQLite itself enforce column types.
+    See [SQLite](databases/sqlite.md#types-and-strict-tables).
 
 ## Recommended team workflow
 
@@ -113,3 +148,6 @@ Generated SQL differs from production expectations:
 - Translation focuses on compatibility for local development.
 - Some backend features cannot be represented exactly in SQLite.
 - For production accuracy, always test migrations against your production-like database too.
+- Translation converts a type name; it does not convert stored data. Narrowing a
+  column against existing rows can still be rejected by SQLite when the target
+  table is `STRICT`.

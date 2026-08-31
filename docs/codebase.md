@@ -23,7 +23,6 @@ site/            # Built documentation output (gitignored)
 | `databases/` | Concrete backend specs: ClickHouse, MySQL, PostgreSQL, MariaDB, SQLite |
 | `schema/` | Dialect-agnostic metadata layer: table/column/field metadata classes |
 | `repositories/` | Migration and lock metadata persistence |
-| `fastapi/` | FastAPI integration (lifespan, health checks) |
 | `config*.py` | Configuration loading and resolution |
 | `constants.py` | Shared constants |
 | `exceptions.py` | Exception hierarchy |
@@ -46,7 +45,7 @@ The `dbwarden/databases/` package is the concrete backend layer. It contains dia
 - `mysql/`: `MyFieldSpec`, `MyTableSpec`
 - `pgsql/`: `PgFieldSpec`, `PgIndexSpec`, `PgTableSpec`, exclude/partition helpers
 - `mariadb/`: `MdbFieldSpec`, `MdbTableSpec`
-- `sqlite/`: `SqFieldSpec`, `SqTableSpec`
+- `sqlite/`: `SqFieldSpec`, `SqTableSpec`, re-exported `SqTableMeta` / `SqColumnMeta`
 
 ### The Import Contract
 
@@ -97,5 +96,5 @@ The orphan `__pycache__` directories under `schema/{clickhouse,mysql,pgsql,maria
 1. Create a new subpackage under `databases/<name>/` with `__init__.py`, `field.py`, and any backend-specific specs.
 2. Define a `*TableSpec` dataclass and a `*FieldSpec` dataclass matching the existing backends.
 3. Register the backend in `databases/__init__.py` and add the shortcut import (`sq`, `my`, etc.).
-4. If the backend needs no column-level `Meta` attributes (like SQLite), add no `*ColumnMeta` class.
+4. If the backend needs no column-level `Meta` attributes, add no `*ColumnMeta` class.
 5. Do not touch files in `schema/` unless you are adding cross-database metadata fields.

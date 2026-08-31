@@ -233,3 +233,31 @@ class MdbColumnMeta(metaclass=_MetaValidator):
     comment: str | None = None
     public: bool | None = None
     mdb: Any = None
+
+
+class SqTableMeta(TableMeta):
+    """SQLite table-level metadata; inherit in ``class Meta``."""
+
+    comment: str | None = None
+    indexes: list[Any] = []
+    checks: list[Any] = []
+    uniques: list[Any] = []
+
+    sq_without_rowid: bool = False
+    sq_strict: bool = False
+    sq_indexes: list[Any] = []
+
+
+class SqColumnMeta(metaclass=_MetaValidator):
+    """SQLite column-level metadata; inherit in ``Meta`` inner classes.
+
+    Example::
+
+        class Meta(SqTableMeta):
+            class slug(SqColumnMeta):
+                sq = sq.field(generated="lower(title)")
+    """
+    __meta_root__ = True
+    comment: str | None = None
+    public: bool | None = None
+    sq: Any = None

@@ -49,3 +49,23 @@ def _get_generic_type_name(col_type: Any) -> str:
         except Exception:
             pass
     return type_str
+
+
+def pg_index_sort_option(is_asc: bool | None, nulls_first: bool | None) -> str | None:
+    """Render an index column's sort options, or ``None`` when they are default.
+
+    PostgreSQL's null ordering follows the sort direction: ``NULLS LAST`` is
+    implied by ``ASC`` and ``NULLS FIRST`` by ``DESC``.  Recording the implied
+    value would make a plain index differ from a model that says nothing about
+    sorting, and indexes are compared by full content - so every such index
+    would be dropped and recreated on every run.
+    """
+    descending = is_asc is False
+    parts: list[str] = []
+    if descending:
+        parts.append("DESC")
+    if nulls_first is False and descending:
+        parts.append("NULLS LAST")
+    elif nulls_first is True and not descending:
+        parts.append("NULLS FIRST")
+    return " ".join(parts) or None

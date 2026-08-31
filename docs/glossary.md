@@ -49,7 +49,7 @@ description: Key terms and concepts used throughout the dbwarden documentation, 
 ## F
 
 **FastAPI Integration**
-: dbwarden's built-in support for FastAPI including async sessions, health endpoints, migration endpoints, Prometheus metrics, and distributed locking. Configured once via a `DbwardenDatabase` class or the equivalent `database_config()` function.
+: Support for FastAPI including async sessions, health endpoints, migration endpoints, Prometheus metrics, and distributed locking. Provided by the [`dbwarden-fastapi`](https://pypi.org/p/dbwarden-fastapi) plugin. Configured once via a `DbwardenDatabase` class or the equivalent `database_config()` function.
 
 ## G
 

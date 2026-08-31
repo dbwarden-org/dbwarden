@@ -1,6 +1,6 @@
-# Correctness
+# Compilation Correctness
 
-dbwarden generates SQL automatically. This section explains the mechanical checks that make that safe: how dbwarden proves the generated SQL matches the declared model state, how it prevents noisy diffs, how it warns before risky changes, and how rollback SQL is produced under a strict contract.
+dbwarden compiles models to SQL. This section explains the mechanical checks that make that compilation trustworthy: how dbwarden proves the compiled SQL matches the declared model state, how it prevents noisy diffs, how it warns before risky changes, and how rollback SQL is produced under a strict contract.
 
 The claim is not "trust the tool because it is convenient". The claim is stronger: dbwarden exposes a chain of independent checks. Each check catches a different class of failure. Together they make generated migrations reviewable, reproducible, and suitable for CI enforcement.
 

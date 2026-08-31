@@ -56,6 +56,7 @@ def _write_models(
                     table.get("pg_meta"),
                     table.get("my_meta"),
                     base_class_name=base_class_name,
+                    sq_meta=table.get("sq_meta"),
                 )
             )
 
@@ -148,8 +149,10 @@ def _write_models(
             content_lines.append("Base = declarative_base()\n\n\n")
         needs_pg_base: set[str] = set()
         needs_my_base: set[str] = set()
+        needs_sq_base: set[str] = set()
         needs_pg_spec = False
         needs_my_spec = False
+        needs_sq_spec = False
         needs_ch_spec = False
         if any(col.get("pg_meta") for col in table["columns"]):
             needs_pg_base.add("PGColumnMeta")
@@ -163,6 +166,11 @@ def _write_models(
             needs_my_spec = True
         if table.get("my_meta"):
             needs_my_base.add("MyTableMeta")
+        if any(col.get("sq_meta") for col in table["columns"]):
+            needs_sq_base.add("SqColumnMeta")
+            needs_sq_spec = True
+        if table.get("sq_meta"):
+            needs_sq_base.add("SqTableMeta")
         if needs_pg_base or needs_pg_spec:
             imports = ", ".join(sorted(needs_pg_base))
             if needs_pg_spec:
@@ -174,6 +182,12 @@ def _write_models(
             if needs_my_spec:
                 imports = ("my, " + imports) if needs_my_base else "my"
             content_lines.append("from dbwarden.databases.mysql import " + imports + "\n")
+            content_lines.append("\n")
+        if needs_sq_base or needs_sq_spec:
+            imports = ", ".join(sorted(needs_sq_base))
+            if needs_sq_spec:
+                imports = ("sq, " + imports) if needs_sq_base else "sq"
+            content_lines.append("from dbwarden.databases.sqlite import " + imports + "\n")
             content_lines.append("\n")
         if table.get("ch_options"):
             if table.get("object_type") == "materialized_view":
@@ -197,6 +211,7 @@ def _write_models(
                 table.get("pg_meta"),
                 table.get("my_meta"),
                 base_class_name=base_class_name,
+                sq_meta=table.get("sq_meta"),
             )
         )
         safe_name = re.sub(r"[^a-zA-Z0-9_]", "_", table["name"].lower()).strip("_") or "model"

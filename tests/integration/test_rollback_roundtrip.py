@@ -23,6 +23,26 @@ def _requires_option(pytestconfig: pytest.Config, option: str) -> None:
         pytest.skip(f"requires {option}")
 
 
+def _requires_role_handler() -> None:
+    """`alter_role` is not core: it comes from the dbwarden-pgsql-rbac plugin.
+
+    Core's suite stays hermetic - it does not call `load_plugins()`, because
+    registering plugin handlers globally would change what every other diff in
+    the session emits. So this skips unless a handler is already registered,
+    and the plugin-loaded path is covered by the harness's plugin_integration
+    suite.
+    """
+    from dbwarden.plugin import ObjectPluginRegistry
+
+    for registration in ObjectPluginRegistry.handlers().values():
+        if "alter_role" in getattr(registration.handler, "op_types", ()):
+            return
+    pytest.skip(
+        "alter_role is provided by the dbwarden-pgsql-rbac plugin; "
+        "no registered handler for it in this environment"
+    )
+
+
 def _canonical_pg_column_defaults(pg_url: str, table_name: str) -> dict[str, Any]:
     import sqlalchemy as sa
 
@@ -106,7 +126,6 @@ def _assert_round_trip(
 @pytest.fixture(scope="module")
 def pg_url(pytestconfig: pytest.Config) -> str:
     _requires_option(pytestconfig, "--pg-integration")
-    pytest.importorskip("testcontainers.postgres")
 
     host = os.environ.get("PG_HOST")
     port = os.environ.get("PG_PORT")
@@ -114,8 +133,13 @@ def pg_url(pytestconfig: pytest.Config) -> str:
         user = os.environ.get("PG_USER", "postgres")
         password = os.environ.get("PG_PASSWORD", "postgres")
         database = os.environ.get("PG_DATABASE", "dbwarden_test")
-        return f"postgresql://{user}:{password}@{host}:{port}/{database}"
+        # A generator fixture has to yield on every path: returning here left
+        # the fixture with no value whenever a server was supplied by
+        # environment variables, which is how CI runs these.
+        yield f"postgresql://{user}:{password}@{host}:{port}/{database}"
+        return
 
+    pytest.importorskip("testcontainers.postgres")
     from testcontainers.postgres import PostgresContainer
 
     with PostgresContainer("postgres:13-alpine") as pg:
@@ -227,6 +251,8 @@ def test_pg_column_statistics_round_trips(pg_url: str) -> None:
 def test_pg_role_alter_round_trips(pg_url: str) -> None:
     import sqlalchemy as sa
     from dbwarden.engine.snapshot import snapshot_diff_to_sql
+
+    _requires_role_handler()
 
     engine = sa.create_engine(pg_url)
     role_name = "dbw_rt_role"

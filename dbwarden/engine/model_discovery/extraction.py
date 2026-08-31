@@ -149,6 +149,7 @@ def extract_table_from_model(
         excludes = []
         pg_table = {}
         my_table = {}
+        sq_table = {}
         schema = None
         pg_view_definition = None
         pg_view_materialized = False
@@ -163,20 +164,12 @@ def extract_table_from_model(
             checks = [normalize_check_spec(c) for c in checks]
             uniques = [normalize_unique_spec(u) for u in uniques]
             excludes = [normalize_exclude_spec(ex) for ex in excludes]
-            for column in model_class.__table__.columns:
-                if getattr(column, "unique", False):
-                    col_name = column.name
-                    if not any(col_name in u.get("columns", []) for u in uniques):
-                        uniques.append({
-                            "columns": [col_name],
-                            "deferrable": False,
-                            "initially_deferred": False,
-                        })
             indexes_meta = getattr(dw_meta, "indexes", []) or []
             pg_indexes_meta = getattr(dw_meta, "pg_indexes", []) or []
             ch_indexes_meta = getattr(dw_meta, "ch_indexes", []) or []
             my_indexes_meta = getattr(dw_meta, "my_indexes", []) or []
-            for idx_entry in list(indexes_meta) + list(pg_indexes_meta) + list(ch_indexes_meta) + list(my_indexes_meta):
+            sq_indexes_meta = getattr(dw_meta, "sq_indexes", []) or []
+            for idx_entry in list(indexes_meta) + list(pg_indexes_meta) + list(ch_indexes_meta) + list(my_indexes_meta) + list(sq_indexes_meta):
                     if hasattr(idx_entry, "to_dict"):
                         idx_entry = idx_entry.to_dict()
                     if not isinstance(idx_entry, dict):
@@ -255,6 +248,11 @@ def extract_table_from_model(
                     k: v for k, v in dw_meta.table_attrs.items()
                     if k.startswith("my_") and k not in ("my_indexes", "my_checks", "my_uniques") and v is not None
                 }
+            if any(k.startswith("sq_") for k in getattr(dw_meta, "table_attrs", {})):
+                sq_table = {
+                    k: v for k, v in dw_meta.table_attrs.items()
+                    if k.startswith("sq_") and k not in ("sq_indexes",) and v is not None
+                }
 
             if "pg_partition" in pg_table:
                 part = pg_table["pg_partition"]
@@ -265,6 +263,20 @@ def extract_table_from_model(
                 pg_policies = list(dw_meta.table_attrs.get("pg_policies", [])) or None
             if pg_grants is None:
                 pg_grants = list(dw_meta.table_attrs.get("pg_grants", [])) or None
+
+        # A column-level unique=True is a unique constraint whether or not the
+        # model declares a class Meta. Reading it only inside the Meta branch
+        # left the constraint out of the model, so a diff against a database
+        # that has it emitted a DROP.
+        for column in model_class.__table__.columns:
+            if getattr(column, "unique", False):
+                col_name = column.name
+                if not any(col_name in u.get("columns", []) for u in uniques):
+                    uniques.append({
+                        "columns": [col_name],
+                        "deferrable": False,
+                        "initially_deferred": False,
+                    })
 
         if backend == "clickhouse":
             clickhouse_options = _ch_options_from_meta(model_class)
@@ -289,6 +301,7 @@ def extract_table_from_model(
             excludes=excludes,
             pg_table=pg_table,
             my_table=my_table,
+            sq_table=sq_table,
             schema=schema,
             pg_view_definition=pg_view_definition,
             pg_view_materialized=pg_view_materialized,
@@ -472,6 +485,7 @@ def extract_column_info(
         pg_meta: dict[str, Any] = {}
         ch_meta: dict[str, Any] = {}
         my_meta: dict[str, Any] = {}
+        sq_meta: dict[str, Any] = {}
         if backend == "clickhouse":
             ch_codec = column.info.get("ch_codec")
             if isinstance(ch_codec, str) and ch_codec.strip():
@@ -559,6 +573,14 @@ def extract_column_info(
             if key in column.info:
                 my_meta[key] = column.info[key]
 
+        for key in (
+            "sq_generated",
+            "sq_generated_mode",
+            "sq_collate",
+        ):
+            if key in column.info:
+                sq_meta[key] = column.info[key]
+
         return ModelColumn(
             name=name,
             type=type_str,
@@ -572,6 +594,7 @@ def extract_column_info(
             pg_meta=pg_meta,
             ch_meta=ch_meta,
             my_meta=my_meta,
+            sq_meta=sq_meta,
             autoincrement=autoincrement,
             fk_on_delete=fk_on_delete,
             fk_on_update=fk_on_update,

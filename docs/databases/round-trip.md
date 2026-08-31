@@ -15,7 +15,7 @@ A **round-trip** backend is one where dbwarden can both read schema (via `genera
 | PostgreSQL | `postgresql` | Yes |
 | MySQL | `mysql` | Yes |
 | ClickHouse | `clickhouse` | Yes |
-| SQLite | `sqlite` | Dev only |
+| SQLite | `sqlite` | Yes |
 | MariaDB | `mariadb` | No |
 
 ## How Round-Trip Verification Works
@@ -50,7 +50,11 @@ See [ClickHouse Deep Dive](clickhouse/index.md) for the complete list of support
 
 ### SQLite
 
-SQLite is supported for **development workflows only** (`--dev` flag). It uses the same snapshot format as PostgreSQL but with SQLite-compatible DDL. SQLite is ideal for local iteration before running migrations against production.
+SQLite is a **first-class backend** with full round-trip support. Table options (`WITHOUT ROWID`, `STRICT`), generated columns and column collations are captured by the snapshot, diffed correctly, and emitted as valid DDL. Changes SQLite's `ALTER TABLE` cannot express are emitted as a table rebuild, and the rollback is the rebuild in the other direction.
+
+SQLite remains the usual choice for a `dev_database_url` as well; see [SQL Translation](../sql-translation.md).
+
+See [SQLite Deep Dive](sqlite.md) for the complete list of supported features.
 
 ### MariaDB
 

@@ -286,7 +286,11 @@ class AggregatingViewSpec:
         # table, the default Float64 arg type is replaced by the resolved CH
         # type of the source column so the target column matches the state
         # combinator (e.g. sum over an Int32 column -> AggregateFunction(sum, Int32)).
-        from dbwarden.databases.clickhouse.agg import AggExpr, _classify_column_type
+        from dbwarden.databases.clickhouse.agg import (
+            _DEFAULT_AGG_ARG_TYPE,
+            AggExpr,
+            _classify_column_type,
+        )
         from dbwarden.engine.backends.clickhouse.extract import _render_ch_type_from_sa
 
         effective_aggregates: list[AggExpr] = []
@@ -302,7 +306,17 @@ class AggregatingViewSpec:
             aggregate_source_types.append(src_type)
 
             effective = a
-            if src_type is not None and _classify_column_type(src_type)[0] == "plain":
+            if (
+                src_type is not None
+                # Only the defaulted type is replaced. `agg.sum()` and
+                # `agg.avg()` fall back to Float64 when the caller says
+                # nothing; every other helper - and `agg.raw()` - takes the
+                # type explicitly, and substituting there would silently
+                # rewrite a declared `UInt32` state as the source column's
+                # `Int32`, changing the AggregateFunction signature.
+                and tuple(a.arg_types) == (_DEFAULT_AGG_ARG_TYPE,)
+                and _classify_column_type(src_type)[0] == "plain"
+            ):
                 ch_type = _render_ch_type_from_sa(None, src_type.upper().strip())
                 effective = AggExpr(a.func, a.arg, (ch_type,), a.alias)
             effective_aggregates.append(effective)

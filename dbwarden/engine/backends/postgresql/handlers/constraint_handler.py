@@ -23,6 +23,32 @@ def _quote_relation(name: str) -> str:
     return ".".join(_quote_constraint_name(part) for part in name.split("."))
 
 
+def _normalize_check_expression(expression: Any) -> str:
+    """Compare CHECK expressions the way the database means them.
+
+    PostgreSQL stores a check with its casts and its own parenthesisation:
+    the model's ``email <> ''`` comes back as ``email <> ''::text``. Comparing
+    the text literally makes every unnamed check look new.
+    """
+    text = str(expression or "")
+    text = re.sub(r"::[A-Za-z_][A-Za-z0-9_]*(\s+[A-Za-z]+)*(\[\])?", "", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    while text.startswith("(") and text.endswith(")"):
+        inner = text[1:-1]
+        depth = 0
+        for char in inner:
+            if char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+                if depth < 0:
+                    break
+        if depth != 0:
+            break
+        text = inner.strip()
+    return text
+
+
 class ConstraintHandler(ObjectHandler):
     object_type: str = "constraint"
     op_types: tuple[str, ...] = (
@@ -80,28 +106,61 @@ class ConstraintHandler(ObjectHandler):
         result: dict[str, Any] = {}
         for table in model_tables:
             uniques: dict[str, Any] = {}
+            auto_named: set[str] = set()
             for u in (table.uniques or []):
-                name = u.get("name") or f"uq_{table.name}_{'_'.join(u.get('columns', []))}"
+                name = u.get("name")
+                if not name:
+                    name = f"uq_{table.name}_{'_'.join(u.get('columns', []))}"
+                    # The model did not name this constraint; the name is ours.
+                    # Remembering that keeps the diff from renaming whatever the
+                    # database already calls the same constraint.
+                    auto_named.add(name)
                 uniques[name] = u
             checks: dict[str, Any] = {}
+            auto_named_checks: set[str] = set()
             for i, c in enumerate(table.checks or []):
-                name = c.get("name") or f"ck_{table.name}_{i}"
+                name = c.get("name")
+                if not name:
+                    # Index-based, so it is ours and it moves when the model
+                    # reorders its checks. Remember that, so the diff can match
+                    # this check to the database by expression instead.
+                    name = f"ck_{table.name}_{i}"
+                    auto_named_checks.add(name)
                 checks[name] = c
             fks = table.foreign_keys or []
-            if uniques or checks or fks:
-                result[table.name] = {"uniques": uniques, "checks": checks, "fks": fks}
+            # Every table is recorded, not just the ones carrying constraints:
+            # adding a foreign key checks that the referenced table exists, and
+            # a referenced table that declares no constraints of its own would
+            # otherwise look missing, silently dropping the foreign key.
+            result[table.name] = {
+                "uniques": uniques,
+                "checks": checks,
+                "fks": fks,
+                "auto_named_uniques": auto_named,
+                "auto_named_checks": auto_named_checks,
+                "model_columns": {column.name for column in table.columns},
+            }
         return result
 
     def model_spec_from_config(self, config: Any) -> dict[str, Any]:
         return {}
 
     def canonicalize(self, spec: dict[str, Any]) -> dict[str, Any]:
+        """Normalize a constraint spec, without touching what was passed in.
+
+        ``extract`` hands back the snapshot's own constraint dicts. Editing them
+        here would rewrite the caller's snapshot - dropping ``type`` and
+        renaming ``referenced_table`` - so anything reading the snapshot after a
+        diff would see constraints it can no longer classify.
+        """
         if not spec:
             return {}
-        for entry in spec.values():
+        canonical: dict[str, Any] = {}
+        for tname, entry in spec.items():
+            new_entry = {k: v for k, v in entry.items() if k not in ("uniques", "checks", "fks")}
             for key in ("uniques", "checks"):
                 normalized: dict[str, Any] = {}
-                for _name, item in entry.get(key, {}).items():
+                for _name, item in (entry.get(key) or {}).items():
                     if not isinstance(item, dict):
                         continue
                     clean = {
@@ -112,8 +171,11 @@ class ConstraintHandler(ObjectHandler):
                     }
                     name = clean.get("name") or str(_name).split(".")[-1]
                     normalized[name] = clean
-                entry[key] = normalized
-            for fk in entry.get("fks", []):
+                new_entry[key] = normalized
+
+            fks: list[dict[str, Any]] = []
+            for source in entry.get("fks", []) or []:
+                fk = dict(source)
                 m = fk.get("match")
                 if m is None or m == "SIMPLE":
                     fk.pop("match", None)
@@ -127,7 +189,10 @@ class ConstraintHandler(ObjectHandler):
                     fk["referred_table"] = fk.pop("referenced_table")
                 if "referenced_columns" in fk and "referred_columns" not in fk:
                     fk["referred_columns"] = fk.pop("referenced_columns")
-        return spec
+                fks.append(fk)
+            new_entry["fks"] = fks
+            canonical[tname] = new_entry
+        return canonical
 
     def diff(
         self,
@@ -146,6 +211,7 @@ class ConstraintHandler(ObjectHandler):
 
             snap_uniques = snap_entry.get("uniques", {})
             model_uniques = model_entry.get("uniques", {})
+            auto_named_uniques = model_entry.get("auto_named_uniques") or set()
 
             snap_by_cols: dict[frozenset, tuple[str, dict]] = {}
             model_by_cols: dict[frozenset, tuple[str, dict]] = {}
@@ -161,6 +227,13 @@ class ConstraintHandler(ObjectHandler):
                     continue
                 model_name, model_entry_uq = model_match
                 if snap_name == model_name:
+                    handled_snap.add(snap_name)
+                    handled_model.add(model_name)
+                elif model_name in auto_named_uniques:
+                    # Same columns, and the model never asked for this name. The
+                    # database's own name (users_email_key, say) is as good as
+                    # the one dbwarden would generate, so leave it alone rather
+                    # than renaming - and dropping - a live constraint.
                     handled_snap.add(snap_name)
                     handled_model.add(model_name)
                 elif snap_entry_uq.get("columns") == model_entry_uq.get("columns"):
@@ -221,7 +294,33 @@ class ConstraintHandler(ObjectHandler):
 
             snap_checks = snap_entry.get("checks", {})
             model_checks = model_entry.get("checks", {})
+            auto_named_checks = model_entry.get("auto_named_checks") or set()
+
+            # A check the model did not name keeps whatever the database calls
+            # it, as long as the expression is the same. Without this every
+            # unnamed check is dropped and recreated under a generated name on
+            # every run, and reordering the model's checks renames them.
+            snap_check_by_expression: dict[str, str] = {}
+            for _name, _ck in snap_checks.items():
+                snap_check_by_expression.setdefault(
+                    _normalize_check_expression(_ck.get("expression")), _name,
+                )
+            handled_snap_checks: set[str] = set()
+            handled_model_checks: set[str] = set()
+            for _name, _ck in model_checks.items():
+                if _name not in auto_named_checks:
+                    continue
+                _key = _normalize_check_expression(
+                    _ck.get("expression") or _ck.get("sql_expression")
+                )
+                _snap_name = snap_check_by_expression.get(_key)
+                if _snap_name and _snap_name not in handled_snap_checks:
+                    handled_snap_checks.add(_snap_name)
+                    handled_model_checks.add(_name)
+
             for name, ck in snap_checks.items():
+                if name in handled_snap_checks:
+                    continue
                 snap_sig = {k: v for k, v in ck.items() if k not in {"type", "table", "columns"}}
                 model_sig = model_checks.get(name, {})
                 model_sig_filtered = {k: v for k, v in model_sig.items() if k not in {"type", "table", "columns"}}
@@ -238,6 +337,8 @@ class ConstraintHandler(ObjectHandler):
                         rollback_attrs={"table": tname, "name": name, **payload},
                     ))
             for name, ck in model_checks.items():
+                if name in handled_model_checks:
+                    continue
                 if name not in snap_checks:
                     upgrade_ops.append(Op(
                         object_type="add_check_constraint",
@@ -253,15 +354,25 @@ class ConstraintHandler(ObjectHandler):
             snap_fks = snap_entry.get("fks", [])
             model_fks = model_entry.get("fks", [])
 
+            def _fk_action(value: Any) -> str:
+                # The database reports NO ACTION for an unspecified action while
+                # a model may leave it out, and a model may spell an action in
+                # any case ("cascade"). Comparing these literally drops and
+                # recreates a foreign key that never changed.
+                if value is None:
+                    return "NO ACTION"
+                text = str(value).strip().upper()
+                return text or "NO ACTION"
+
             def _fk_sig(fk: dict) -> tuple:
                 return (
                     frozenset(fk.get("columns", [])),
                     fk.get("referenced_table") or fk.get("referred_table", ""),
                     frozenset(fk.get("referenced_columns", fk.get("referred_columns", []))),
-                    fk.get("on_delete", "NO ACTION"),
-                    fk.get("on_update", "NO ACTION"),
+                    _fk_action(fk.get("on_delete")),
+                    _fk_action(fk.get("on_update")),
                     bool(fk.get("deferrable", False)),
-                    fk.get("match"),
+                    (str(fk.get("match")).upper() if fk.get("match") else None),
                 )
 
             snap_fk_sigs = {_fk_sig(fk) for fk in snap_fks}
@@ -323,7 +434,11 @@ class ConstraintHandler(ObjectHandler):
                     if _snap_tbl is None:
                         if self._model_table_names is not None and _ref_table not in self._model_table_names:
                             continue
-                        _snap_ref_cols = set(_ref_cols_check)
+                        # The referenced table is being created by this same
+                        # migration; validate against its model columns when the
+                        # spec carries them, rather than trusting the reference.
+                        _model_ref = model_spec.get(_ref_table) or {}
+                        _snap_ref_cols = _model_ref.get("model_columns") or set(_ref_cols_check)
                     else:
                         _snap_ref_cols = _snap_tbl.get("columns", {})
                     if not all(c in _snap_ref_cols for c in _ref_cols_check):

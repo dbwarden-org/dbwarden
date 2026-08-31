@@ -5,7 +5,7 @@
   <strong style="font-size: 2.5em;">dbwarden</strong>
 </p>
 <p align="center">
-    <em>Your SQLAlchemy models are your migrations.</em>
+    <em>Your models are the source code. SQL is the output.</em>
 </p>
 <p align="center">
   <a href="https://www.python.org/downloads/">
@@ -33,7 +33,7 @@
 
 ---
 
-dbwarden is a declarative database migration and schema management tool for SQLAlchemy. You declare the schema you want in your SQLAlchemy models, and dbwarden derives everything else: migration SQL, rollbacks, snapshots, and safety checks.
+dbwarden is a declarative schema compiler for SQLAlchemy. You declare the schema you want in your SQLAlchemy models, and dbwarden compiles everything else: migration SQL, rollbacks, snapshots, and safety checks.
 
 There are no migration scripts to write or maintain. There is no migration runtime. Your models are the contract. The database is kept in sync with them.
 
@@ -309,7 +309,7 @@ By default each generated file declares its own `Base = declarative_base()`. Use
 | PostgreSQL | Full       | Primary backend, full schema fidelity       |
 | MySQL      | Full       | DDL parity focus                            |
 | ClickHouse | Full       | Analytics backend, MergeTree engine family  |
-| SQLite     | Dev only   | Local development and SQL translation       |
+| SQLite     | Full       | Table rebuilds, WITHOUT ROWID/STRICT, generated columns |
 | MariaDB    | No         | Schema layer complete; snapshot gaps remain |
 
 ### PostgreSQL
@@ -331,6 +331,10 @@ First-class analytics backend support. MergeTree engine family via `ChEngineSpec
 ```bash
 uv add "dbwarden[clickhouse]"
 ```
+
+### SQLite
+
+Full round-trip support with `SqTableMeta` / `SqColumnMeta` and `sq.field()` spec objects. `WITHOUT ROWID` and `STRICT` tables, generated columns (`STORED` / `VIRTUAL`), per-column collation, and model reverse-engineering via `generate-models`. Changes SQLite's `ALTER TABLE` cannot express - column types, nullability, defaults, table constraints - are emitted as a table rebuild with a rebuild in the other direction as the rollback.
 
 ### MariaDB
 

@@ -9,6 +9,12 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 
 ## Unreleased
 
+### Added
+
+- **SQLite is a first-class backend.** Changes SQLite's `ALTER TABLE` cannot express - column type, nullability, default, table constraints, `WITHOUT ROWID`, `STRICT`, generated expressions and collation - are emitted as a table rebuild (create, copy, drop, rename, recreate indexes) with the reverse rebuild as the rollback, instead of a comment. All changes to one table collapse into a single rebuild.
+- **SQLite table and column metadata.** `SqTableMeta` supports `sq_without_rowid`, `sq_strict` and `sq_indexes`; the new `SqColumnMeta` plus `sq.field(generated=..., generated_mode=..., collate=...)` cover generated columns and per-column collation. Both are emitted in `CREATE TABLE`, captured by schema snapshots, and written back by `generate-models`.
+- **SQLite impact analysis.** `check-impact` reports table-option, generated-column and collation changes as warnings, because each rebuilds the table.
+
 ### Fixed
 
 - **PostgreSQL reverse-engineering now works with mixed-case and quoted identifiers.** `generate-models` and snapshot queries use quoted `regclass` references, so tables and columns such as `"MyTable"` and `"weird-col"` no longer silently fail metadata extraction.
@@ -35,6 +41,34 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 - **PostgreSQL identity values are normalized to lowercase.** `Identity(always=True)` and `pg.field(identity="ALWAYS")` both normalize to `pg_identity="always"`, eliminating spurious identity diffs.
 
 - **Official plugin provenance recognizes renamed publisher workflows.** `dbwarden plugin add` now verifies the trusted-publishing attestations for the ClickHouse RBAC, PostgreSQL extensions, PostgreSQL RBAC, and PostgreSQL types plugins against their `publishing.yml` workflows.
+- **A migration generated without a snapshot no longer drops every table constraint.** `make-migrations` falls back to generating from the models alone when there is no schema snapshot, the database is unreachable, or the snapshot diff raises. That path emitted columns, indexes and foreign keys but silently omitted `UNIQUE` and `CHECK` constraints, so the schema applied cleanly and then failed at runtime with *there is no unique or exclusion constraint matching the ON CONFLICT specification*.
+- **`EXCLUDE` constraints survive model-only generation.** They are rendered by the PostgreSQL table handler, which the fallback path does not run.
+- **A single-column foreign key is emitted once on MySQL and MariaDB.** It was rendered inline as `REFERENCES` in the column definition *and* as a named `ADD CONSTRAINT`, which MariaDB honours as two constraints.
+- **An unnamed `CHECK` constraint keeps the name the database gave it.** PostgreSQL names an inline `CHECK (age >= 0)` itself while dbwarden's generated name is index-based, so every unnamed check was dropped and recreated on every run - and reordering a model's checks renamed them. Checks the model does not name are now matched by expression, with casts and parentheses normalized away; a changed expression is still detected.
+- **An aggregating view's target table is emitted as ClickHouse DDL.** When the model declared its dimension columns, the target was built from the SQLAlchemy types, producing `VARCHAR(50)` and `INTEGER` instead of `String` and `Int32`, and giving the aggregate column its declared type instead of the `AggregateFunction(...)` signature it needs to accept `-State` rows.
+- **PostgreSQL roles are no longer lost when a table has a row-level security policy.** The policy loop bound its list of policy roles to the same name as the snapshot's role accumulator, so every later role lookup raised `TypeError` and the snapshot recorded no roles at all.
+- **An aggregating view keeps a declared ClickHouse aggregate type.** Only the default `Float64` that `agg.sum()` / `agg.avg()` fall back to is replaced by the source column's resolved type; an explicit type such as `agg.raw("quantile(0.95)", col, "UInt32")` was being rewritten to the source column's `Int32`, changing the `AggregateFunction` signature.
+- **Falling back to model-only generation is announced.** The snapshot diff failing used to be swallowed, leaving no way to tell a degraded migration from a correct one; it now logs the cause and warns.
+- **A column-level `unique=True` produces one constraint, not two.** The column was rendered `UNIQUE` inline *and* emitted again as a named table constraint, leaving two unique constraints - and two indexes - on the same column.
+- **A unique constraint dbwarden named itself no longer renames the database's.** When a model declares a unique constraint without a name, an existing constraint on the same columns - `users_email_key`, say - is now left alone instead of being renamed to `uq_users_email` and, in some orderings, dropped.
+- **Column defaults are compared without their cast.** PostgreSQL reports a default as `'queued'::character varying` while the model spells it `'queued'`, so every run re-emitted the default and the rollback re-quoted the cast into `'''queued''::character varying'`.
+- **Default index sort options are no longer recorded.** `ASC NULLS LAST` and `DESC NULLS FIRST` are what PostgreSQL implies; recording them made plain indexes differ from the models and be dropped and recreated on every run.
+- **A column-level `unique=True` is read from every model.** The constraint was only collected when the model also declared a `class Meta`, so a diff against a database that had the constraint emitted a `DROP CONSTRAINT` for it.
+- **Column storage is compared against the type's own default.** `NUMERIC` defaults to `MAIN` and `TEXT` to `EXTENDED`; recording those made untouched columns differ from the models.
+- **Foreign keys are matched regardless of how the action is spelled.** `ondelete="cascade"` in a model and `CASCADE` in the database no longer read as different constraints.
+- **Constraint canonicalization no longer edits the snapshot it was given.** The diff rewrote the caller's snapshot in place, so anything reading the snapshot after a diff saw constraints it could no longer classify.
+- **Unnamed `CHECK` constraints get a stable key.** The generated name used `hash()`, which is salted per process, so the same schema produced a different snapshot on every run.
+- **Configuration-declared objects are no longer recreated on every migration.** Roles, domains, sequences, functions, triggers, composite types, extended statistics, event triggers and default privileges were diffed against a hardcoded empty snapshot, so each generation emitted `CREATE` for objects that already existed - the second `migrate` failed with *role "..." already exists*, and an attribute change never became an `ALTER`. The preamble now diffs against the same snapshot as the rest of the migration; offline generation, which cannot see the server, still creates.
+- **A SQLite table rebuild no longer leaves its staging table in the snapshot.** Pending-migration merging read every `CREATE TABLE` out of the migration text but ignored the `DROP`/`RENAME` that followed, so `t__dbw_new` survived as a table nothing declared and every later run generated a migration to drop it, in SQL built from columns typed `unknown`.
+- **MySQL and MariaDB integer primary keys are `AUTO_INCREMENT`.** The same model produced `SERIAL` on PostgreSQL and `AUTOINCREMENT` on SQLite but a plain `id INTEGER NOT NULL PRIMARY KEY` here, so the migration applied and the first insert that omitted the key failed with *Field 'id' doesn't have a default value*.
+- **Reverse-engineered models import `func`.** A column defaulting to `now()` was written as `default=func.now()` while `func` was filtered out of the generated import line, so the artifact raised `NameError` the moment dbwarden loaded it.
+- **`generate-models` no longer writes an empty class body for SQLite.** Column metadata with nothing renderable emitted `class id(SqColumnMeta):` followed by nothing, and the generated module failed to import with *expected an indented block after class definition*.
+- **SQLite migrations no longer fail the rollback contract.** A column type change or foreign key change on SQLite previously raised `RollbackContractError` because the generated rollback was a placeholder.
+- **SQLite primary keys no longer churn.** A primary key column is recorded as `NOT NULL` when reading a SQLite schema, which SQLite itself reports as nullable, and autoincrement changes are no longer generated for SQLite primary keys where `AUTOINCREMENT` is either implicit or illegal.
+- **Generated SQLite models import cleanly.** `generate-models` writes `sq = sq.field(...)` specs instead of flat `sq_*` attributes, which the metadata reader rejects.
+- **Rebuilt tables keep their column order.** Reconstructing a table from model state preserved sorted order rather than declaration order.
+- **A SQLite rebuild preserves what reflection cannot see.** Declared types keep their length and case (`VARCHAR(255)`, not `varchar`), and `AUTOINCREMENT`, foreign key `ON DELETE` / `ON UPDATE`, unnamed `UNIQUE (...)` constraints, partial indexes, `DESC` / `COLLATE` inside an index, and expression indexes all survive the rebuild.
+- **SQLite partial indexes are recorded.** The index predicate was read only under PostgreSQL's dialect key, so `WHERE` was dropped from every SQLite index.
 
 ## [0.17.1] - 2026-08-15
 

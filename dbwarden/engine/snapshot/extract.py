@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import hashlib
 import re
 from typing import Any
 
 from dbwarden.engine.backends.postgresql.extract import (
     _is_autoincrement,
     _strip_pg_expr_parens,
+    pg_index_sort_option,
 )
 from dbwarden.engine.backends.postgresql.render import _is_expression
 from dbwarden.engine.backends.postgresql.sql_build import _build_pg_meta_sql
@@ -469,10 +471,16 @@ def extract_full_schema_snapshot(
                         attr_cols = "a.attname, a.attstorage, a.attcompression, a.attstattarget"
                     else:
                         attr_cols = "a.attname, a.attstorage, NULL::text AS attcompression, a.attstattarget"
+                    # typstorage is the type's own default storage. Comparing
+                    # against it keeps a column that was never tuned out of the
+                    # snapshot: NUMERIC defaults to MAIN, TEXT to EXTENDED, and
+                    # recording either would read as a difference from a model
+                    # that says nothing about storage.
                     rows = _conn.execute(
                         text(
-                            f"SELECT {attr_cols} "
+                            f"SELECT {attr_cols}, t.typstorage "
                             "FROM pg_attribute a "
+                            "JOIN pg_type t ON t.oid = a.atttypid "
                             "WHERE a.attrelid = CAST(:t AS regclass) AND a.attnum > 0 AND NOT a.attisdropped "
                             "ORDER BY a.attnum"
                         ),
@@ -485,7 +493,8 @@ def extract_full_schema_snapshot(
                             pg_col = columns_dict[cname].get("pg_column", {})
                             if isinstance(pg_col, dict):
                                 storage = storage_map.get(r[1], r[1]) if r[1] else None
-                                if storage and storage not in ("PLAIN", "EXTENDED"):
+                                default_storage = storage_map.get(r[4], r[4]) if len(r) > 4 and r[4] else None
+                                if storage and storage != default_storage:
                                     pg_col["storage"] = storage
                                 if r[2]:
                                     pg_col["compression"] = r[2]
@@ -539,12 +548,20 @@ def extract_full_schema_snapshot(
                     if policy_rows:
                         policies = []
                         for r in policy_rows:
-                            roles = list(r[3]) if r[3] else ["PUBLIC"]
+                            # Not `roles`: that name holds the snapshot's role
+                            # accumulator for this whole function, and rebinding
+                            # it to a list here made every later role lookup
+                            # fail, dropping roles from the snapshot entirely.
+                            policy_roles = list(r[3]) if r[3] else ["PUBLIC"]
                             policy_entry = {
                                 "name": r[0],
                                 "permissive": "PERMISSIVE" if r[1] else "RESTRICTIVE",
                                 "command": r[2] or "ALL",
-                                "role": roles[0] if len(roles) == 1 else roles,
+                                "role": (
+                                    policy_roles[0]
+                                    if len(policy_roles) == 1
+                                    else policy_roles
+                                ),
                                 "using": _strip_pg_expr_parens(r[4]),
                             }
                             if r[5]:
@@ -704,6 +721,49 @@ def extract_full_schema_snapshot(
                     except Exception:
                         pass
 
+        if database_type == "sqlite":
+            from dbwarden.engine.backends.sqlite.extract import (
+                get_sqlite_index_ddl,
+                get_sqlite_table_sql,
+                parse_sqlite_column_meta,
+                parse_sqlite_table_options,
+            )
+
+            # SQLite reports a PRIMARY KEY column as nullable unless it was
+            # declared NOT NULL, while a mapped model always declares its
+            # primary key NOT NULL. Left alone, every SQLite table would show a
+            # nullability change on its key column on every run.
+            for col_entry in columns_dict.values():
+                if col_entry.get("primary_key"):
+                    col_entry["nullable"] = False
+
+            _conn = engine.connect() if own_engine and engine is not None else connection
+            try:
+                create_sql = get_sqlite_table_sql(_conn, table_name)
+                sq_table = parse_sqlite_table_options(create_sql)
+                if sq_table:
+                    table_entry["sq_table"] = sq_table
+                index_ddl = get_sqlite_index_ddl(_conn, table_name)
+                if index_ddl:
+                    table_entry["sq_index_ddl"] = index_ddl
+                for col_name, sq_column in parse_sqlite_column_meta(create_sql).items():
+                    col_entry = columns_dict.get(col_name)
+                    if col_entry is None:
+                        continue
+                    # AUTOINCREMENT is a property of the declaration, not of the
+                    # reflected column, so it is recorded where the diff and the
+                    # rebuild both read it.
+                    if sq_column.pop("sq_autoincrement", False):
+                        col_entry["autoincrement"] = True
+                    if sq_column:
+                        col_entry["sq_column"] = sq_column
+            finally:
+                if own_engine and _conn is not None:
+                    try:
+                        _conn.close()
+                    except Exception:
+                        pass
+
         tables[table_name] = table_entry
 
         constraint_index_names: set[str] = set()
@@ -772,10 +832,15 @@ def extract_full_schema_snapshot(
                     break
             if "using" not in idx_entry:
                 idx_entry["using"] = "btree"
-            for k in ("postgresql_where",):
+            for k in ("postgresql_where", "sqlite_where"):
                 val = idx_dialect.get(k)
-                if val:
-                    idx_entry["where"] = val
+                # `if val` would raise: SQLite reports the predicate as a
+                # TextClause, whose truth value SQLAlchemy refuses to define.
+                if val is None:
+                    continue
+                where_sql = val if isinstance(val, str) else str(val)
+                if where_sql:
+                    idx_entry["where"] = where_sql
                     break
             incl = idx.get("include_columns")
             if incl:
@@ -816,15 +881,9 @@ def extract_full_schema_snapshot(
                     ).fetchall()
                     sorting: dict[str, str] = {}
                     for r in sort_rows:
-                        parts: list[str] = []
-                        if r.is_asc is False:
-                            parts.append("DESC")
-                        if r.nf is False:
-                            parts.append("NULLS LAST")
-                        elif r.nf is True:
-                            parts.append("NULLS FIRST")
-                        if parts:
-                            sorting[r.attname] = " ".join(parts)
+                        option = pg_index_sort_option(r.is_asc, r.nf)
+                        if option:
+                            sorting[r.attname] = option
                     if sorting:
                         idx_entry["column_sorting"] = sorting
                 except Exception:
@@ -907,10 +966,42 @@ def extract_full_schema_snapshot(
             if fk_match:
                 constraints[f"{table_name}.{fk_name}"]["match"] = fk_match
 
+        if database_type == "sqlite":
+            # SQLAlchemy reports SQLite foreign keys with an empty options dict,
+            # so ON DELETE / ON UPDATE would read as NO ACTION and a rebuild
+            # would recreate the table without them.
+            from dbwarden.engine.backends.sqlite.extract import (
+                get_sqlite_foreign_key_actions,
+            )
+
+            _fk_conn = engine.connect() if own_engine and engine is not None else connection
+            try:
+                actions = get_sqlite_foreign_key_actions(_fk_conn, table_name)
+            finally:
+                if own_engine and _fk_conn is not None:
+                    try:
+                        _fk_conn.close()
+                    except Exception:
+                        pass
+            for constraint in constraints.values():
+                if constraint.get("type") != "foreign_key" or constraint.get("table") != table_name:
+                    continue
+                action = actions.get(tuple(constraint.get("columns", [])))
+                if action:
+                    constraint["on_delete"] = action["on_delete"]
+                    constraint["on_update"] = action["on_update"]
+
         for uq in inspector.get_unique_constraints(table_name, **inspect_kw):
             uq_name = uq.get("name", "")
             if not uq_name:
-                continue
+                # SQLite reports an inline UNIQUE(...) with no name. Dropping it
+                # here would hide the constraint from the diff, and a SQLite
+                # table rebuild would then silently recreate the table without
+                # it, so name it the way the generated DDL would.
+                columns = list(uq.get("column_names", []) or [])
+                if not columns:
+                    continue
+                uq_name = f"uq_{table_name}_{'_'.join(columns)}"
             constraints[f"{table_name}.{uq_name}"] = {
                 "type": "unique",
                 "name": uq_name,
@@ -921,7 +1012,12 @@ def extract_full_schema_snapshot(
         for ck in inspector.get_check_constraints(table_name, **inspect_kw):
             ck_name = ck.get("name", "")
             if not ck_name:
-                ck_name = f"ck_{table_name}_{hash(ck.get('sqltext', ''))}"
+                # Not hash(): it is salted per process, so the same schema would
+                # produce a different constraint key on every run.
+                digest = hashlib.sha1(
+                    str(ck.get("sqltext", "")).encode("utf-8")
+                ).hexdigest()[:12]
+                ck_name = f"ck_{table_name}_{digest}"
             constraints[f"{table_name}.{ck_name}"] = {
                 "type": "check",
                 "name": ck_name,

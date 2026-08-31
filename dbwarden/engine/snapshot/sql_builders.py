@@ -401,15 +401,28 @@ def _build_index_sql(op: dict[str, Any], backend: str) -> list[MigrationStatemen
     expression = op.get("expression")
     idx_name = op.get("index_name") or _build_index_name(table, columns, unique, using, expression)
 
+    if backend == "postgresql":
+        from dbwarden.engine.backends.postgresql.render import _quote_pg
+
+        table_sql = ".".join(_quote_pg(part) for part in table.split("."))
+        idx_name_sql = _quote_pg(idx_name)
+        col_sql = {col: _quote_pg(col) for col in columns}
+        include_sql = [_quote_pg(c) for c in (include or [])]
+    else:
+        table_sql = table
+        idx_name_sql = idx_name
+        col_sql = {col: col for col in columns}
+        include_sql = list(include or [])
+
     if op["type"] == "add_index":
         if backend == "clickhouse" and clickhouse_type:
             upgrade = (
-                f"ALTER TABLE {table} ADD INDEX {idx_name} "
+                f"ALTER TABLE {table_sql} ADD INDEX {idx_name_sql} "
                 f"({', '.join(columns)}) "
                 f"TYPE {clickhouse_type} "
                 f"GRANULARITY {clickhouse_granularity or 1};"
             )
-            rollback = f"ALTER TABLE {table} DROP INDEX {idx_name};"
+            rollback = f"ALTER TABLE {table_sql} DROP INDEX {idx_name_sql};"
             return [
                 MigrationStatement(
                     order=StatementOrder.ALTER_INDEX,
@@ -424,28 +437,28 @@ def _build_index_sql(op: dict[str, Any], backend: str) -> list[MigrationStatemen
         parts.append("INDEX")
         if backend == "postgresql" and concurrently:
             parts.append("CONCURRENTLY")
-        parts.append(idx_name)
-        parts.append(f"ON {table}")
+        parts.append(idx_name_sql)
+        parts.append(f"ON {table_sql}")
 
         if using and using != "btree":
             parts.append(f"USING {using}")
 
         col_parts = []
         for col in columns:
-            col_sql = col
+            _col_sql = col_sql[col]
             opclass = (postgresql_ops or {}).get(col, "")
             if opclass and using:
-                col_sql += f" {opclass}"
+                _col_sql += f" {opclass}"
             sorting = (column_sorting or {}).get(col, "")
             if sorting:
-                col_sql += f" {sorting}"
-            col_parts.append(col_sql)
+                _col_sql += f" {sorting}"
+            col_parts.append(_col_sql)
         if expression:
             col_parts.append(expression)
         parts.append(f"({', '.join(col_parts)})")
 
         if include and backend == "postgresql":
-            parts.append(f"INCLUDE ({', '.join(include)})")
+            parts.append(f"INCLUDE ({', '.join(include_sql)})")
 
         if with_params and backend == "postgresql":
             opts = ", ".join(f"{k} = {v}" for k, v in with_params.items())
@@ -464,7 +477,7 @@ def _build_index_sql(op: dict[str, Any], backend: str) -> list[MigrationStatemen
         if backend == "postgresql" and concurrently:
             from dbwarden.engine.file_parser import DBWARDEN_AUTOCOMMIT_MARKER
             upgrade = f"{DBWARDEN_AUTOCOMMIT_MARKER}\n{upgrade}"
-        rollback = f"DROP INDEX {idx_name};"
+        rollback = f"DROP INDEX {idx_name_sql};"
         return [
             MigrationStatement(
                 order=StatementOrder.ALTER_INDEX,
@@ -474,11 +487,11 @@ def _build_index_sql(op: dict[str, Any], backend: str) -> list[MigrationStatemen
         ]
     else:
         if backend == "clickhouse":
-            upgrade = f"ALTER TABLE {table} DROP INDEX {idx_name};"
+            upgrade = f"ALTER TABLE {table_sql} DROP INDEX {idx_name_sql};"
             ch_type = using.upper() if using else "MINMAX"
             ch_granularity = op.get("granularity", 1)
             rollback = (
-                f"ALTER TABLE {table} ADD INDEX {idx_name} "
+                f"ALTER TABLE {table_sql} ADD INDEX {idx_name_sql} "
                 f"({', '.join(columns)}) "
                 f"TYPE {ch_type} "
                 f"GRANULARITY {ch_granularity};"
@@ -490,7 +503,7 @@ def _build_index_sql(op: dict[str, Any], backend: str) -> list[MigrationStatemen
                     rollback_sql=rollback,
                 ),
             ]
-        upgrade = f"DROP INDEX {idx_name};"
+        upgrade = f"DROP INDEX {idx_name_sql};"
         unique_clause = "UNIQUE " if unique else ""
         cols_list = ", ".join(columns)
         rollback_parts = ["CREATE"]
@@ -499,22 +512,22 @@ def _build_index_sql(op: dict[str, Any], backend: str) -> list[MigrationStatemen
         rollback_parts.append("INDEX")
         if backend == "postgresql" and concurrently:
             rollback_parts.append("CONCURRENTLY")
-        rollback_parts.append(idx_name)
-        rollback_parts.append(f"ON {table}")
+        rollback_parts.append(idx_name_sql)
+        rollback_parts.append(f"ON {table_sql}")
 
         if using and using != "btree":
             rollback_parts.append(f"USING {using}")
 
         col_parts_rb = []
         for col in columns:
-            col_sql = col
+            _col_sql = col_sql[col]
             opclass = (postgresql_ops or {}).get(col, "")
             if opclass and using:
-                col_sql += f" {opclass}"
+                _col_sql += f" {opclass}"
             sorting = (column_sorting or {}).get(col, "")
             if sorting:
-                col_sql += f" {sorting}"
-            col_parts_rb.append(col_sql)
+                _col_sql += f" {sorting}"
+            col_parts_rb.append(_col_sql)
         if expression:
             col_parts_rb.append(expression)
         rollback_parts.append(f"({', '.join(col_parts_rb)})")

@@ -4,7 +4,7 @@ This guide covers installing dbwarden in your project and verifying it works cor
 
 ## Requirements
 
-- Python 3.10 or higher
+- Python 3.12.7 or higher
 - A project that uses SQLAlchemy for database models
 - uv or another Python package manager
 
@@ -31,14 +31,11 @@ The `[postgres]` extra is the most commonly used. Install it if you are targetin
 | `postgres`             | `uv add "dbwarden[postgres]"` | PostgreSQL driver (`psycopg2-binary`) |
 | `mysql`                | `uv add "dbwarden[mysql]"` | MySQL/MariaDB driver (`pymysql`) |
 | `clickhouse`           | `uv add "dbwarden[clickhouse]"` | ClickHouse driver (`clickhouse-connect`) |
-| `fastapi`              | `uv add "dbwarden[fastapi]"` | FastAPI session dependencies, health router, migration router, metrics router, Redis lock |
-| `metrics`              | `uv add "dbwarden[metrics]"` | Prometheus metrics endpoint (`prometheus-client`) |
-| `sandbox`              | `uv add "dbwarden[sandbox]"` | Sandbox migration testing via testcontainers |
 
 Combine groups as needed:
 
 ```bash
-uv add "dbwarden[postgres,mysql,fastapi]"
+uv add "dbwarden[postgres,mysql]"
 ```
 
 ## Database drivers
@@ -77,7 +74,7 @@ $ dbwarden version
 You should see output:
 
 ```
-0.9.4
+0.17.2
 ```
 
 ## Initialize in your project

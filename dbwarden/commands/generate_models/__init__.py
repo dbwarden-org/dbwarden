@@ -369,6 +369,21 @@ def generate_models_cmd(
                         if meta:
                             col["my_meta"] = meta
 
+            sq_meta: dict[str, Any] | None = None
+            if actual_dialect == "sqlite":
+                sq_meta, column_meta = _extract_sqlite_meta(
+                    connection, table_name,
+                    indexes=indexes_info,
+                    checks=checks_info,
+                    uniques=unique_constraints,
+                    raw_columns=columns_info,
+                )
+                sq_meta = sq_meta or None
+                for col in columns_info:
+                    meta = column_meta.get(col["name"])
+                    if meta:
+                        col["sq_meta"] = dict(meta)
+
             if pk_was_inferred and pk_columns:
                 inferred_pk = list(pk_columns)
                 if my_meta is not None:
@@ -384,6 +399,7 @@ def generate_models_cmd(
                 "dialect": actual_dialect,
                 "pg_meta": pg_meta,
                 "my_meta": my_meta,
+                "sq_meta": sq_meta,
             })
 
     output_dir = Path(output)

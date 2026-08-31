@@ -1,6 +1,6 @@
 ---
-title: Declarative Migrations for SQLAlchemy
-description: dbwarden is a SQL-first database migration system for Python and SQLAlchemy.
+title: Declarative Schema Compiler for SQLAlchemy
+description: dbwarden is a declarative schema compiler for Python and SQLAlchemy. It compiles model definitions into reviewable SQL migrations.
   Generate reviewable SQL migrations from your models, validate them before production, and
   operate multiple databases from one config source.
 ---
@@ -40,18 +40,11 @@ description: dbwarden is a SQL-first database migration system for Python and SQ
 
 ---
 
-dbwarden is a declarative database migration and schema management tool for SQLAlchemy. You declare the schema you want in your SQLAlchemy models, and dbwarden derives everything else: migration SQL, rollbacks, snapshots, and safety checks.
+dbwarden is a declarative schema compiler for SQLAlchemy. You declare the schema you want in your SQLAlchemy models, and dbwarden compiles everything else: migration SQL, rollbacks, snapshots, and safety checks.
 
 There are no migration scripts to write or maintain. There is no migration runtime. Your models are the contract. The database is kept in sync with them.
 
 ## At a glance
-- Generates migration files as plain SQL, with `-- upgrade` and `-- rollback` sections
-- Reads SQLAlchemy models and backend-specific metadata from `class Meta`
-- Supports PostgreSQL, MySQL, MariaDB, SQLite, and ClickHouse
-- Uses a registry driven PostgreSQL pipeline for diffs and SQL emission
-- Manages one or many databases from one typed config source
-- Adds safety tooling, schema diffing, and status commands
-
 - Migrations generated from your models, not written by hand
 - Plain SQL output: reviewable, committable, executable anywhere
 - Rollback contract with executable rollback, strict placeholder refusal, and explicit irreversible declarations
@@ -78,7 +71,7 @@ This also means:
 - No schema drift discovered in production: drift is caught at `make-migrations` time
 - Migrations that can be generated in CI without a database connection
 
-dbwarden is not a wrapper around Alembic. It is a different approach to the same problem. Alembic asks you to describe *how* to change the database; dbwarden asks you to describe *what* the schema should be. Alembic can autogenerate revisions, but each one becomes an imperative Python artifact you own, edit, and chain — the revision history is the source of truth. With dbwarden the models stay the source of truth, and the output is plain SQL.
+dbwarden is not a wrapper around Alembic. It is a different approach to the same problem. Alembic asks you to describe *how* to change the database; dbwarden asks you to describe *what* the schema should be. Alembic can autogenerate revisions, but each one becomes an imperative Python artifact you own, edit, and chain; the revision history is the source of truth. With dbwarden the models stay the source of truth, and the output is plain SQL.
 
 Unlike tools that apply declarative diffs directly to the database, dbwarden still produces versioned, reviewable migration files with explicit rollbacks: declarative authoring without giving up auditable deploy artifacts.
 
@@ -106,7 +99,7 @@ Optional dependency groups:
 
 | Group        | Default | Provides                             |
 |--------------|---------|--------------------------------------|
-| `[postgres]` | Yes     | `psycopg2-binary`                    |
+| `[postgres]` |         | `psycopg2-binary`                    |
 | `[mysql]`    |         | `pymysql`                            |
 | `[clickhouse]` |       | `clickhouse-connect`, `aiohttp`      |
 | `[dev]`      |         | `pytest`, `zensical`, `seoslug`, `httpx2` |
@@ -226,9 +219,9 @@ dbwarden status
 
 ## Migration engine
 
-**Model-driven generation**: dbwarden reads your SQLAlchemy models directly. When you change a model, it diffs the new state against the last snapshot and generates the SQL to reconcile them.
+**Model-driven compilation**: dbwarden reads your SQLAlchemy models directly. When you change a model, it diffs the new state against the last snapshot and compiles the SQL to reconcile them.
 
-**Plain SQL output**: Generated migrations are `.sql` files. No migration runtime, no generated Python. Review them, commit them, execute them directly against any environment.
+**Plain SQL output**: Compiled migrations are `.sql` files. No migration runtime, no generated Python. Review them, commit them, execute them directly against any environment.
 
 **Rollback contract**: Generated migrations carry both upgrade and rollback sections. dbwarden emits executable rollback when it is safe, refuses placeholder rollback by default, and requires an explicit irreversible declaration when rollback cannot be produced.
 
@@ -280,7 +273,7 @@ Run this before any destructive deploy to surface breaking changes before they r
 
 ## Offline migrations
 
-Export model state once, then generate migrations on any machine without a database connection. Designed for CI pipelines and local development without a running database.
+Export model state once, then compile migrations on any machine without a database connection. Designed for CI pipelines and local development without a running database.
 
 ```bash
 dbwarden export-models --database primary
@@ -301,7 +294,7 @@ The model state file is updated in place after each migration.
 
 ## Reverse-engineer models
 
-Generate SQLAlchemy models from a live database with round-trip support (PostgreSQL, MySQL, ClickHouse, SQLite):
+Decompile a live database (PostgreSQL, MySQL, ClickHouse, SQLite) into SQLAlchemy models:
 
 ```bash
 dbwarden generate-models --database primary --tables users,posts
@@ -319,7 +312,7 @@ By default each generated file declares its own `Base = declarative_base()`. Use
 | PostgreSQL | Full       | Primary backend, full schema fidelity       |
 | MySQL      | Full       | DDL parity focus                            |
 | ClickHouse | Full       | Analytics backend, MergeTree engine family  |
-| SQLite     | Dev only   | Local development and SQL translation       |
+| SQLite     | Full       | Table rebuilds, WITHOUT ROWID/STRICT, generated columns |
 | MariaDB    | No         | Schema layer complete; snapshot gaps remain |
 
 ### PostgreSQL
@@ -341,6 +334,10 @@ First-class analytics backend support. MergeTree engine family via `ChEngineSpec
 ```bash
 uv add "dbwarden[clickhouse]"
 ```
+
+### SQLite
+
+Full round-trip support with `SqTableMeta` / `SqColumnMeta` and `sq.field()` spec objects. `WITHOUT ROWID` and `STRICT` tables, generated columns (`STORED` / `VIRTUAL`), per-column collation, and model reverse-engineering via `generate-models`. Changes SQLite's `ALTER TABLE` cannot express - column types, nullability, defaults, table constraints - are emitted as a table rebuild with a rebuild in the other direction as the rollback.
 
 ### MariaDB
 

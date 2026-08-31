@@ -1,5 +1,6 @@
 from dbwarden.engine.backends.mysql.render import (
     append_mysql_column_attrs as _append_mysql_column_attrs,
+    mysql_auto_increment_clause as _mysql_auto_increment_clause,
     render_mysql_column_type as _render_mysql_column_type,
 )
 from dbwarden.engine.backends.postgresql.render import (
@@ -17,7 +18,11 @@ from dbwarden.engine.backends.clickhouse.render import (
     _render_clickhouse_table_suffix,
     generate_create_dictionary_sql,
 )
-from dbwarden.engine.core.models import ModelTable
+from dbwarden.engine.core.models import (
+    ModelTable,
+    column_foreign_key_is_table_constraint,
+    column_unique_is_table_constraint,
+)
 from . import type_mapping as _type_mapping
 
 
@@ -36,12 +41,12 @@ def _qualified_name(name: str, schema: str | None) -> str:
 
 def _quote_identifier(name: str, backend: str) -> str:
     """Quote one generated SQL identifier for the selected backend."""
+    if backend == "postgresql":
+        return _quote_pg(name)
     safe = re.fullmatch(r"[a-z_][a-z0-9_]*", name) is not None
     reserved = {"order", "user", "select", "table", "where", "group", "from"}
     if safe and name not in reserved:
         return name
-    if backend == "postgresql":
-        return _quote_pg(name)
     if backend in ("mysql", "mariadb"):
         return f"`{name.replace('`', '``')}" + "`"
     if backend == "sqlite":
@@ -112,6 +117,10 @@ def generate_add_column_sql(
     _validate_identifier(column.name, "column_name")
 
     backend = _get_backend_name(db_name)
+    if _type_mapping.is_sqlite_target(db_name):
+        from dbwarden.engine.backends.sqlite.sql_build import build_sqlite_add_column_sql
+
+        return build_sqlite_add_column_sql(table_name, column, schema)
     if backend == "clickhouse":
         col_type = column.ch_meta.get("ch_type", column.type)
     elif backend in ("mysql", "mariadb"):
@@ -185,6 +194,11 @@ def generate_create_table_sql(table: ModelTable, db_name: str | None = None) -> 
     if backend == "clickhouse" and table.object_type == "dictionary":
         return generate_create_dictionary_sql(table)
 
+    if table.object_type == "table" and _type_mapping.is_sqlite_target(db_name):
+        from dbwarden.engine.backends.sqlite.sql_build import build_sqlite_create_table_sql
+
+        return build_sqlite_create_table_sql(table)
+
     column_defs = []
 
     primary_key_columns = [col.name for col in table.columns if col.primary_key]
@@ -223,7 +237,7 @@ def generate_create_table_sql(table: ModelTable, db_name: str | None = None) -> 
             col_def += " NOT NULL"
         if backend != "clickhouse" and col.primary_key and not composite_primary_key:
             col_def += " PRIMARY KEY"
-        elif col.unique:
+        elif col.unique and not column_unique_is_table_constraint(table, col.name):
             col_def += " UNIQUE"
         if backend != "clickhouse" and col.default and not is_serial and not has_identity and not has_generated:
             col_def += f" DEFAULT {col.default}"
@@ -240,8 +254,15 @@ def generate_create_table_sql(table: ModelTable, db_name: str | None = None) -> 
             if is_ch_key_column:
                 col_def += " NOT NULL"
         if backend in ("mysql", "mariadb"):
+            col_def += _mysql_auto_increment_clause(
+                col, is_sole_primary_key=not composite_primary_key,
+            )
             col_def = _append_mysql_column_attrs(col_def, col.my_meta)
-        if col.foreign_key and backend != "postgresql":
+        if (
+            col.foreign_key
+            and backend != "postgresql"
+            and not column_foreign_key_is_table_constraint(table, col.name)
+        ):
             col_def += f" REFERENCES {col.foreign_key}"
             if col.fk_on_delete and col.fk_on_delete != "NO ACTION":
                 col_def += f" ON DELETE {col.fk_on_delete}"

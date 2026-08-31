@@ -123,9 +123,11 @@ def normalize_model_state(state: dict[str, Any]) -> dict[str, Any]:
             pg_meta = normalized_col.pop("pg_meta", None) or normalized_col.get("pg_column") or {}
             ch_meta = normalized_col.pop("ch_meta", None) or normalized_col.get("ch_column") or {}
             my_meta = normalized_col.pop("my_meta", None) or normalized_col.get("my_column") or {}
+            sq_meta = normalized_col.pop("sq_meta", None) or normalized_col.get("sq_column") or {}
             normalized_col["pg_column"] = {k: _serialize_value(v) for k, v in pg_meta.items()}
             normalized_col["ch_column"] = {k: _serialize_value(v) for k, v in ch_meta.items()}
             normalized_col["my_column"] = {k: _serialize_value(v) for k, v in my_meta.items()}
+            normalized_col["sq_column"] = {k: _serialize_value(v) for k, v in sq_meta.items()}
 
             pg_type = normalized_col["pg_column"].get("pg_type", {})
             if isinstance(pg_type, dict) and pg_type.get("kind") == "enum":
@@ -202,9 +204,16 @@ def reconstruct_model_table(table_entry: dict[str, Any]) -> ModelTable:
         IndexInfo.from_dict(idx) if isinstance(idx, dict) else idx
         for idx in table_entry.get("indexes", []) or []
     ]
-    columns = [reconstruct_model_column(col_entry) for _, col_entry in sorted((table_entry.get("columns", {}) or {}).items())]
+    # Declaration order, not sorted order: a table rebuilt from this entry is
+    # recreated column by column, and sorting would silently reorder the
+    # physical columns of the rebuilt table.
+    columns = [
+        reconstruct_model_column({"name": col_name, **col_entry})
+        for col_name, col_entry in (table_entry.get("columns", {}) or {}).items()
+    ]
     pg_table = {k: v for k, v in backend_spec.items() if k.startswith("pg_")}
     my_table = {k: v for k, v in backend_spec.items() if k.startswith("my_")}
+    sq_table = {k: v for k, v in backend_spec.items() if k.startswith("sq_")}
     excludes = list(pg_table.get("pg_excludes", []) or [])
     return ModelTable(
         name=table_entry["name"],
@@ -219,6 +228,7 @@ def reconstruct_model_table(table_entry: dict[str, Any]) -> ModelTable:
         excludes=excludes,
         pg_table=pg_table,
         my_table=my_table,
+        sq_table=sq_table,
         schema=table_entry.get("schema"),
         pg_view_definition=table_entry.get("pg_view_definition"),
         pg_view_materialized=table_entry.get("pg_view_materialized", False),
@@ -242,6 +252,7 @@ def reconstruct_model_column(col_entry: dict[str, Any]) -> ModelColumn:
         pg_meta=dict(col_entry.get("pg_column", {}) or {}),
         ch_meta=dict(col_entry.get("ch_column", {}) or {}),
         my_meta=dict(col_entry.get("my_column", {}) or {}),
+        sq_meta=dict(col_entry.get("sq_column", {}) or {}),
         autoincrement=col_entry.get("autoincrement"),
     )
 
@@ -270,6 +281,15 @@ def _table_to_state_entry(table: ModelTable) -> dict[str, Any]:
     if my_table:
         backend_table_spec["backend"] = "mysql"
         backend_table_spec.update(my_table)
+
+    sq_table = {
+        k: _serialize_value(v)
+        for k, v in (table.sq_table or {}).items()
+        if v is not None
+    }
+    if sq_table:
+        backend_table_spec["backend"] = "sqlite"
+        backend_table_spec.update(sq_table)
 
     entry = {
         "name": table.name,
@@ -309,6 +329,7 @@ def _column_to_entry(col: Any) -> dict[str, Any]:
         "pg_column": {k: _serialize_value(v) for k, v in (getattr(col, "pg_meta", None) or {}).items() if v is not None},
         "ch_column": {k: _serialize_value(v) for k, v in (getattr(col, "ch_meta", None) or {}).items() if v is not None},
         "my_column": {k: _serialize_value(v) for k, v in (getattr(col, "my_meta", None) or {}).items() if v is not None},
+        "sq_column": {k: _serialize_value(v) for k, v in (getattr(col, "sq_meta", None) or {}).items() if v is not None},
     }
 
 

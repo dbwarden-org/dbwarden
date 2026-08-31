@@ -30,19 +30,19 @@ def _classify_column_type(type_str: str | None) -> tuple[_AggFuncKind, str | Non
         return "plain", None, None
 
     m = re.match(
-        r"^\s*(?:AggregateFunction|SimpleAggregateFunction)\s*\(\s*(\w+)\s*,(.*)\)\s*$",
+        r"^\s*(?:AggregateFunction|SimpleAggregateFunction)\s*\(\s*(.*)\)\s*$",
         type_str,
         re.IGNORECASE,
     )
     if m:
         prefix_end = type_str.index("(")
         prefix = type_str[:prefix_end].strip()
-        func = m.group(1)
-        rest = m.group(2).strip()
-        # Split remaining args on commas at depth 0
-        types = _split_top_level(rest)
+        inner = m.group(1).strip()
+        parts = _split_top_level(inner)
+        func, *_params = _split_func(parts[0].strip())
+        types = tuple(part.strip() for part in parts[1:])
         kind = "aggregate_function" if prefix.lower() == "aggregatefunction" else "simple_agg_function"
-        return kind, func, tuple(types)
+        return kind, func, types
 
     return "plain", None, None
 
@@ -71,6 +71,34 @@ def _split_top_level(s: str) -> list[str]:
 
 # ── combinator resolution ─────────────────────────────────────────────────────
 
+_FUNC_PARAMS_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\s*\((?P<params>.*)\)$", re.DOTALL)
+
+
+def _split_func(func: str) -> tuple[str, str | None]:
+    """Split a parametric aggregate name into its base function and parameters.
+
+    ``"quantile(0.95)"``       → ``("quantile", "0.95")``
+    ``"quantiles(0.9, 0.95)"`` → ``("quantiles", "0.9, 0.95")``
+    ``"sum"``                  → ``("sum", None)``
+
+    ClickHouse renders parametric aggregate combinators on the base name with
+    the parameters hoisted before the argument list::
+
+        quantileState(0.95)(column)
+    """
+    m = _FUNC_PARAMS_RE.match(func)
+    if m:
+        return m.group(1), m.group("params")
+    return func, None
+
+
+def _combinator_name(func: str, suffix: str, params: str | None) -> str:
+    """Render ``<func><suffix>(<params>)``, e.g. ``quantileState(0.95)``."""
+    if suffix and params:
+        return f"{func}{suffix}({params})"
+    return f"{func}{suffix}"
+
+
 _ASSOCIATIVE_AGGS = frozenset({
     "sum", "min", "max", "any", "anyLast",
     "count", "uniq", "uniqExact",
@@ -98,6 +126,7 @@ def resolve_combinator(func: str, source_column_type: str | None) -> str:
       declared ``agg.sum(..., "Float64")``.
     * Non-associative function on ``SimpleAggregateFunction`` source.
     """
+    func, func_params = _split_func(func)
     kind, src_func, src_types = _classify_column_type(source_column_type)
 
     if kind == "aggregate_function":
@@ -113,7 +142,7 @@ def resolve_combinator(func: str, source_column_type: str | None) -> str:
             # So we only validate the function match. Inner-type validation
             # would require comparing parsed types, which is fragile.
             pass
-        return f"{func}MergeState"
+        return _combinator_name(func, "MergeState", func_params)
 
     if kind == "simple_agg_function":
         if func.lower() not in _ASSOCIATIVE_AGGS:
@@ -129,9 +158,15 @@ def resolve_combinator(func: str, source_column_type: str | None) -> str:
                 f"SimpleAggregateFunction({src_func}, ...) but declared "
                 f"aggregate function is '{func}'."
             )
-        return func
+        return _combinator_name(func, "", func_params)
 
-    return f"{func}State"
+    return _combinator_name(func, "State", func_params)
+
+
+# The arg type `agg.sum()` / `agg.avg()` fall back to when the caller does not
+# give one. An aggregating view replaces only this value with the resolved
+# source column type; a type the caller wrote is left alone.
+_DEFAULT_AGG_ARG_TYPE = "Float64"
 
 
 @dataclass(frozen=True)
@@ -201,13 +236,13 @@ class _AggNamespace:
     """
 
     def sum(  # noqa: A003
-        self, arg: Any, type_: str = "Float64",
+        self, arg: Any, type_: str = _DEFAULT_AGG_ARG_TYPE,
     ) -> AggExpr:
         """``SUM`` aggregate. → ``AggregateFunction(sum, type)``, ``sumState(arg)``."""
         return AggExpr("sum", arg, (type_,))
 
     def avg(  # noqa: A003
-        self, arg: Any, type_: str = "Float64",
+        self, arg: Any, type_: str = _DEFAULT_AGG_ARG_TYPE,
     ) -> AggExpr:
         """``AVG`` aggregate. → ``AggregateFunction(avg, type)``, ``avgState(arg)``."""
         return AggExpr("avg", arg, (type_,))
@@ -258,6 +293,13 @@ class _AggNamespace:
         Example::
 
             agg.raw("sumIf", amount_col, "Float64", "UInt8")
+
+        Parametric aggregates keep their parameter list on the function name
+        and the ``-State`` combinator is rendered correctly::
+
+            agg.raw("quantile(0.95)", duration_ms, "UInt32")
+            # → quantileState(0.95)(duration_ms) AS ...
+            #   AggregateFunction(quantile(0.95), UInt32)
         """
         return AggExpr(func, arg, arg_types)
 

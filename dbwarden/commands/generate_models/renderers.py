@@ -8,6 +8,7 @@ from dbwarden.engine.backends.clickhouse.generate_models import (
     _render_ch_mv_meta,
 )
 from dbwarden.engine.backends.mysql.generate_models import _render_mysql_meta
+from dbwarden.engine.backends.sqlite.generate_models import _render_sqlite_meta
 from dbwarden.engine.backends.postgresql.generate_models import (
     _format_pg_type,
     _render_postgresql_meta,
@@ -66,6 +67,7 @@ def _generate_table_code(
     pg_meta: dict | None = None,
     my_meta: dict | None = None,
     base_class_name: str = "Base",
+    sq_meta: dict | None = None,
 ) -> str:
     class_name = "".join(part.capitalize() for part in re.split(r"[_\s]", table_name) if part)
     if not class_name:
@@ -104,4 +106,7 @@ def _generate_table_code(
     if my_meta or any(col.get("my_meta") for col in columns):
         lines.append("")
         lines.extend(_render_mysql_meta(columns, my_meta))
+    if sq_meta or any(col.get("sq_meta") for col in columns):
+        lines.append("")
+        lines.extend(_render_sqlite_meta(columns, sq_meta))
     return "\n".join(lines) + "\n"

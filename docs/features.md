@@ -5,11 +5,11 @@ description: Overview of dbwarden features, with short examples for migrations, 
 
 # Features
 
-This page gives a compact overview of the main dbwarden features, with short examples. Use it to understand the surface area of the tool before diving into the guides and reference pages.
+This page gives a compact overview of the main dbwarden features, with short examples. dbwarden is a schema compiler. Each feature maps to a compilation stage.
 
-## SQL-First Migrations
+## SQL-First Compilation
 
-dbwarden writes migrations as plain SQL files. Each file contains both an `--upgrade` section and a `--rollback` section.
+dbwarden compiles migrations as plain SQL files. Each file contains both an `--upgrade` section and a `--rollback` section.
 
 ```sql
 -- upgrade

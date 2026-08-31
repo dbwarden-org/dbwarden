@@ -494,6 +494,76 @@ class TestAggregatingView:
             f"Plain source should use sumState, got:\n{select}"
         )
 
+    def test_parametric_quantile_renders_state_combinator(self):
+        """agg.raw('quantile(0.95)', ...) renders quantileState(0.95)(col), not
+        the invalid quantile(0.95)State(col)."""
+        expr = agg.raw("quantile(0.95)", "duration_ms", "UInt32").as_("p95_duration_ms")
+        assert expr.state_combinator() == (
+            "quantileState(0.95)(duration_ms) AS p95_duration_ms"
+        ), expr.state_combinator()
+        assert expr.target_type() == "AggregateFunction(quantile(0.95), UInt32)"
+
+    def test_parametric_quantile_multi_param(self):
+        expr = agg.raw("quantiles(0.9, 0.95)", "duration_ms", "UInt32").as_("quantiles_90_95")
+        assert expr.state_combinator() == (
+            "quantilesState(0.9, 0.95)(duration_ms) AS quantiles_90_95"
+        ), expr.state_combinator()
+
+    def test_parametric_quantile_cascade_uses_merge_state(self):
+        """A parametric aggregate over an AggregateFunction source must emit
+        quantileMergeState(0.95)(col), matching the target column type."""
+        expr = agg.raw("quantile(0.95)", "duration_ms", "UInt32").as_("p95")
+        source_type = "AggregateFunction(quantile(0.95), UInt32)"
+        assert expr.state_combinator(source_column_type=source_type) == (
+            "quantileMergeState(0.95)(duration_ms) AS p95"
+        ), expr.state_combinator(source_column_type=source_type)
+
+    def test_resolve_combinator_parametric_base_match(self):
+        """resolve_combinator compares the base name, so parametric functions
+        no longer trip the cascade function-mismatch check."""
+        from dbwarden.databases.clickhouse.agg import resolve_combinator
+
+        assert resolve_combinator("quantile(0.95)", None) == "quantileState(0.95)"
+        assert (
+            resolve_combinator("quantile(0.95)", "AggregateFunction(quantile, Float64)")
+            == "quantileMergeState(0.95)"
+        )
+        assert resolve_combinator("sum", None) == "sumState"
+        assert resolve_combinator("sum", "AggregateFunction(sum, Float64)") == "sumMergeState"
+
+    def test_parametric_quantile_in_aggregating_view_select(self):
+        """End-to-end shape: a model-level aggregating_view emits the corrected
+        quantileState(0.95)(...) SELECT and AggregateFunction target type."""
+        from sqlalchemy import Integer
+        from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+        class _Base(DeclarativeBase):
+            pass
+
+        class SourceTable(_Base):
+            __tablename__ = "source"
+            id: Mapped[int] = mapped_column(Integer, primary_key=True)
+            duration_ms: Mapped[int] = mapped_column()
+
+        av = aggregating_view(
+            name="agg_pos_health_hourly",
+            source=SourceTable,
+            group_by=["id"],
+            aggregates=[
+                agg.raw("quantile(0.95)", "duration_ms", "UInt32").as_("p95_duration_ms"),
+            ],
+            order_by=["id"],
+        )
+        d = av.to_dict()
+        select = d["ch_agg_mv"]["ch_select_statement"]
+        assert "quantileState(0.95)(duration_ms) AS p95_duration_ms" in select, (
+            f"Parametric combinator must be quantileState(0.95)(...), got:\n{select}"
+        )
+        assert "quantile(0.95)State" not in select, f"Invalid combinator shape:\n{select}"
+        target = d["ch_agg_target"]
+        assert "p95_duration_ms" in target.get("columns", []), target
+        assert target["aggregates"][0].target_type() == "AggregateFunction(quantile(0.95), UInt32)"
+
 
 # ── data_op ───────────────────────────────────────────────────────────────────
 
@@ -967,3 +1037,130 @@ class TestTwoCycleConvergence:
         h = ChDataOpHandler()
         up, _ = h.diff({}, {})
         assert not up, "ChDataOpHandler should always return empty diff"
+
+
+class TestAggregateArgTypePreservation:
+    """An aggregating view resolves the defaulted arg type, not a declared one.
+
+    `agg.sum()` and `agg.avg()` fall back to Float64 when the caller gives no
+    type, and the view replaces that with the source column's resolved type.
+    Every other helper takes the type explicitly, and overwriting it there
+    silently rewrote a declared `UInt32` state as the source column's `Int32`,
+    changing the AggregateFunction signature of the target column.
+    """
+
+    @staticmethod
+    def _view(aggregate):
+        from sqlalchemy import Integer
+        from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+        class _Base(DeclarativeBase):
+            pass
+
+        class Source(_Base):
+            __tablename__ = "source"
+            id: Mapped[int] = mapped_column(Integer, primary_key=True)
+            duration_ms: Mapped[int] = mapped_column()
+
+        view = aggregating_view(
+            name="agg_view", source=Source, group_by=["id"],
+            aggregates=[aggregate], order_by=["id"],
+        )
+        return view.to_dict()["ch_agg_target"]
+
+    def test_an_explicit_type_is_preserved(self):
+        target = self._view(agg.raw("quantile(0.95)", "duration_ms", "UInt32").as_("p95"))
+        assert target["aggregates"][0].arg_types == ("UInt32",)
+
+    def test_an_explicit_type_on_an_enumerated_helper_is_preserved(self):
+        target = self._view(agg.uniq("duration_ms", "UInt64").as_("uniq_ms"))
+        assert target["aggregates"][0].arg_types == ("UInt64",)
+
+    def test_an_explicit_sum_type_is_preserved(self):
+        target = self._view(agg.sum("duration_ms", "UInt32").as_("total"))
+        assert target["aggregates"][0].arg_types == ("UInt32",)
+
+    def test_the_defaulted_sum_type_is_resolved_from_the_source(self):
+        target = self._view(agg.sum("duration_ms").as_("total"))
+        assert target["aggregates"][0].arg_types == ("Int32",), (
+            "an unspecified type should follow the source column"
+        )
+
+    def test_the_target_column_uses_the_declared_type(self):
+        target = self._view(agg.raw("quantile(0.95)", "duration_ms", "UInt32").as_("p95"))
+        assert any(
+            "AggregateFunction(quantile(0.95), UInt32)" in definition
+            for definition in target.get("column_defs", [])
+        ) or target["aggregates"][0].target_type() == (
+            "AggregateFunction(quantile(0.95), UInt32)"
+        )
+
+
+class TestAggregatingTargetColumnTypes:
+    """The aggregating target table is ClickHouse DDL, not SQLAlchemy types.
+
+    When the model declares its dimension columns, the target used to be built
+    from `str(sa_col.type)`, emitting `VARCHAR(50)` and `INTEGER` where
+    ClickHouse wants `String` and `Int32` - and giving the aggregate column its
+    declared type instead of the `AggregateFunction(...)` signature it must
+    have to accept `-State` rows.
+    """
+
+    @staticmethod
+    def _target():
+        from sqlalchemy import Integer, String
+        from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+        from dbwarden.databases.clickhouse import CHTableMeta, aggregating_view
+        from dbwarden.databases.clickhouse.views import _expand_agg_target
+        from dbwarden.schema._base import read_meta
+
+        class Base(DeclarativeBase):
+            pass
+
+        class PosEvent(Base):
+            __tablename__ = "pos_events"
+            id: Mapped[int] = mapped_column(Integer, primary_key=True)
+            terminal_id: Mapped[int] = mapped_column(Integer)
+            terminal_name: Mapped[str] = mapped_column(String(50))
+            duration_ms: Mapped[int] = mapped_column(Integer)
+
+        class AggPosHealth(Base):
+            __tablename__ = "agg_pos_health_hourly"
+            terminal_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+            terminal_name: Mapped[str] = mapped_column(String(50))
+            p95_duration_ms: Mapped[int] = mapped_column(Integer)
+
+            class Meta(CHTableMeta):
+                ch = aggregating_view(
+                    name="agg_pos_health_hourly",
+                    source=PosEvent,
+                    group_by=["terminal_id", "terminal_name"],
+                    aggregates=[
+                        agg.raw("quantile(0.95)", "duration_ms", "UInt32").as_("p95_duration_ms"),
+                    ],
+                    order_by=["terminal_id", "terminal_name"],
+                )
+
+        # Metadata is attached by model extraction, as in the real flow.
+        from dbwarden.engine.model_discovery.extraction import extract_table_from_model
+
+        extract_table_from_model(AggPosHealth)
+        target = _expand_agg_target(AggPosHealth, read_meta(AggPosHealth).backend_table)
+        return {c.name: c.type for c in target.columns}
+
+    def test_string_dimension_is_clickhouse_string(self):
+        assert self._target()["terminal_name"] == "String"
+
+    def test_integer_dimension_is_clickhouse_int(self):
+        assert self._target()["terminal_id"] == "Int32"
+
+    def test_no_sqlalchemy_type_names_leak(self):
+        rendered = " ".join(self._target().values()).upper()
+        assert "VARCHAR" not in rendered
+        assert "INTEGER" not in rendered
+
+    def test_aggregate_column_gets_its_aggregate_function_type(self):
+        assert self._target()["p95_duration_ms"] == (
+            "AggregateFunction(quantile(0.95), UInt32)"
+        )

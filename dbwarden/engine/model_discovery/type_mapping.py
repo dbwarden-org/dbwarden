@@ -16,18 +16,37 @@ def _validate_identifier(name: str, field: str = "identifier") -> None:
         )
 
 
-def _get_backend_name(db_name: str | None = None) -> str:
+def _resolved_backend_name(db_name: str | None = None) -> str | None:
+    """The configured backend, or ``None`` when no config could be resolved.
+
+    ``_get_backend_name`` answers 'sqlite' for an unresolvable config, which
+    makes 'sqlite' ambiguous: it means both "SQLite is the target" and "we do
+    not know the target".  Callers that change the *shape* of a migration for
+    SQLite - rather than just the dialect of a statement - must only do so when
+    SQLite was actually configured, which is what this reports.
+    """
     try:
-        config = get_database(db_name)
-        return config.database_type
+        return get_database(db_name).database_type
     except Exception:
-        get_logger().warning(
-            "Could not resolve database config for %r; "
-            "falling back to 'sqlite'.  This may cause the wrong SQL "
-            "dialect to be used.  Ensure DATABASE_URL is configured.",
-            db_name,
-        )
-        return "sqlite"
+        return None
+
+
+def _get_backend_name(db_name: str | None = None) -> str:
+    backend = _resolved_backend_name(db_name)
+    if backend is not None:
+        return backend
+    get_logger().warning(
+        "Could not resolve database config for %r; "
+        "falling back to 'sqlite'.  This may cause the wrong SQL "
+        "dialect to be used.  Ensure DATABASE_URL is configured.",
+        db_name,
+    )
+    return "sqlite"
+
+
+def is_sqlite_target(db_name: str | None = None) -> bool:
+    """True when SQLite is the configured backend, not merely the fallback."""
+    return _resolved_backend_name(db_name) == "sqlite"
 
 
 def _map_sqlalchemy_type_to_backend(

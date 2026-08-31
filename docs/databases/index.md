@@ -1,6 +1,6 @@
 # Supported Databases
 
-dbwarden supports PostgreSQL (the default and first-class backend), MySQL, MariaDB, SQLite, and ClickHouse.
+dbwarden supports PostgreSQL (the default backend), MySQL, MariaDB, SQLite, and ClickHouse.
 
 A **round-trip** backend is one where dbwarden can both read schema (via `generate-models`) and write schema (via `make-migrations` / `migrate`).
 
@@ -10,19 +10,18 @@ A **round-trip** backend is one where dbwarden can both read schema (via `genera
 |---------|------------------|-------------|------------|
 | PostgreSQL | `postgresql` | `postgresql://user:pass@host:5432/db` | Yes |
 | MySQL | `mysql` | `mysql://user:pass@host:3306/db` | Yes |
-| MariaDB | `mariadb` | `mariadb://user:pass@host:3306/db` | No |
+| MariaDB | `mariadb` | `mariadb://user:pass@host:3306/db` | Partial |
 | ClickHouse | `clickhouse` | `clickhouse://user:pass@host:8123/db` | Yes |
-| SQLite | `sqlite` | `sqlite:///./app.db` | Dev only |
+| SQLite | `sqlite` | `sqlite:///./app.db` | Yes |
 
 ## Optional Dependency Groups
 
-When you install `dbwarden`, the `[postgres]` extra is included by default (providing the PostgreSQL driver). For other backends you must specify the corresponding extra:
+None of the database drivers are installed by default. Install the extra for your target backend:
 
 | Extra | Command | Driver |
 |-------|---------|--------|
-| `[postgres]` | Included by default | `psycopg2-binary` |
+| `[postgres]` | `uv add "dbwarden[postgres]"` | `psycopg2-binary` |
 | `[mysql]` | `uv add "dbwarden[mysql]"` | `pymysql` |
-| `[mariadb]` | `uv add "dbwarden[mariadb]"` | `pymysql` |
 | `[clickhouse]` | `uv add "dbwarden[clickhouse]"` | `clickhouse-connect` |
 
 See [Installation](../installation.md) for full details.
@@ -169,7 +168,7 @@ See [MySQL Deep Dive](mysql.md) for the complete reference.
 
 ### MariaDB
 
-MariaDB is supported as a separate `database_type` (`mariadb`), but it does **not** have round-trip support. You can use MariaDB as a target database for migrations, but `generate-models` and full schema introspection are not available. Use `make-migrations` to write migrations manually.
+MariaDB is supported as a separate `database_type` (`mariadb`). Schema layer is complete with `MdbTableMeta` / `MdbColumnMeta` and `mdb.field()` spec objects including MariaDB-specific features. Snapshot capture and reverse-engineering of MariaDB-specific features are not yet complete, so full round-trip is not yet available.
 
 See [MySQL Deep Dive](mysql.md) for MariaDB-specific notes.
 

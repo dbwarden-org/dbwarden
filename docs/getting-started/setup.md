@@ -21,18 +21,18 @@ Install the base package:
 uv add dbwarden
 ```
 
-Optional dependency groups:
+Optional dependency groups for database drivers:
 
 | Group | Command | Use case |
 |---|---|---|
-| `fastapi` | `uv add "dbwarden[fastapi]"` | FastAPI session dependencies and runtime integration |
-| `metrics` | `uv add "dbwarden[metrics]"` | Prometheus metrics |
-| `sandbox` | `uv add "dbwarden[sandbox]"` | Sandbox migration testing |
+| `postgres` | `uv add "dbwarden[postgres]"` | PostgreSQL driver |
+| `mysql` | `uv add "dbwarden[mysql]"` | MySQL/MariaDB driver |
+| `clickhouse` | `uv add "dbwarden[clickhouse]"` | ClickHouse driver |
 
 You can combine them:
 
 ```bash
-uv add "dbwarden[fastapi,metrics,sandbox]"
+uv add "dbwarden[postgres,mysql]"
 ```
 
 ## Initialize the Project

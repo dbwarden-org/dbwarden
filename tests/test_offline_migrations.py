@@ -2278,6 +2278,73 @@ def test_offline_pg_reserved_word_quoting(monkeypatch):
     assert '"user"' in sql
 
 
+def test_offline_pg_reserved_word_columns_and_index_quoted():
+    """A reserved-word column (`limit`) is quoted in CREATE TABLE, ADD COLUMN,
+    and its index DDL — the generated migration must apply without syntax error."""
+    set_dev_mode(False)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(tmpdir)
+
+            Path("dbwarden.py").write_text(
+                "from dbwarden import database_config\n\n"
+                "database_config(database_name='primary', default=True, "
+                "database_type='postgresql', database_url_sync='postgresql:///', "
+                "model_paths=['models'])\n",
+                encoding="utf-8",
+            )
+
+            Path("models").mkdir(parents=True)
+            Path("models/models.py").write_text(
+                "from sqlalchemy import Column, Integer\n"
+                "from sqlalchemy.orm import declarative_base\n"
+                "from dbwarden.databases import index\n\n"
+                "Base = declarative_base()\n\n"
+                "class RateLimit(Base):\n"
+                "    __tablename__ = 'rate_limits'\n"
+                "    id = Column(Integer, primary_key=True)\n"
+                "    limit = Column('limit', Integer, nullable=False)\n"
+                "\n"
+                "    class Meta:\n"
+                "        indexes = [\n"
+                "            index('ix_rate_limits_limit', ['limit']),\n"
+                "        ]\n",
+                encoding="utf-8",
+            )
+
+            Path("migrations/primary").mkdir(parents=True)
+            Path(".dbwarden").mkdir(parents=True)
+            Path(".dbwarden/model_state.primary.json").write_text(
+                json.dumps(model_state_to_dict([])) + "\n", encoding="utf-8"
+            )
+
+            make_migrations_cmd("rate limit table", offline=True, database="primary")
+
+            sql_files = sorted(Path("migrations/primary").glob("*.sql"))
+            assert sql_files, "Should have generated a migration"
+            sql = sql_files[-1].read_text(encoding="utf-8")
+
+            assert '"limit" INTEGER NOT NULL' in sql, (
+                f"CREATE TABLE must quote the reserved column, got:\n{sql}"
+            )
+            assert (
+                "CREATE INDEX CONCURRENTLY ix_rate_limits_limit ON rate_limits (\"limit\")"
+                in sql
+            ), (
+                f"Index must be emitted, got:\n{sql}"
+            )
+            assert 'ON rate_limits ("limit")' in sql, (
+                f"Index columns must be quoted, got:\n{sql}"
+            )
+            assert "DROP INDEX ix_rate_limits_limit" in sql
+            assert "limit INTEGER" not in sql, (
+                f"Reserved column must never be emitted bare, got:\n{sql}"
+            )
+        finally:
+            os.chdir(old_cwd)
+
+
 def test_offline_pg_extension_sql():
     """A plugin-owned config key round-trips once its plugin has registered it."""
     from dbwarden.config import get_database, set_dev_mode

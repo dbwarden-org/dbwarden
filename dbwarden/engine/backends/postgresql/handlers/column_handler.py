@@ -262,6 +262,12 @@ class ColumnHandler(ObjectHandler):
                     k: v for k, v in model_pg_meta.items()
                     if k not in ("pg_type", "pg_enum_name", "pg_enum_values")
                 }
+                # Physical tuning the model does not mention is not a
+                # difference: a column a DBA set to MAIN storage would
+                # otherwise be reported as changed on every run, and reset.
+                for _tuning_key in ("pg_storage", "pg_compression"):
+                    if _tuning_key not in model_pg_meta_filtered:
+                        norm_snap_pg_col.pop(_tuning_key, None)
                 if norm_snap_pg_col != model_pg_meta_filtered:
                     upgrade_ops.append(Op(
                         object_type="alter_pg_column_meta",
@@ -425,6 +431,11 @@ class ColumnHandler(ObjectHandler):
         snap_has_identity = bool((snap_col.get("pg_column") or {}).get("identity"))
 
         if model_autoinc == "auto":
+            # SERIAL and friends are integer columns: by the time the diff runs,
+            # an autoincrementing INTEGER primary key has already been rendered
+            # as SERIAL, and looking for "int" alone would resolve "auto" to
+            # False and emit an autoincrement change against a column that never
+            # changed.
             model_autoinc = (
                 model_col.primary_key
                 and pk_count <= 1
@@ -440,14 +451,18 @@ class ColumnHandler(ObjectHandler):
         if not snap_autoinc and "serial" in snap_type_lower:
             snap_autoinc = True
 
-        if (
-            backend == "sqlite"
-            and model_col.primary_key
-            and pk_count <= 1
-            and "int" in model_type_lower
-            and model_col.autoincrement in (None, "auto", True)
-        ):
-            return
+        if backend == "sqlite" and model_col.primary_key:
+            # An INTEGER PRIMARY KEY is SQLite's rowid alias and is
+            # autoincrementing whether or not the model says so; on any other
+            # primary key AUTOINCREMENT is not legal at all. Either way there is
+            # nothing to alter.
+            if pk_count > 1:
+                return
+            if "int" in model_type_lower:
+                if model_col.autoincrement in (None, "auto", True):
+                    return
+            else:
+                return
         if model_autoinc is not None and bool(snap_autoinc) != bool(model_autoinc):
             if pk_count > 1 and backend in ("mysql", "mariadb"):
                 return

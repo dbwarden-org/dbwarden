@@ -119,6 +119,8 @@ At least one of `database_url_sync` or `database_url_async` must be provided.
 | `dev_database_url` | `str | None` | `None` | connection URL for local development (used with `--dev`) |
 | `overlap_models` | `bool` | `False` | if `True`, allow model path overlap with other databases |
 | `secure_values` | `bool` | `False` | if `True`, display commands show variable names instead of resolved values |
+| `pg_schema` | `str | None` | `None` | PostgreSQL schema name; sets `search_path` on connection so all unqualified references use that schema |
+| `pg_migration_lock_timeout` | `int | None` | `None` | PostgreSQL lock timeout in seconds for migration DDL; prevents indefinite waits on conflicting locks |
 
 ## Field descriptions
 
@@ -583,6 +585,8 @@ analytics = database_config(
 | `dev_database_url` |  No | `None` | Local development |
 | `overlap_models` |  No | `False` | Shared models (read replicas) |
 | `secure_values` |  No | `False` | Hide credentials in output |
+| `pg_schema` |  No | `None` | PostgreSQL schema name for search_path |
+| `pg_migration_lock_timeout` |  No | `None` | PostgreSQL lock timeout (seconds) for migrations |
 
 ## Related Documentation
 

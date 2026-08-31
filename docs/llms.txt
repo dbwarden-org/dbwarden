@@ -53,6 +53,7 @@
 - [SQL Databases](https://docs.dbwarden.org/databases/sql-databases/): Backend-specific syntax, limitations, and edge cases
 - [PostgreSQL](https://docs.dbwarden.org/databases/postgresql/): First-class backend - full round-trip verification
 - [MySQL & MariaDB](https://docs.dbwarden.org/databases/mysql/): First-class backends - reverse-engineered, diffed, emitted as correct DDL
+- [SQLite](https://docs.dbwarden.org/databases/sqlite/): First-class backend - table rebuilds, WITHOUT ROWID/STRICT, generated columns
 - [ClickHouse](https://docs.dbwarden.org/databases/clickhouse/): First-class backend - full round-trip support
 
 ## FastAPI Integration

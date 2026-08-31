@@ -1488,7 +1488,7 @@ class TestCHViewDiscovery:
                             lambda: SimpleNamespace(default="analytics"))
         monkeypatch.setattr(pipeline_mod, "get_all_model_tables", lambda *a, **k: [])
         monkeypatch.setattr(pipeline_mod, "validate_model_tables_exist", lambda *a, **k: None)
-        monkeypatch.setattr("dbwarden.engine.offline.diff_model_states", lambda prev, curr: (
+        monkeypatch.setattr("dbwarden.engine.offline.diff_model_states", lambda prev, curr, **kwargs: (
             [{"type": "drop_table", "table": "hourly_mv", "object_type": "materialized_view"},
              {"type": "drop_table", "table": "hourly"}],
             [{"type": "drop_table", "table": "hourly"},

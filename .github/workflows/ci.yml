@@ -158,4 +158,7 @@ jobs:
         run: >-
           uv run pytest
           tests/integration/test_pg_convergence.py
+          tests/integration/test_pg_no_spurious_diff.py
+          tests/integration/test_pg_constraint_emission.py
+          tests/integration/test_pg_snapshot_fidelity.py
           -m integration --pg-integration --tb=short -v

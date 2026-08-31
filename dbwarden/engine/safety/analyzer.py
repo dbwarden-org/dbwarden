@@ -8,6 +8,9 @@ from dbwarden.engine.backends.clickhouse.safety import (
 from dbwarden.engine.backends.postgresql.safety import (
     classify_pg_type_change,
 )
+from dbwarden.engine.backends.sqlite.safety import (
+    analyze_sqlite_options,
+)
 from dbwarden.engine.discovery import (
     ModelTable,
 )
@@ -222,4 +225,5 @@ def _analyze_table(table_snapshot: dict[str, Any], model_table: ModelTable) -> l
             )
 
     issues.extend(analyze_clickhouse_options(table_snapshot, model_table))
+    issues.extend(analyze_sqlite_options(table_snapshot, model_table))
     return issues

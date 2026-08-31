@@ -70,7 +70,7 @@ def _resolve_imports(columns: list[dict], has_relationships: bool) -> set[str]:
 def _render_imports(imports: set[str]) -> set[str]:
     result: set[str] = set()
     for imp in sorted(imports):
-        if imp in ("Column", "func"):
+        if imp == "Column":
             continue
         result.add(imp)
     result.add("Column")

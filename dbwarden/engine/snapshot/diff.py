@@ -2,11 +2,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from dbwarden.engine.model_discovery.type_mapping import _get_backend_name
+from dbwarden.engine.model_discovery.type_mapping import _get_backend_name, is_sqlite_target
 
 
 def _is_clickhouse(db_name: str | None) -> bool:
     return _get_backend_name(db_name) == "clickhouse"
+
+
+def _is_sqlite(db_name: str | None) -> bool:
+    return is_sqlite_target(db_name)
 
 
 def _suppress_ch_column_ops(ops: list[Any]) -> list[Any]:
@@ -60,6 +64,17 @@ def diff_models_against_snapshot(
 
     snapshot = _filter_system_objects(snapshot)
     model_tables = [t for t in model_tables if not _is_system_table_name(t.name)]
+
+    # The SQLite rebuild renders whole tables out of the snapshot, and the
+    # handlers below canonicalize the snapshot in place - dropping constraint
+    # types and renaming keys. Capture the shape now, while it is still the
+    # shape the database reported.
+    sqlite_from_entries: dict[str, dict[str, Any]] = {}
+    if _is_sqlite(db_name or database):
+        from dbwarden.engine.backends.sqlite.collapse import snapshot_state_entries
+
+        sqlite_from_entries = snapshot_state_entries(snapshot)
+
     snapshot_tables = snapshot.get("tables", {})
     model_by_name = {t.name: t for t in model_tables}
     backend_is_ch = _is_clickhouse(db_name or database)
@@ -206,6 +221,13 @@ def diff_models_against_snapshot(
     _extend_ops(upgrade_ops, _my_up)
     _extend_ops(rollback_ops, _my_rb)
 
+    from dbwarden.engine.backends.sqlite.handlers import SqTableHandler
+    _sq_driver = RegistryDriver(include_plugins=False)
+    _sq_driver.register(SqTableHandler())
+    _sq_up, _sq_rb = _sq_driver.run(snapshot, model_tables, None)
+    _extend_ops(upgrade_ops, _sq_up)
+    _extend_ops(rollback_ops, _sq_rb)
+
     create_tables = {op["table"] for op in upgrade_ops if op.get("type") == "create_table"}
     if create_tables:
         def _is_redundant_initial_table_op(op: dict[str, Any]) -> bool:
@@ -265,5 +287,18 @@ def diff_models_against_snapshot(
         allowed = {"recreate_ch_table", "drop_table", "create_table", "rename_table", "alter_enum_add_value", "create_type", "drop_type"}
         upgrade_ops = [op for op in upgrade_ops if op.get("table") not in recreate_tables or op.get("type") in allowed]
         rollback_ops = [op for op in rollback_ops if op.get("table") not in recreate_tables or op.get("type") in allowed]
+
+    if _is_sqlite(db_name or database):
+        from dbwarden.engine.backends.sqlite.collapse import (
+            collapse_sqlite_ops,
+            model_state_entries,
+        )
+
+        upgrade_ops, rollback_ops = collapse_sqlite_ops(
+            upgrade_ops,
+            rollback_ops,
+            from_entries=sqlite_from_entries,
+            to_entries=model_state_entries(model_tables),
+        )
 
     return upgrade_ops, rollback_ops

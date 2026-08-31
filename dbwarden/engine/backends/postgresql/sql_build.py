@@ -37,6 +37,11 @@ def _build_pg_meta_sql(
         to_val = to_pg_column.get(model_key)
         if from_val == to_val:
             continue
+        if key in ("storage", "compression") and to_val is None:
+            # Physical tuning the model does not mention. Emitting the type
+            # default here would reset every column a DBA had deliberately set
+            # to MAIN or EXTERNAL, on every migration.
+            continue
         if key == "collation":
             up = f"ALTER TABLE {table} ALTER COLUMN {column} TYPE {col_type} COLLATE \"{to_val}\";" if to_val else f"ALTER TABLE {table} ALTER COLUMN {column} TYPE {col_type};"
             rb = f"ALTER TABLE {table} ALTER COLUMN {column} TYPE {snap_type} COLLATE \"{from_val}\";" if from_val else f"ALTER TABLE {table} ALTER COLUMN {column} TYPE {snap_type};"

@@ -132,6 +132,7 @@ def snapshot_diff_to_sql(
         ChTableHandler,
     )
     from dbwarden.engine.backends.mysql.handlers import MyTableHandler
+    from dbwarden.engine.backends.sqlite.handlers import SqTableHandler
     from dbwarden.engine.core.ordering import apply_public_ordering
     from dbwarden.engine.core.protocol import Op
     from dbwarden.plugin import ObjectPluginRegistry
@@ -156,6 +157,7 @@ def snapshot_diff_to_sql(
         RenameTableHandler(),
         SchemaHandler(),
         ChSkipIndexHandler(),
+        SqTableHandler(),
         StatisticsHandler(),
         TableHandler(),
         TypeHandler(),
@@ -180,6 +182,9 @@ def snapshot_diff_to_sql(
         "add_grant": "table", "revoke_grant": "table",
         "alter_enum_add_value": "enum_name", "create_type": "enum_name", "drop_type": "enum_name",
         "alter_my_table": "table",
+        "alter_sq_table": "table",
+        "alter_sq_column_meta": "table",
+        "recreate_sq_table": "table",
         "alter_view": "table",
         "refresh_matview": "table",
         "create_table": "table",
@@ -252,6 +257,8 @@ def snapshot_diff_to_sql(
         "add_grant": "role", "revoke_grant": "role",
         "alter_enum_add_value": "value",
         "alter_my_table": "key",
+        "alter_sq_table": "key",
+        "alter_sq_column_meta": "column",
         "alter_pg_table": "key",
         "add_index": "columns",
         "add_column": "column",

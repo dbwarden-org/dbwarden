@@ -776,3 +776,43 @@ class TestPkFallbackInference:
         from dbwarden.commands.generate_models import _infer_primary_key
         result = _infer_primary_key(set(), [], [])
         assert result == set()
+
+
+class TestGeneratedImportsAreComplete:
+    """A generated model file has to import everything it references.
+
+    Reverse engineering a column whose default is `now()` writes
+    `default=func.now()`, but `func` was filtered back out of the import line.
+    The artifact then raised `NameError: name 'func' is not defined` the moment
+    dbwarden loaded it - so `generate-models` produced a file that its own
+    `diff` could not read.
+    """
+
+    @staticmethod
+    def _imports(columns):
+        from dbwarden.commands.generate_models.imports import (
+            _render_imports,
+            _resolve_imports,
+        )
+
+        return _render_imports(_resolve_imports(columns, has_relationships=False))
+
+    def test_func_survives_for_a_now_default(self):
+        imports = self._imports(
+            [{"name": "created_at", "type": "timestamp", "default": "func.now()"}],
+        )
+        assert "func" in imports
+
+    def test_func_survives_for_current_timestamp(self):
+        imports = self._imports(
+            [{"name": "created_at", "type": "timestamp", "default": "CURRENT_TIMESTAMP"}],
+        )
+        assert "func" in imports
+
+    def test_column_is_always_imported_once(self):
+        imports = self._imports([{"name": "id", "type": "integer"}])
+        assert "Column" in imports
+
+    def test_no_func_import_without_a_generated_default(self):
+        imports = self._imports([{"name": "code", "type": "varchar(32)"}])
+        assert "func" not in imports

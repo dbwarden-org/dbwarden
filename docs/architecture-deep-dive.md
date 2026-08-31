@@ -1,13 +1,13 @@
 # Architecture
 
-This page explains dbwarden internals for contributors and advanced debugging.
+This page explains dbwarden internals for contributors and advanced debugging. dbwarden is structured as a multi-pass compiler.
 
-## Layered architecture
+## Compilation pipeline
 
 ```text
 CLI (Typer)
-  -> Commands layer
-    -> Engine layer (planning/parsing/version/checksum/model discovery)
+  -> Commands layer (compilation driver)
+    -> Engine layer (parsing, canonicalization, diff, optimization, code generation)
       -> Repository layer (migration + lock records)
         -> Database layer (SQLAlchemy connection + SQL execution)
 ```
