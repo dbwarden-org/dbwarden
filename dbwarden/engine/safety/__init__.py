@@ -18,7 +18,6 @@ from dbwarden.engine.backends.clickhouse.safety import (
     CH_COLUMN_WARN,
     CH_OPTION_CRITICAL,
     _CH_OPTION_KEY_MAP,
-    _CH_OPTION_RULES,
     CH_OPTION_WARN,
     analyze_clickhouse_options,
     classify_ch_column_change,

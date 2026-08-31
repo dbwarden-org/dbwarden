@@ -1,12 +1,12 @@
-import logging
 import secrets
 
 from sqlalchemy import text
 
 from dbwarden.database.connection import get_db_connection
 from dbwarden.database.queries import QueryMethod, get_query
+from dbwarden.logging import get_component_logger
 
-logger = logging.getLogger("dbwarden.lock")
+logger = get_component_logger("lock")
 
 
 def create_lock_table_if_not_exists(db_name: str | None = None) -> None:

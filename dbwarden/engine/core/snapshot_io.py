@@ -8,6 +8,10 @@ import tempfile
 from datetime import datetime, timezone
 from typing import Any
 
+from dbwarden.logging import get_component_logger
+
+_snapshot_logger = get_component_logger("snapshot")
+
 
 def compute_checksum(snapshot: dict[str, Any]) -> str:
     snapshot_copy = {k: v for k, v in snapshot.items() if k != "checksum"}
@@ -86,8 +90,7 @@ def read_snapshot(filepath: str) -> dict[str, Any] | None:
         actual = compute_checksum(snapshot)
         snapshot["checksum"] = stored_checksum
         if actual != stored_checksum:
-            import logging
-            logging.getLogger("dbwarden.snapshot").warning(
+            _snapshot_logger.warning(
                 "Snapshot checksum mismatch for %s (expected %s, got %s)",
                 filepath, stored_checksum, actual,
             )

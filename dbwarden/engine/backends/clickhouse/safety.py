@@ -39,6 +39,7 @@ CH_OPTION_CRITICAL = frozenset({
 CH_OPTION_WARN = frozenset({
     "ch_settings", "ch_zookeeper_path", "ch_replica_name",
     "ch_dict_layout", "ch_dict_source", "ch_dict_lifetime", "ch_dict_primary_key",
+    "ch_ttl",
 })
 
 
@@ -63,23 +64,26 @@ _CH_OPTION_KEY_MAP: dict[str, str] = {
     "ch_dict_lifetime": "clickhouse_dict_lifetime",
 }
 
-_CH_OPTION_RULES: dict[str, tuple[str, str | None, str]] = {
-    "ch_order_by": ("WARNING", "--force", "Change ORDER BY for '{table}'"),
-    "ch_ttl": ("WARNING", "--force", "Change TTL for '{table}'"),
-    "ch_engine": ("WARNING", "--force", "Change engine for '{table}'"),
-    "ch_select_statement": ("WARNING", "--force", "Change materialized view query for '{table}'"),
-    "ch_zookeeper_path": ("WARNING", "--force", "Change ZooKeeper path for '{table}'"),
-    "ch_replica_name": ("WARNING", "--force", "Change replica name for '{table}'"),
-    "ch_dict_source": ("WARNING", "--force", "Change dictionary source for '{table}'"),
-    "ch_dict_layout": ("WARNING", "--force", "Change dictionary layout for '{table}'"),
-    "ch_dict_lifetime": ("WARNING", "--force", "Change dictionary lifetime for '{table}'"),
-}
-
 
 def _normalize_option_value(value: Any) -> Any:
     if isinstance(value, tuple):
         return list(value)
     return value
+
+
+def _classify_option_to_schema_severity(key: str) -> tuple[str, str | None]:
+    """Map classify_ch_options_change() output to schema-analysis severity.
+
+    The schema analysis path (analyze_clickhouse_options) uses a simpler
+    severity model: WARNING with --force, or INFO without. This helper
+    bridges the two-level classifier (CRITICAL/WARN/INFO) to the
+    schema-analysis format.
+    """
+    classification = classify_ch_options_change(key)
+    if classification == Safety.INFO:
+        return ("INFO", None)
+    # Both WARN and CRITICAL require --force in the schema analysis path
+    return ("WARNING", "--force")
 
 
 def analyze_clickhouse_options(table_snapshot: dict[str, Any], model_table: ModelTable) -> list[SafetyIssue]:
@@ -89,7 +93,7 @@ def analyze_clickhouse_options(table_snapshot: dict[str, Any], model_table: Mode
     if not snapshot_options and not model_options:
         return issues
 
-    for ch_key, (severity, required_flag, template) in _CH_OPTION_RULES.items():
+    for ch_key in _CH_OPTION_KEY_MAP:
         model_val = _normalize_option_value(model_options.get(ch_key))
         snap_key = ch_key
         snap_val = _normalize_option_value(snapshot_options.get(snap_key))
@@ -99,12 +103,13 @@ def analyze_clickhouse_options(table_snapshot: dict[str, Any], model_table: Mode
         if snap_val != model_val:
             if snap_val is None and model_val is None:
                 continue
+            severity, required_flag = _classify_option_to_schema_severity(ch_key)
             issues.append(
                 SafetyIssue(
                     severity=severity,
                     change_type=_CH_OPTION_KEY_MAP.get(ch_key, ch_key),
                     table_name=model_table.name,
-                    message=template.format(table=model_table.name),
+                    message=f"Change {ch_key.replace('ch_', '').replace('_', ' ')} for '{model_table.name}'",
                     required_flag=required_flag,
                 )
             )

@@ -445,17 +445,16 @@ class TestCHSafetyClassifiers:
         from dbwarden.engine.safety import classify_ch_options_change
         assert classify_ch_options_change("ch_settings") == "WARN"
         assert classify_ch_options_change("ch_zookeeper_path") == "WARN"
-        assert classify_ch_options_change("ch_zookeeper_path") == "WARN"
         assert classify_ch_options_change("ch_replica_name") == "WARN"
         assert classify_ch_options_change("ch_dict_layout") == "WARN"
         assert classify_ch_options_change("ch_dict_source") == "WARN"
         assert classify_ch_options_change("ch_dict_lifetime") == "WARN"
         assert classify_ch_options_change("ch_dict_primary_key") == "WARN"
+        assert classify_ch_options_change("ch_ttl") == "WARN"
 
     def test_classify_ch_options_change_info(self):
         from dbwarden.engine.safety import classify_ch_options_change
         assert classify_ch_options_change("ch_sample_by") == "INFO"
-        assert classify_ch_options_change("ch_ttl") == "INFO"
         assert classify_ch_options_change("unknown") == "INFO"
 
     def test_classify_ch_safety_alter_ch_column(self):

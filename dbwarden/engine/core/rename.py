@@ -4,6 +4,9 @@ from dataclasses import dataclass
 from typing import Any
 
 from dbwarden.engine.core.models import ModelColumn, ModelTable
+from dbwarden.logging import get_component_logger
+
+_snapshot_logger = get_component_logger("snapshot")
 
 
 @dataclass
@@ -161,8 +164,7 @@ def _apply_rename_intents(
                     break
                 break
             if not found:
-                import logging
-                logging.getLogger("dbwarden.snapshot").warning(
+                _snapshot_logger.warning(
                     "Confirmed rename %s.%s -> %s could not be applied: "
                     "no matching drop+add pair found.",
                     table, old, new,

@@ -3,7 +3,10 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from dbwarden.logging import get_component_logger
 from dbwarden.sql import split_sql_statements
+
+_snapshot_logger = get_component_logger("snapshot")
 
 
 def _normalize_sql(s: str) -> str:
@@ -33,8 +36,7 @@ def _filter_duplicates_from_snapshot_diff(
     rollback_parts = [s.strip() for s in rollback_sql.split("\n\n") if s.strip()]
 
     if len(upgrade_parts) != len(changes) or len(rollback_parts) != len(changes):
-        import logging
-        logging.getLogger("dbwarden.snapshot").warning(
+        _snapshot_logger.warning(
             "Snapshot diff part count mismatch: %d upgrade, %d rollback, %d changes. "
             "Skipping duplicate filter to avoid misalignment.",
             len(upgrade_parts), len(rollback_parts), len(changes),

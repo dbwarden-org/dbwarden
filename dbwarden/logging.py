@@ -402,6 +402,8 @@ class DBWardenLogger:
         for handler in self.logger.handlers[:]:
             self.logger.removeHandler(handler)
 
+        component_filter = ComponentFilter()
+
         if _use_json_logging():
             handler = logging.StreamHandler(sys.stdout)
             handler.setLevel(self.debug_level)
@@ -416,6 +418,7 @@ class DBWardenLogger:
             )
             handler.setLevel(self.debug_level)
             handler.setFormatter(logging.Formatter("%(name)s - %(message)s"))
+        handler.addFilter(component_filter)
         self.logger.addHandler(handler)
 
     def _apply_logging_defaults(self, kwargs: dict[str, Any]) -> dict[str, Any]:
@@ -828,6 +831,115 @@ class DBWardenLogger:
 
 _global_logger: Optional[DBWardenLogger] = None
 _LOGGER_LOCK = threading.RLock()
+
+_KNOWN_COMPONENTS = ("plugin", "lock", "registry", "snapshot")
+_component_levels: dict[str, int] = {}
+
+
+class ComponentFilter(logging.Filter):
+    """Logging filter that applies per-component level overrides.
+
+    The root ``dbwarden`` logger receives messages from child loggers
+    (e.g. ``dbwarden.snapshot``) via propagation.  This filter inspects
+    ``record.name`` and, when a per-component level has been registered,
+    drops messages below that level.
+
+    The filter is attached to the handler, not the logger, so it acts as
+    the last gate before output.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if not _component_levels:
+            return True
+
+        logger_name = record.name
+        if logger_name.startswith("dbwarden."):
+            component = logger_name[len("dbwarden."):]
+        else:
+            component = None
+
+        if component and component in _component_levels:
+            return record.levelno >= _component_levels[component]
+
+        return True
+
+
+def set_component_level(component: str, level: int) -> None:
+    """Set the logging level for a named component.
+
+    Args:
+        component: Component name (e.g. ``"snapshot"``, ``"plugin"``).
+        level: Stdlib logging level (e.g. ``logging.DEBUG``).
+    """
+    if not isinstance(level, int):
+        raise TypeError(f"level must be an int, got {type(level)}")
+    _component_levels[component] = level
+    # Also set the level on the stdlib child logger so it accepts messages
+    # up to the configured level.  The ComponentFilter on the handler
+    # provides the fine-grained gate; setting the child logger level here
+    # ensures it is at least as permissive as the component override.
+    stdlib_logger = logging.getLogger(f"dbwarden.{component}")
+    if level != logging.NOTSET:
+        stdlib_logger.setLevel(max(level, logging.NOTSET))
+
+
+def get_component_level(component: str) -> int | None:
+    """Return the current level override for *component*, or ``None``."""
+    return _component_levels.get(component)
+
+
+def parse_log_level_spec(spec: str) -> tuple[str, int]:
+    """Parse a ``"component:LEVEL"`` string.
+
+    Returns:
+        ``(component, level)`` tuple.
+
+    Raises:
+        ValueError: If *spec* does not match the expected format or the
+            level name is not recognised.
+    """
+    if ":" not in spec:
+        raise ValueError(
+            f"Invalid log-level spec {spec!r}. Expected format: component:LEVEL "
+            f"(e.g. snapshot:debug). Known components: {', '.join(_KNOWN_COMPONENTS)}"
+        )
+    component, level_str = spec.split(":", 1)
+    component = component.strip()
+    level_str = level_str.strip()
+    if not component:
+        raise ValueError(
+            f"Empty component name in log-level spec {spec!r}. "
+            f"Known components: {', '.join(_KNOWN_COMPONENTS)}"
+        )
+    try:
+        level = resolve_debug_level(level_str)
+    except ValueError as exc:
+        raise ValueError(
+            f"Invalid level {level_str!r} for component {component!r}: {exc}"
+        ) from exc
+    return component, level
+
+
+def get_component_logger(name: str) -> logging.Logger:
+    """Return a stdlib child logger registered as a known component.
+
+    Use this instead of ``logging.getLogger("dbwarden.<name>")`` so the
+    logger is tracked by the per-component level system.
+    """
+    qualified = f"dbwarden.{name}"
+    stdlib_logger = logging.getLogger(qualified)
+    # Ensure the child logger accepts all messages; the ComponentFilter
+    # on the root handler enforces the actual per-component level.
+    stdlib_logger.setLevel(logging.NOTSET)
+    return stdlib_logger
+
+
+def clear_component_levels() -> None:
+    """Reset all per-component level overrides (used in tests)."""
+    _component_levels.clear()
+    for component in _KNOWN_COMPONENTS:
+        stdlib_logger = logging.getLogger(f"dbwarden.{component}")
+        stdlib_logger.setLevel(logging.NOTSET)
 
 
 def get_logger(

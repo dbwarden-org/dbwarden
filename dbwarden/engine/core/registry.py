@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-import logging
 from typing import Any, List, Optional, Tuple
 
 from dbwarden.engine.core.protocol import ObjectHandler, Op, RunPhase
 from dbwarden.engine.core.ordering import apply_public_ordering, order_handlers
 from dbwarden.engine.core.statement_order import MigrationStatement, _assemble_migration
 from dbwarden.engine.migration_name import Change
+from dbwarden.logging import get_component_logger
 from dbwarden.plugin import ObjectHandlerRegistration, ObjectPluginRegistry
 
-logger = logging.getLogger("dbwarden.registry")
+logger = get_component_logger("registry")
 
 # Overrides are announced once per (object type, plugin) per process. Drivers are
 # constructed many times per run, and a warning repeated ten times reads like ten

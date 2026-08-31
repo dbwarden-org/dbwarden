@@ -38,7 +38,13 @@ from dbwarden.commands import (
     handle_version,
     handle_settings_show_command,
 )
-from dbwarden.logging import enable_json_logging, get_logger, resolve_debug_level
+from dbwarden.logging import (
+    enable_json_logging,
+    get_logger,
+    resolve_debug_level,
+    set_component_level,
+    parse_log_level_spec,
+)
 from dbwarden.output import set_output_mode
 from dbwarden.plugin import load_plugins
 
@@ -48,6 +54,7 @@ app = typer.Typer(
 All commands support the --verbose / -v flag for detailed output and the
 --debug / --debug-level flags for DEBUG-level diagnostics.""",
     add_completion=False,
+    context_settings={"help_option_names": ["-h", "--help"]},
 )
 
 database_app = typer.Typer(help="List configured databases")
@@ -95,6 +102,16 @@ def app_callback(
         "-j",
         help="Render command output (and logs) as structured JSON",
     ),
+    log_level: list[str] = typer.Option(
+        [],
+        "--log-level",
+        metavar="COMPONENT:LEVEL",
+        help=(
+            "Per-component log level (repeatable). "
+            "Example: --log-level snapshot:debug --log-level plugin:warning. "
+            "Known components: plugin, lock, registry, snapshot"
+        ),
+    ),
 ):
     """Global CLI options."""
     set_dev_mode(dev)
@@ -103,17 +120,25 @@ def app_callback(
     if json_output:
         set_output_mode("json")
         enable_json_logging()
-    _apply_cli_logging(debug=debug, debug_level=debug_level)
+    _apply_cli_logging(debug=debug, debug_level=debug_level, log_level_specs=log_level)
     if ctx.invoked_subcommand != "plugin":
         load_plugins(interactive=True)
 
 
-def _apply_cli_logging(*, debug: bool, debug_level: str | None) -> None:
-    """Resolve and apply --debug / --debug-level to the global logger.
+def _apply_cli_logging(
+    *,
+    debug: bool,
+    debug_level: str | None,
+    log_level_specs: list[str] | None = None,
+) -> None:
+    """Resolve and apply --debug / --debug-level / --log-level to the global logger.
 
     ``--debug-level`` takes precedence over the bare ``--debug`` switch. The
     severity level is orthogonal to ``--verbose``: verbosity is applied by each
     command through ``get_logger(verbose=...)``.
+
+    ``--log-level`` specs (``component:LEVEL``) set per-component overrides
+    that are enforced by the ComponentFilter on the root handler.
     """
     level: int | None = None
     if debug_level is not None:
@@ -125,6 +150,13 @@ def _apply_cli_logging(*, debug: bool, debug_level: str | None) -> None:
         level = resolve_debug_level("debug")
     if level is not None:
         get_logger(debug_level=level)
+
+    for spec in (log_level_specs or []):
+        try:
+            component, component_level = parse_log_level_spec(spec)
+        except ValueError as exc:
+            raise typer.BadParameter(str(exc), param_hint="--log-level") from exc
+        set_component_level(component, component_level)
 
 
 @plugin_app.command("list")

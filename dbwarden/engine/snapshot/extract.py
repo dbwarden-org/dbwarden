@@ -11,6 +11,9 @@ from dbwarden.engine.backends.postgresql.extract import (
 )
 from dbwarden.engine.backends.postgresql.render import _is_expression
 from dbwarden.engine.backends.postgresql.sql_build import _build_pg_meta_sql
+from dbwarden.logging import get_component_logger
+
+_snapshot_logger = get_component_logger("snapshot")
 
 from .extract_ch import _extract_clickhouse_schema_snapshot
 from .type_normalize import normalize_type
@@ -459,8 +462,7 @@ def extract_full_schema_snapshot(
                         ]
                         pg_table["pg_partitions"] = children
                 except Exception as e:
-                    import logging
-                    logging.getLogger('dbwarden.snapshot').warning('child partitions extraction failed for %s: %s', _regclass_name, e)
+                    _snapshot_logger.warning('child partitions extraction failed for %s: %s', _regclass_name, e)
                     try:
                         _conn.rollback()
                     except Exception:
@@ -503,8 +505,7 @@ def extract_full_schema_snapshot(
                                 if pg_col:
                                     columns_dict[cname]["pg_column"] = pg_col
                 except Exception as e:
-                    import logging
-                    logging.getLogger('dbwarden.snapshot').warning('attstats extraction failed for %s: %s', _regclass_name, e)
+                    _snapshot_logger.warning('attstats extraction failed for %s: %s', _regclass_name, e)
                     try:
                         _conn.rollback()
                     except Exception:
@@ -528,8 +529,7 @@ def extract_full_schema_snapshot(
                     if row and row[0]:
                         pg_table["pg_rls_force"] = True
                 except Exception as e:
-                    import logging
-                    logging.getLogger('dbwarden.snapshot').warning('rls_force extraction failed for %s: %s', _regclass_name, e)
+                    _snapshot_logger.warning('rls_force extraction failed for %s: %s', _regclass_name, e)
                     try:
                         _conn.rollback()
                     except Exception:
@@ -618,8 +618,7 @@ def extract_full_schema_snapshot(
                             })
                         table_entry["pg_triggers"] = triggers
                 except Exception as e:
-                    import logging
-                    logging.getLogger('dbwarden.snapshot').warning('trigger extraction failed for %s: %s', _regclass_name, e)
+                    _snapshot_logger.warning('trigger extraction failed for %s: %s', _regclass_name, e)
                     try:
                         _conn.rollback()
                     except Exception:
@@ -628,8 +627,7 @@ def extract_full_schema_snapshot(
                 if pg_table:
                     table_entry["pg_table"] = pg_table
             except Exception:
-                import logging
-                logging.getLogger('dbwarden.snapshot').warning('PG table extraction failed for %s', _regclass_name)
+                _snapshot_logger.warning('PG table extraction failed for %s', _regclass_name)
                 try:
                     _conn.rollback()
                 except Exception:
@@ -1270,8 +1268,7 @@ def extract_full_schema_snapshot(
                         seq_info["owned_by"] = r.owned_by
                     sequences[r.seq_name] = seq_info
             except Exception as e:
-                import logging
-                logging.getLogger('dbwarden.snapshot').warning('sequences extraction failed: %s', e)
+                _snapshot_logger.warning('sequences extraction failed: %s', e)
 
             try:
                 comp_rows = _pg_conn.execute(
@@ -1301,8 +1298,7 @@ def extract_full_schema_snapshot(
                     comp_type_map[tname]["columns"].append({"name": r.col_name, "type": r.col_type})
                 composite_types.update(comp_type_map)
             except Exception as e:
-                import logging
-                logging.getLogger('dbwarden.snapshot').warning('composite_types extraction failed: %s', e)
+                _snapshot_logger.warning('composite_types extraction failed: %s', e)
                 try:
                     _pg_conn.rollback()
                 except Exception:
@@ -1330,8 +1326,7 @@ def extract_full_schema_snapshot(
                         func_entry["schema"] = r.schema
                     functions[r.func_name] = func_entry
             except Exception as e:
-                import logging
-                logging.getLogger('dbwarden.snapshot').warning('functions extraction failed: %s', e)
+                _snapshot_logger.warning('functions extraction failed: %s', e)
                 try:
                     _pg_conn.rollback()
                 except Exception:
@@ -1361,8 +1356,7 @@ def extract_full_schema_snapshot(
                         role_info["valid_until"] = str(r.rolvaliduntil)
                     roles[r.rolname] = role_info
             except Exception as e:
-                import logging
-                logging.getLogger('dbwarden.snapshot').warning('roles extraction failed: %s', e)
+                _snapshot_logger.warning('roles extraction failed: %s', e)
                 try:
                     _pg_conn.rollback()
                 except Exception:
@@ -1389,8 +1383,7 @@ def extract_full_schema_snapshot(
                     val["privileges"] = list(sorted(set(val["privileges"])))
                 default_privileges.update(dp_map)
             except Exception as e:
-                import logging
-                logging.getLogger('dbwarden.snapshot').warning('default_privileges extraction failed: %s', e)
+                _snapshot_logger.warning('default_privileges extraction failed: %s', e)
                 try:
                     _pg_conn.rollback()
                 except Exception:
@@ -1420,8 +1413,7 @@ def extract_full_schema_snapshot(
                     })
                 schema_grants.update(sg_map)
             except Exception as e:
-                import logging
-                logging.getLogger('dbwarden.snapshot').warning('schema_grants extraction failed: %s', e)
+                _snapshot_logger.warning('schema_grants extraction failed: %s', e)
                 try:
                     _pg_conn.rollback()
                 except Exception:
@@ -1446,8 +1438,7 @@ def extract_full_schema_snapshot(
                         et_entry["enabled"] = r.evtenabled
                     event_triggers[r.evtname] = et_entry
             except Exception as e:
-                import logging
-                logging.getLogger('dbwarden.snapshot').warning('event_triggers extraction failed: %s', e)
+                _snapshot_logger.warning('event_triggers extraction failed: %s', e)
                 try:
                     _pg_conn.rollback()
                 except Exception:
@@ -1488,8 +1479,7 @@ def extract_full_schema_snapshot(
                     stat_key = f"{r.schema}.{r.stxname}" if r.schema and r.schema != "public" else r.stxname
                     extended_stats[stat_key] = stat_entry
             except Exception as e:
-                import logging
-                logging.getLogger('dbwarden.snapshot').warning('extended_stats extraction failed: %s', e)
+                _snapshot_logger.warning('extended_stats extraction failed: %s', e)
                 try:
                     _pg_conn.rollback()
                 except Exception:

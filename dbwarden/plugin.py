@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import base64
 import json
-import logging
 import subprocess
 import sys
 import tomllib
@@ -22,7 +21,9 @@ from dbwarden._verified import VERIFIED_PLUGINS
 from dbwarden._official import OFFICIAL_PLUGINS, OfficialSpec, classify
 from dbwarden.files import atomic_write_text
 
-logger = logging.getLogger("dbwarden.plugin")
+from dbwarden.logging import get_component_logger
+
+logger = get_component_logger("plugin")
 
 PYPI_BASE_URL = "https://pypi.org"
 
