@@ -78,20 +78,23 @@ database_config(
 
 When you run `dbwarden migrate`, dbwarden:
 
-1. Attempts to insert a lease row into `dbwarden_lock` with a unique `execution_id`, a monotonically increasing `fencing_token`, and an `expires_at` timestamp
-2. The insert uses a conditional `WHERE NOT EXISTS` to ensure only one lease is active at a time
+1. Attempts to insert a lease row into `dbwarden_lock` with a unique `execution_id`, a monotonically increasing `fencing_token`, and metadata
+2. The insert uses a simple INSERT followed by verification (ClickHouse MergeTree does not support atomic conditional inserts)
 3. A background heartbeat updates `last_heartbeat_at` every 15 seconds
-4. On completion, the lease row is deleted
+4. On completion, the lease row is marked as COMPLETE
 
 ```sql
 INSERT INTO dbwarden_lock
-    (namespace, execution_id, owner_id, fencing_token, expires_at, ...)
-SELECT ...
-WHERE NOT EXISTS (
-    SELECT 1 FROM dbwarden_lock FINAL
-    WHERE namespace = :ns AND expires_at > now()
-)
+    (namespace, execution_id, owner_id, migration_version, migration_checksum,
+     fencing_token, host, pid, state, acquired_at, last_heartbeat_at)
+VALUES
+    (:namespace, :execution_id, :owner_id, :migration_version, :migration_checksum,
+     :fencing_token, :host, :pid, :state, :acquired_at, :last_heartbeat_at)
 ```
+
+After insertion, the system verifies ownership by reading back the row and confirming the `execution_id` matches.
+
+**Note:** The `expires_at` column exists in the schema for lease TTL tracking but is not currently populated by the INSERT statement. Lease expiry is determined by comparing `last_heartbeat_at` against the current time.
 
 ### CH-0 verification
 
