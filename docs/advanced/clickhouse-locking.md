@@ -516,15 +516,15 @@ metadata:
   namespace: analytics
 data:
   dbwarden.py: |
-    from dbwarden import database_config
+    from dbwarden import DbwardenDatabase
 
-    database_config(
-        database_name="analytics",
-        database_type="clickhouse",
-        database_url_sync="clickhouse://dbwarden_migration:secure_password@clickhouse1:8123/analytics",
-        model_paths=["app/analytics_models"],
-        ch_cluster="production_cluster",
-    )
+    class Analytics(DbwardenDatabase):
+        database_name = "analytics"
+        default = True
+        database_type = "clickhouse"
+        database_url_sync = "clickhouse://dbwarden_migration:secure_password@clickhouse1:8123/analytics"
+        model_paths = ["app/analytics_models"]
+        ch_cluster = "production_cluster"
 ```
 
 **3. Create the executor Job (runs once, serially):**
@@ -611,15 +611,15 @@ batch_api.create_namespaced_job(namespace="analytics", body=job)
 The executor container uses the same dbwarden config as CH-3 (the migration user with DDL privileges):
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-database_config(
-    database_name="analytics",
-    database_type="clickhouse",
-    database_url_sync="clickhouse://dbwarden_migration:secure_password@clickhouse1:8123/analytics",
-    model_paths=["app/analytics_models"],
-    ch_cluster="production_cluster",
-)
+class Analytics(DbwardenDatabase):
+    database_name = "analytics"
+    default = True
+    database_type = "clickhouse"
+    database_url_sync = "clickhouse://dbwarden_migration:secure_password@clickhouse1:8123/analytics"
+    model_paths = ["app/analytics_models"]
+    ch_cluster = "production_cluster"
 ```
 
 ### CH-4 verification
