@@ -53,6 +53,16 @@ def _status_payload(database: str | None = None) -> dict:
         "pending": len([v for v in all_migrations if v not in applied_versions]),
         "total": len(all_migrations),
     }
+
+    # Phase 2: Add merge signal detection
+    from dbwarden.merge.detection import detect_merge_signals
+    signals = detect_merge_signals(database)
+    if signals:
+        payload["merge_signals"] = [s.value for s in signals]
+        payload["merge_status"] = "MERGE_PENDING"
+    else:
+        payload["merge_status"] = "CLEAN"
+
     return payload
 
 
@@ -78,6 +88,10 @@ def status_single(database: str | None = None) -> None:
         entry["version"] for entry in payload["migrations"] if entry["status"] == "pending"
     ]
 
+    # Phase 2: Show merge status
+    merge_status = payload.get("merge_status", "CLEAN")
+    merge_signals = payload.get("merge_signals", [])
+
     render(
         data_table(
             f"Migration Status - {db_name}",
@@ -93,16 +107,23 @@ def status_single(database: str | None = None) -> None:
         )
     )
 
-    render(
-        kv_table(
-            "Summary",
-            {
-                "Applied": payload["summary"]["applied"],
-                "Pending": payload["summary"]["pending"],
-                "Total": payload["summary"]["total"],
-            },
-        )
-    )
+    summary_data = {
+        "Applied": payload["summary"]["applied"],
+        "Pending": payload["summary"]["pending"],
+        "Total": payload["summary"]["total"],
+    }
+
+    # Add merge status to summary
+    if merge_status == "MERGE_PENDING":
+        summary_data["Merge"] = "PENDING"
+    else:
+        summary_data["Merge"] = "CLEAN"
+
+    render(kv_table("Summary", summary_data))
+
+    if merge_status == "MERGE_PENDING":
+        warning(f"Merge detected: {', '.join(merge_signals)}")
+        info("Run 'dbwarden merge' to reconcile before generating migrations.")
 
     if pending_versions:
         logger.info(f"Pending migrations: {', '.join(pending_versions)}")
@@ -183,6 +204,11 @@ def _render_status_payload(payload: dict) -> None:
     pending_versions = [
         entry["version"] for entry in payload["migrations"] if entry["status"] == "pending"
     ]
+
+    # Phase 2: Show merge status
+    merge_status = payload.get("merge_status", "CLEAN")
+    merge_signals = payload.get("merge_signals", [])
+
     render(
         data_table(
             f"Migration Status - {payload['database']}",
@@ -191,10 +217,24 @@ def _render_status_payload(payload: dict) -> None:
              for entry in payload["migrations"]),
         )
     )
-    render(kv_table("Summary", {
+
+    summary_data = {
         "Applied": payload["summary"]["applied"],
         "Pending": payload["summary"]["pending"],
         "Total": payload["summary"]["total"],
-    }))
+    }
+
+    # Add merge status to summary
+    if merge_status == "MERGE_PENDING":
+        summary_data["Merge"] = "PENDING"
+    else:
+        summary_data["Merge"] = "CLEAN"
+
+    render(kv_table("Summary", summary_data))
+
+    if merge_status == "MERGE_PENDING":
+        warning(f"Merge detected: {', '.join(merge_signals)}")
+        info("Run 'dbwarden merge' to reconcile before generating migrations.")
+
     if pending_versions:
         get_logger().info(f"Pending migrations: {', '.join(pending_versions)}")

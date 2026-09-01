@@ -97,6 +97,14 @@ def make_migrations_cmd(
         )
         return
 
+    # Phase 2: Check for merge signals before proceeding
+    from dbwarden.merge.detection import detect_merge_signals, get_diagnostic_message
+    signals = detect_merge_signals(database)
+    if signals:
+        error("Merge detected. Run 'dbwarden merge' to reconcile before generating migrations.")
+        warning(get_diagnostic_message(signals))
+        raise SystemExit(1)
+
     config = get_database(database)
     multi_config = get_multi_db_config()
     db_name = database or multi_config.default
