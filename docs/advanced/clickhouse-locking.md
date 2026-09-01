@@ -32,11 +32,57 @@ The coordination profiles (CH-0 through CH-4) represent progressively stronger g
 | **CH-3** | Migration proxy choke point | A- | Production with migration proxy | Eliminates stale-lock window: single migration process |
 | **CH-4** | Singleton executor | A* | Kubernetes with dedicated executor | Strongest guarantee: no DDL credentials on workers |
 
-### CH-0: Lease with fencing token
+---
+
+## CH-0: Lease with fencing token
 
 The baseline profile. dbwarden writes a lease row to `dbwarden_lock` with a fencing token (monotonically increasing integer). A second process cannot acquire the lease while the first is active.
 
 **Why it is grade C:** The fence check and DDL statement are not atomic. A paused worker (GC pause, SIGSTOP, CPU starvation) can lose its lease, another worker can acquire it, and the paused worker resumes and executes DDL against a database it no longer owns. The fencing token detects this, but only after the fact.
+
+**Use when:** Development, staging, or any environment where a human is the only one triggering migrations and you can manually verify no concurrent runs are happening.
+
+### CH-0 prerequisites
+
+- ClickHouse server (any recent version)
+- No additional infrastructure required
+
+### CH-0 configuration
+
+```python
+from dbwarden import DbwardenDatabase
+
+class Analytics(DbwardenDatabase):
+    database_name = "analytics"
+    default = True
+    database_type = "clickhouse"
+    database_url_sync = "clickhouse://default:@localhost:8123/analytics"
+    model_paths = ["app/analytics_models"]
+    # CH-0 is the default; no coordination profile setting needed
+```
+
+Or with `database_config()`:
+
+```python
+from dbwarden import database_config
+
+database_config(
+    database_name="analytics",
+    database_type="clickhouse",
+    database_url_sync="clickhouse://default:@localhost:8123/analytics",
+    model_paths=["app/analytics_models"],
+    # clickhouse_coordination_profile defaults to "CH-0"
+)
+```
+
+### How the lease works
+
+When you run `dbwarden migrate`, dbwarden:
+
+1. Attempts to insert a lease row into `dbwarden_lock` with a unique `execution_id`, a monotonically increasing `fencing_token`, and an `expires_at` timestamp
+2. The insert uses a conditional `WHERE NOT EXISTS` to ensure only one lease is active at a time
+3. A background heartbeat updates `last_heartbeat_at` every 15 seconds
+4. On completion, the lease row is deleted
 
 ```sql
 INSERT INTO dbwarden_lock
@@ -48,13 +94,71 @@ WHERE NOT EXISTS (
 )
 ```
 
-### CH-1: Idempotency enforcement
+### CH-0 verification
+
+```bash
+# Run a migration
+dbwarden migrate -d analytics
+
+# Check lock status (should show INACTIVE after migration completes)
+dbwarden lock-status -d analytics
+
+# Inspect the lease table directly
+clickhouse-client --query "SELECT * FROM analytics.dbwarden_lock"
+```
+
+### CH-0 limitations
+
+- If the process crashes after the lease expires but before cleanup, another process must wait for the TTL (default 120 seconds) before acquiring the lock
+- A paused worker can lose its lease and resume DDL execution against a database it no longer owns (the fencing token detects this after the fact)
+- No automatic recovery from partial migration failure
+
+---
+
+## CH-1: Idempotency enforcement
 
 CH-1 adds strict idempotency checking on top of CH-0. Non-idempotent statements (`RENAME`, `MODIFY COLUMN`, `UPDATE`, `DELETE`) are refused unless `--allow-non-idempotent` is passed.
 
 **Why it exists:** Even with CH-0's lease, a stale worker can execute non-idempotent DDL after losing its lease. Idempotent DDL (`CREATE TABLE IF NOT EXISTS`, `DROP TABLE IF EXISTS`) is safe to re-execute; non-idempotent DDL is not. By refusing non-idempotent statements, CH-1 limits the blast radius of the stale-worker window to idempotent operations only.
 
-**Idempotent** (allowed):
+**Use when:** Production environments where all migrations are idempotent (dbwarden generates idempotent DDL by default).
+
+### CH-1 prerequisites
+
+- Everything in CH-0
+- All migrations must use idempotent forms (`IF NOT EXISTS`, `IF EXISTS`)
+
+### CH-1 configuration
+
+```python
+from dbwarden import DbwardenDatabase
+
+class Analytics(DbwardenDatabase):
+    database_name = "analytics"
+    default = True
+    database_type = "clickhouse"
+    database_url_sync = "clickhouse://default:@localhost:8123/analytics"
+    model_paths = ["app/analytics_models"]
+    clickhouse_coordination_profile = "CH-1"
+```
+
+Or with `database_config()`:
+
+```python
+from dbwarden import database_config
+
+database_config(
+    database_name="analytics",
+    database_type="clickhouse",
+    database_url_sync="clickhouse://default:@localhost:8123/analytics",
+    model_paths=["app/analytics_models"],
+    clickhouse_coordination_profile="CH-1",
+)
+```
+
+### Idempotent vs non-idempotent DDL
+
+**Idempotent** (allowed under CH-1):
 
 - `CREATE TABLE/VIEW/DICTIONARY IF NOT EXISTS`
 - `DROP TABLE/VIEW/DICTIONARY IF EXISTS`
@@ -62,215 +166,27 @@ CH-1 adds strict idempotency checking on top of CH-0. Non-idempotent statements 
 - `ALTER TABLE DROP COLUMN IF EXISTS`
 - Metadata-only alters (COMMENT, TTL)
 
-**Non-idempotent** (refused):
+**Non-idempotent** (refused under CH-1):
 
 - `RENAME` (no idempotent form)
 - `MODIFY COLUMN` (rewrites data)
 - `UPDATE` / `DELETE` (data mutations)
 
-### CH-2: Keeper-backed lock
-
-For replicated deployments with clickhouse-keeper (ZooKeeper-compatible), CH-2 replaces the lease table with ephemeral-sequential znodes.
-
-**Why it exists:** CH-0/CH-1 lease expiry depends on TTL, which means there is always a window between "worker died" and "lease expired" where the database is locked but no work is happening. With ZooKeeper ephemeral znodes, the lock is released the instant the ZooKeeper session ends (typically within seconds of a crash), eliminating the stale-lock window for liveness purposes.
-
-- Lock via ephemeral-sequential znodes
-- Crash triggers session expiry, which removes the znode immediately
-- Fencing token equals the znode sequence number (monotonic by construction)
-- Status row maintained for observability
-
-### CH-3: Migration proxy
-
-All migration DDL flows through a single migration proxy process. Workers connect only to the proxy, not directly to ClickHouse.
-
-**Why it exists:** Even with CH-2's fast lock release, two workers could theoretically acquire the lock in rapid succession during a network partition. CH-3 eliminates this by design: only one process ever has DDL credentials, so concurrent migration is structurally impossible.
-
-- Proxy holds the lock (CH-2 or CH-0)
-- Workers have no direct DDL access to ClickHouse
-- Network-restricted migration user (proxy-only DDL access)
-- Takeover: `KILL QUERY WHERE initial_user = 'dbwarden_migration'` during grace window
-
-### CH-4: Singleton executor
-
-Workers submit migration jobs; a single executor process executes them. The executor is the only process with DDL credentials, enforced by the deployment platform.
-
-**Why it exists:** CH-3 requires running a proxy process, which is additional infrastructure. CH-4 achieves the same guarantee using the deployment platform's native primitives (Kubernetes Job with `parallelism: 1`). Workers submit jobs; the platform serializes them; the executor runs them one at a time.
-
-- Workers have no DDL credentials
-- Executor is the only mutation channel
-- Enforced by deployment platform (Kubernetes Job with `parallelism: 1`)
-- Executor holds CH-2 Keeper lock as defense in depth
-
-## Quick Start
-
-### Single-node setup
-
-```python
-from dbwarden import DbwardenDatabase
-
-class Analytics(DbwardenDatabase):
-    database_name = "analytics"
-    default = True
-    database_type = "clickhouse"
-    database_url_sync = "clickhouse://default:@localhost:8123/analytics"
-    model_paths = ["app/analytics_models"]
-```
-
-### ON CLUSTER setup
-
-```python
-from dbwarden import DbwardenDatabase
-
-class Analytics(DbwardenDatabase):
-    database_name = "analytics"
-    default = True
-    database_type = "clickhouse"
-    database_url_sync = "clickhouse://default:@localhost:8123/analytics"
-    model_paths = ["app/analytics_models"]
-    ch_cluster = "production_cluster"
-```
-
-### Replicated database setup
-
-```python
-from dbwarden import DbwardenDatabase
-
-class Analytics(DbwardenDatabase):
-    database_name = "analytics"
-    default = True
-    database_type = "clickhouse"
-    database_url_sync = "clickhouse://default:@localhost:8123/analytics"
-    model_paths = ["app/analytics_models"]
-    ch_replicated_database = True
-```
-
-## Configuration
-
-```python
-database_config(
-    database_name="analytics",
-    database_type="clickhouse",
-    database_url_sync="clickhouse://...",
-    clickhouse_coordination_profile="CH-1",  # CH-0, CH-1, CH-2, CH-3, CH-4
-)
-```
-
-## Setup Guide
-
-### Step 1: Configure database connection
-
-```python
-from dbwarden import DbwardenDatabase
-
-class Analytics(DbwardenDatabase):
-    database_name = "analytics"
-    default = True
-    database_type = "clickhouse"
-
-    # Single-node
-    database_url_sync = "clickhouse://default:@localhost:8123/analytics"
-
-    # Or ON CLUSTER
-    # database_url_sync = "clickhouse://default:@clickhouse1:8123/analytics"
-    # ch_cluster = "production_cluster"
-
-    model_paths = ["app/analytics_models"]
-```
-
-### Step 2: Define models
-
-```python
-from sqlalchemy import Column, Integer, String, Float, Date
-from sqlalchemy.orm import DeclarativeBase
-from dbwarden.databases.clickhouse import CHTableMeta, ch_table, merge_tree
-
-class Base(DeclarativeBase):
-    pass
-
-class Event(Base):
-    __tablename__ = "events"
-
-    id = Column(Integer, primary_key=True)
-    event_date = Column(Date)
-    event_type = Column(String(100))
-    amount = Column(Float)
-
-    class Meta(CHTableMeta):
-        ch = ch_table(
-            engine=merge_tree(),
-            order_by=["event_date", "id"],
-            partition_by="toYYYYMM(event_date)",
-        )
-```
-
-### Step 3: Generate and apply migrations
-
-```bash
-# Generate migration
-dbwarden make-migrations "create events table"
-
-# Review the generated SQL
-cat migrations/analytics/analytics__0001_create_events_table.sql
-
-# Apply migration
-dbwarden migrate
-```
-
-### Step 4: Verify
-
-```bash
-# Check status
-dbwarden status
-
-# Check lock status
-dbwarden lock-status
-
-# Verify schema
-dbwarden diff
-```
-
-## Production Recommendations
-
-### For single-node deployments
-
-```python
-class Analytics(DbwardenDatabase):
-    database_type = "clickhouse"
-    database_url_sync = "clickhouse://default:@localhost:8123/analytics"
-    ch_cluster = None
-```
-
-### For ON CLUSTER deployments
-
-```python
-class Analytics(DbwardenDatabase):
-    database_type = "clickhouse"
-    database_url_sync = "clickhouse://default:@clickhouse1:8123/analytics"
-    ch_cluster = "production_cluster"
-```
-
-### For replicated deployments
-
-```python
-class Analytics(DbwardenDatabase):
-    database_type = "clickhouse"
-    database_url_sync = "clickhouse://default:@clickhouse1:8123/analytics"
-    ch_replicated_database = True
-```
-
-## Idempotency Checklist
+### CH-1 idempotency checklist
 
 Before enabling CH-1 in production:
 
 1. **Audit existing migrations**:
+
    ```bash
    grep -E "RENAME|MODIFY COLUMN|UPDATE|DELETE" migrations/analytics/*.sql
    ```
 
 2. **Test idempotency**:
+
    ```bash
-   dbwarden migrate --database analytics
-   dbwarden migrate --database analytics  # Should be no-op
+   dbwarden migrate -d analytics
+   dbwarden migrate -d analytics  # Should be no-op
    ```
 
 3. **Review generated migrations**:
@@ -278,6 +194,480 @@ Before enabling CH-1 in production:
    - All CREATE statements should use `IF NOT EXISTS`
    - All DROP statements should use `IF EXISTS`
    - All ALTER ADD/DROP COLUMN should use `IF NOT EXISTS`/`IF EXISTS`
+
+### CH-1 verification
+
+```bash
+# Run a migration
+dbwarden migrate -d analytics
+
+# Run again (should be a no-op with CH-1 enforcement)
+dbwarden migrate -d analytics
+
+# Check lock status
+dbwarden lock-status -d analytics
+```
+
+### Overriding CH-1 for non-idempotent migrations
+
+If you must run a non-idempotent migration (e.g., a one-time RENAME), pass `--allow-non-idempotent`:
+
+```bash
+dbwarden migrate -d analytics --allow-non-idempotent
+```
+
+This skips the idempotency check for that run. Use with caution; the migration must not be re-executed.
+
+---
+
+## CH-2: Keeper-backed lock
+
+For replicated deployments with clickhouse-keeper (ZooKeeper-compatible), CH-2 replaces the lease table with ephemeral-sequential znodes.
+
+**Why it exists:** CH-0/CH-1 lease expiry depends on TTL, which means there is always a window between "worker died" and "lease expired" where the database is locked but no work is happening. With ZooKeeper ephemeral znodes, the lock is released the instant the ZooKeeper session ends (typically within seconds of a crash), eliminating the stale-lock window for liveness purposes.
+
+**Use when:** Replicated ClickHouse deployments with clickhouse-keeper or ZooKeeper available.
+
+### CH-2 prerequisites
+
+- ClickHouse cluster with clickhouse-keeper or ZooKeeper
+- clickhouse-keeper must be reachable from all cluster nodes
+- Default keeper path: `/dbwarden/locks`
+
+### CH-2 infrastructure setup
+
+**1. Deploy clickhouse-keeper (if not already running):**
+
+clickhouse-keeper ships with ClickHouse. A minimal 3-node keeper cluster for quorum:
+
+```xml
+<!-- /etc/clickhouse-server/config.d/keeper.xml -->
+<clickhouse>
+    <keeper_server>
+        <tcp_port>9181</tcp_port>
+        <server_id>1</server_id>
+        <raft_configuration>
+            <server>
+                <id>1</id>
+                <hostname>keeper1</hostname>
+                <port>9234</port>
+            </server>
+            <server>
+                <id>2</id>
+                <hostname>keeper2</hostname>
+                <port>9234</port>
+            </server>
+            <server>
+                <id>3</id>
+                <hostname>keeper3</hostname>
+                <port>9234</port>
+            </server>
+        </raft_configuration>
+    </keeper_server>
+</clickhouse>
+```
+
+**2. Verify keeper is running:**
+
+```bash
+clickhouse-client --host keeper1 --port 9181 --query "SELECT * FROM system.zookeeper WHERE path = '/'"
+```
+
+### CH-2 configuration
+
+```python
+from dbwarden import DbwardenDatabase
+
+class Analytics(DbwardenDatabase):
+    database_name = "analytics"
+    default = True
+    database_type = "clickhouse"
+    database_url_sync = "clickhouse://default:@clickhouse1:8123/analytics"
+    model_paths = ["app/analytics_models"]
+    ch_cluster = "production_cluster"
+    clickhouse_coordination_profile = "CH-2"
+```
+
+Or with `database_config()`:
+
+```python
+from dbwarden import database_config
+
+database_config(
+    database_name="analytics",
+    database_type="clickhouse",
+    database_url_sync="clickhouse://default:@clickhouse1:8123/analytics",
+    model_paths=["app/analytics_models"],
+    ch_cluster="production_cluster",
+    clickhouse_coordination_profile="CH-2",
+    clickhouse_keeper_path="/dbwarden/locks",  # optional, this is the default
+)
+```
+
+### How CH-2 locking works
+
+1. dbwarden creates an ephemeral-sequential znode under the keeper path
+2. The znode sequence number serves as the fencing token (monotonic by construction)
+3. If the process crashes, the ZooKeeper session ends, and the ephemeral znode is removed immediately
+4. The next worker sees no active lock and acquires one instantly
+
+### CH-2 verification
+
+```bash
+# Run a migration on a replicated cluster
+dbwarden migrate -d analytics
+
+# Check lock status
+dbwarden lock-status -d analytics
+
+# Inspect keeper znodes directly
+clickhouse-client --host keeper1 --port 9181 --query \
+  "SELECT name, value, ctime FROM system.zookeeper WHERE path = '/dbwarden/locks'"
+```
+
+### CH-2 limitations
+
+- Requires clickhouse-keeper or ZooKeeper infrastructure
+- Keeper availability is a single point of failure for migration locking (but not for data serving)
+- Does not prevent two workers from acquiring the lock during a network partition (addressed by CH-3)
+
+---
+
+## CH-3: Migration proxy
+
+All migration DDL flows through a single migration proxy process. Workers connect only to the proxy, not directly to ClickHouse.
+
+**Why it exists:** Even with CH-2's fast lock release, two workers could theoretically acquire the lock in rapid succession during a network partition. CH-3 eliminates this by design: only one process ever has DDL credentials, so concurrent migration is structurally impossible.
+
+**Use when:** Production environments where zero-downtime deploys run from multiple replicas and you need the strongest DDL safety guarantee without Kubernetes.
+
+### CH-3 prerequisites
+
+- Everything in CH-2
+- A dedicated proxy host or container
+- Network configuration to restrict DDL access to the proxy only
+
+### CH-3 infrastructure setup
+
+**1. Create a migration-only ClickHouse user with DDL privileges:**
+
+```sql
+CREATE USER dbwarden_migration IDENTIFIED BY 'secure_password';
+GRANT CREATE, ALTER, DROP, RENAME ON *.* TO dbwarden_migration;
+```
+
+**2. Create a restricted user for application connections (no DDL):**
+
+```sql
+CREATE USER dbwarden_app IDENTIFIED BY 'app_password';
+GRANT SELECT, INSERT, UPDATE, DELETE ON analytics.* TO dbwarden_app;
+```
+
+**3. Configure ClickHouse to only allow DDL from the proxy IP:**
+
+```xml
+<!-- /etc/clickhouse-server/users.d/migration_restriction.xml -->
+<clickhouse>
+    <users>
+        <dbwarden_migration>
+            <networks>
+                <ip>proxy-host-ip</ip>
+            </networks>
+        </dbwarden_migration>
+    </users>
+</clickhouse>
+```
+
+**4. Run the migration proxy:**
+
+The proxy is a thin process that holds the CH-2 lock and accepts DDL commands:
+
+```python
+# migration_proxy.py
+import asyncio
+from dbwarden import database_config
+from dbwarden_redis import migration_lock
+from redis.asyncio import Redis
+
+database_config(
+    database_name="analytics",
+    database_type="clickhouse",
+    database_url_sync="clickhouse://dbwarden_migration:secure_password@proxy-host:8123/analytics",
+    model_paths=["app/analytics_models"],
+    ch_cluster="production_cluster",
+    clickhouse_coordination_profile="CH-2",
+)
+
+async def run_migration():
+    redis = Redis.from_url("redis://localhost:6379")
+    async with migration_lock(redis, key="analytics_migration"):
+        # Import and run migration logic
+        from dbwarden.engine import migrate
+        await migrate("analytics")
+
+if __name__ == "__main__":
+    asyncio.run(run_migration())
+```
+
+### CH-3 configuration
+
+**Worker nodes (no DDL access):**
+
+```python
+from dbwarden import DbwardenDatabase
+
+class Analytics(DbwardenDatabase):
+    database_name = "analytics"
+    default = True
+    database_type = "clickhouse"
+    # Workers use the restricted user (no DDL privileges)
+    database_url_sync = "clickhouse://dbwarden_app:app_password@clickhouse1:8123/analytics"
+    model_paths = ["app/analytics_models"]
+    ch_cluster = "production_cluster"
+    # Workers do NOT run migrations; they only read schema
+```
+
+**Proxy node (DDL access):**
+
+```python
+from dbwarden import database_config
+
+database_config(
+    database_name="analytics",
+    database_type="clickhouse",
+    # Proxy uses the migration user (has DDL privileges)
+    database_url_sync="clickhouse://dbwarden_migration:secure_password@proxy-host:8123/analytics",
+    model_paths=["app/analytics_models"],
+    ch_cluster="production_cluster",
+    clickhouse_coordination_profile="CH-2",
+)
+```
+
+### CH-3 verification
+
+```bash
+# On the proxy node: run migration
+python migration_proxy.py
+
+# On any node: check lock status
+dbwarden lock-status -d analytics
+
+# On any node: verify schema
+dbwarden diff -d analytics
+```
+
+### CH-3 takeover procedure
+
+If the proxy process dies and you need to run migrations from a different host:
+
+```bash
+# 1. Kill any lingering proxy processes
+kill $(pgrep -f migration_proxy)
+
+# 2. Wait for the keeper lock to expire (or force release)
+clickhouse-client --host keeper1 --port 9181 --query \
+  "SELECT * FROM system.zookeeper WHERE path = '/dbwarden/locks'"
+
+# 3. Run migration from the new proxy host
+python migration_proxy.py
+```
+
+---
+
+## CH-4: Singleton executor
+
+Workers submit migration jobs; a single executor process executes them. The executor is the only process with DDL credentials, enforced by the deployment platform.
+
+**Why it exists:** CH-3 requires running a proxy process, which is additional infrastructure. CH-4 achieves the same guarantee using the deployment platform's native primitives (Kubernetes Job with `parallelism: 1`). Workers submit jobs; the platform serializes them; the executor runs them one at a time.
+
+**Use when:** Kubernetes deployments where you want the platform to enforce migration serialization rather than running a dedicated proxy process.
+
+### CH-4 prerequisites
+
+- Kubernetes cluster
+- ClickHouse cluster with clickhouse-keeper or ZooKeeper
+- A container image with dbwarden and your models installed
+
+### CH-4 infrastructure setup
+
+**1. Create a Kubernetes Secret for the migration credentials:**
+
+```yaml
+# migration-secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: clickhouse-migration
+  namespace: analytics
+type: Opaque
+stringData:
+  url: "clickhouse://dbwarden_migration:secure_password@clickhouse1:8123/analytics"
+```
+
+**2. Create a ConfigMap with your dbwarden config:**
+
+```yaml
+# dbwarden-config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dbwarden-config
+  namespace: analytics
+data:
+  dbwarden.py: |
+    from dbwarden import database_config
+
+    database_config(
+        database_name="analytics",
+        database_type="clickhouse",
+        database_url_sync="clickhouse://dbwarden_migration:secure_password@clickhouse1:8123/analytics",
+        model_paths=["app/analytics_models"],
+        ch_cluster="production_cluster",
+        clickhouse_coordination_profile="CH-2",
+    )
+```
+
+**3. Create the executor Job (runs once, serially):**
+
+```yaml
+# migration-executor.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dbwarden-migrate
+  namespace: analytics
+spec:
+  # Key setting: only one job runs at a time
+  parallelism: 1
+  completions: 1
+  backoffLimit: 1
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: your-registry/dbwarden:latest
+          command: ["dbwarden", "migrate", "-d", "analytics"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: clickhouse-migration
+                  key: url
+          volumeMounts:
+            - name: config
+              mountPath: /app/dbwarden.py
+              subPath: dbwarden.py
+            - name: models
+              mountPath: /app/app/analytics_models
+          resources:
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+      volumes:
+        - name: config
+          configMap:
+            name: dbwarden-config
+        - name: models
+          configMap:
+            name: analytics-models
+```
+
+**4. Trigger migrations from workers:**
+
+Workers submit Jobs instead of running migrations directly:
+
+```python
+# In your deploy script or CI pipeline
+from kubernetes import client, config
+
+config.load_incluster_config()
+batch_api = client.BatchV1Api()
+
+job = client.V1Job(
+    metadata=client.V1ObjectMeta(name=f"dbwarden-migrate-{timestamp}"),
+    spec=client.V1JobSpec(
+        parallelism=1,
+        completions=1,
+        backoff_limit=1,
+        template=client.V1PodTemplateSpec(
+            spec=client.V1PodSpec(
+                restart_policy="Never",
+                containers=[client.V1Container(
+                    name="migrate",
+                    image="your-registry/dbwarden:latest",
+                    command=["dbwarden", "migrate", "-d", "analytics"],
+                )],
+            ),
+        ),
+    ),
+)
+
+batch_api.create_namespaced_job(namespace="analytics", body=job)
+```
+
+### CH-4 configuration
+
+The executor container uses the same dbwarden config as CH-3 (the migration user with DDL privileges):
+
+```python
+from dbwarden import database_config
+
+database_config(
+    database_name="analytics",
+    database_type="clickhouse",
+    database_url_sync="clickhouse://dbwarden_migration:secure_password@clickhouse1:8123/analytics",
+    model_paths=["app/analytics_models"],
+    ch_cluster="production_cluster",
+    clickhouse_coordination_profile="CH-2",
+)
+```
+
+### CH-4 verification
+
+```bash
+# Check that the executor Job ran successfully
+kubectl get jobs -n analytics
+
+# Check logs
+kubectl logs job/dbwarden-migrate -n analytics
+
+# Check lock status from any pod
+kubectl exec -it clickhouse-client-pod -n analytics -- \
+  dbwarden lock-status -d analytics
+```
+
+### CH-4 cleanup
+
+After a successful migration, the Job remains until manually cleaned up. Use a TTL policy:
+
+```yaml
+# Add to the Job spec
+spec:
+  ttlSecondsAfterFinished: 3600  # Clean up after 1 hour
+```
+
+---
+
+## Choosing a profile
+
+| Your situation | Recommended profile |
+|----------------|---------------------|
+| Local development, single developer | CH-0 |
+| Staging, single deploy process | CH-0 |
+| Production, all migrations are idempotent | CH-1 |
+| Production, replicated ClickHouse with keeper | CH-2 |
+| Production, multiple deploy replicas, zero-downtime | CH-3 |
+| Kubernetes, want platform-enforced serialization | CH-4 |
+
+## Configuration reference
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `clickhouse_coordination_profile` | `"CH-0"` | Coordination profile: `CH-0`, `CH-1`, `CH-2`, `CH-3`, `CH-4` |
+| `clickhouse_keeper_path` | `"/dbwarden/locks"` | ZooKeeper/keeper znode path (CH-2+) |
+| `clickhouse_lock_ttl` | `120` | Lease TTL in seconds (CH-0/CH-1) |
+| `lock_namespace` | `"default"` | Lock scope (allows independent lock streams) |
 
 ## Troubleshooting
 
@@ -288,6 +678,7 @@ Non-idempotent: ALTER TABLE events RENAME TO events_v2
 ```
 
 **Solution**: Make the statement idempotent:
+
 ```sql
 -- Instead of:
 ALTER TABLE events RENAME TO events_v2;
@@ -297,6 +688,12 @@ ALTER TABLE IF EXISTS events RENAME TO events_v2;
 -- Or restructure to avoid RENAME
 ```
 
+Or override for a one-time migration:
+
+```bash
+dbwarden migrate -d analytics --allow-non-idempotent
+```
+
 ### "Lease expired" error
 
 ```
@@ -304,8 +701,9 @@ ClickHouse lease held by: host=clickhouse1, pid=1234, expires=2026-09-01 12:00:0
 ```
 
 **Solution**: Wait for lease expiry or force release:
+
 ```bash
-dbwarden unlock --database analytics --force
+dbwarden unlock -d analytics --force
 ```
 
 ### Replicated database conflicts
@@ -315,6 +713,7 @@ ConfigurationError: ch_cluster and ch_replicated_database are mutually exclusive
 ```
 
 **Solution**: Use one or the other, not both:
+
 ```python
 # Correct: ON CLUSTER
 ch_cluster = "production_cluster"
@@ -325,41 +724,34 @@ ch_cluster = None
 ch_replicated_database = True
 ```
 
-## Advanced: Custom Lock Configuration
+### Keeper connection refused
 
-### Extended TTL
-
-For long-running migrations:
-
-```python
-database_config(
-    database_name="analytics",
-    database_type="clickhouse",
-    database_url_sync="clickhouse://...",
-    clickhouse_lock_ttl=600,  # 10 minutes
-)
+```
+Connection refused: keeper1:9181
 ```
 
-### Multiple namespaces
+**Solution**: Verify keeper is running and reachable:
 
-Run independent migration streams:
+```bash
+# Check keeper status
+clickhouse-client --host keeper1 --port 9181 --query "SELECT * FROM system.build_options"
 
-```python
-# Stream 1: schema migrations
-database_config(
-    database_name="analytics",
-    database_type="clickhouse",
-    database_url_sync="clickhouse://...",
-    lock_namespace="schema",
-)
+# Check network connectivity
+nc -zv keeper1 9181
+```
 
-# Stream 2: data operations
-database_config(
-    database_name="analytics",
-    database_type="clickhouse",
-    database_url_sync="clickhouse://...",
-    lock_namespace="data",
-)
+### Migration stuck in RUNNING state
+
+Check if the migration process is still alive:
+
+```bash
+dbwarden lock-status -d analytics
+```
+
+If the process is dead, force release the lock:
+
+```bash
+dbwarden unlock -d analytics --force
 ```
 
 ## See Also
