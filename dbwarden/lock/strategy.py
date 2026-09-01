@@ -119,7 +119,8 @@ def _derive_lock_key(namespace: str, database: str) -> int:
     """
     raw = f"dbwarden:{namespace}:{database}"
     digest = hashlib.md5(raw.encode()).hexdigest()[:16]
-    return int(digest, 16)
+    # Ensure the key fits in 64-bit signed integer (PostgreSQL bigint)
+    return int(digest, 16) & 0x7FFFFFFFFFFFFFFF
 
 
 def _generate_execution_id() -> str:

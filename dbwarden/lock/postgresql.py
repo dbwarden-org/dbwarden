@@ -88,7 +88,7 @@ class PostgreSQLStrategy:
         while True:
             attempt += 1
             result = connection.execute(
-                text("SELECT pg_try_advisory_lock(:lock_key)"),
+                text("SELECT pg_try_advisory_lock(CAST(:lock_key AS bigint))"),
                 {"lock_key": lock_key},
             )
             acquired = result.scalar()
@@ -231,7 +231,7 @@ class PostgreSQLStrategy:
             text(
                 "SELECT pid FROM pg_locks "
                 "WHERE locktype = 'advisory' "
-                "AND (classid::bigint << 32 | objid::bigint) = :lock_key"
+                "AND (classid::bigint << 32 | objid::bigint) = CAST(:lock_key AS bigint)"
             ),
             {"lock_key": lock_key},
         ).first()
@@ -270,7 +270,7 @@ class PostgreSQLStrategy:
                     "FROM pg_locks l "
                     "JOIN pg_stat_activity a ON a.pid = l.pid "
                     "WHERE l.locktype = 'advisory' "
-                    "AND (l.classid::bigint << 32 | l.objid::bigint) = :lock_key"
+                    "AND (l.classid::bigint << 32 | l.objid::bigint) = CAST(:lock_key AS bigint)"
                 ),
                 {"lock_key": lock_key},
             ).mappings().first()
