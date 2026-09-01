@@ -119,6 +119,9 @@ class DatabaseEntry:
     seed_table: str | None = field(default=None, validator=_validate_seed_table)
     pg_schema: str | None = field(default=None, validator=_validate_pg_schema)
     pg_migration_lock_timeout: int | None = field(default=None, validator=_validate_lock_timeout)
+    # ClickHouse cluster configuration
+    ch_cluster: str | None = None
+    ch_replicated_database: bool = False
     # Backend object keys contributed by plugins (pg_roles, ch_grants, and so on).
     # Kept as a dict so core does not have to know each plugin's key list.
     plugin_config: dict[str, Any] = field(factory=dict)
