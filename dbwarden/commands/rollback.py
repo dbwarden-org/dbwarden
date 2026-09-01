@@ -140,6 +140,7 @@ def _get_versions_to_rollback(
 ) -> dict[str, str]:
     """Get migration file paths for versions to rollback."""
     from dbwarden.engine.version import get_migration_filepaths_by_version
+    from dbwarden.merge.marker import is_superseded
 
     if not latest_versions:
         return {}
@@ -151,6 +152,9 @@ def _get_versions_to_rollback(
     result: dict[str, str] = {}
     for v in latest_versions:
         if v in filepaths:
-            result[v] = filepaths[v]
+            filepath = filepaths[v]
+            # Skip superseded files (Phase 5: integration with merge handling)
+            if not is_superseded(filepath):
+                result[v] = filepath
 
     return dict(reversed(list(result.items())))

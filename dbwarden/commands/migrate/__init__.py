@@ -569,6 +569,7 @@ def _get_filepaths_by_version(
 ) -> dict[str, str]:
     """Get pending migration file paths."""
     from dbwarden.engine.version import resolve_migration_order
+    from dbwarden.merge.marker import is_superseded
 
     if migrations_dir is None:
         migrations_dir = get_migrations_directory(db_name)
@@ -577,7 +578,12 @@ def _get_filepaths_by_version(
         directory=migrations_dir,
         applied_versions=applied_versions or set(),
     )
-    filepaths = {version: filepath for version, filepath, _deps, _seed in ordered}
+
+    # Skip superseded files (Phase 5: integration with merge handling)
+    filepaths = {}
+    for version, filepath, _deps, _seed in ordered:
+        if not is_superseded(filepath):
+            filepaths[version] = filepath
 
     if count:
         filepaths = dict(list(filepaths.items())[:count])
