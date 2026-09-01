@@ -16,12 +16,12 @@ $ dbwarden merge --database primary --rename-column users.username=users.handle
 
 ### Options
 
-- `--database`, `-d` — Target database name
-- `--rename-column` — Column rename to confirm (format: `table.old=new`)
-- `--rename-table` — Table rename to confirm (format: `old=new`)
-- `--force`, `-f` — Force marking hand-edited migrations
-- `--commit` — Create a git commit with the changes
-- `--verbose`, `-v` — Enable verbose logging
+- `--database`, `-d`: Target database name
+- `--rename-column`: Column rename to confirm (format: `table.old=new`)
+- `--rename-table`: Table rename to confirm (format: `old=new`)
+- `--force`, `-f`: Force marking hand-edited migrations
+- `--commit`: Create a git commit with the changes
+- `--verbose`, `-v`: Enable verbose logging
 
 ### What it does
 
@@ -60,11 +60,11 @@ $ dbwarden rebase --database local --check
 
 ### Options
 
-- `--database`, `-d` — Target database name
-- `--yes`, `-y` — Skip confirmation prompts
-- `--force`, `-f` — Force operation even against persistent environments
-- `--check` — Only check what would happen, don't make changes
-- `--verbose`, `-v` — Enable verbose logging
+- `--database`, `-d`: Target database name
+- `--yes`, `-y`: Skip confirmation prompts
+- `--force`, `-f`: Force operation even against persistent environments
+- `--check`: Only check what would happen, don't make changes
+- `--verbose`, `-v`: Enable verbose logging
 
 ### What it does
 
@@ -101,11 +101,11 @@ $ dbwarden reconcile --environment staging --dry-run
 
 ### Options
 
-- `environment` — Environment name to reconcile (required)
-- `--database`, `-d` — Target database name
-- `--rename-column` — Column rename to confirm
-- `--dry-run` — Only show what would happen
-- `--verbose`, `-v` — Enable verbose logging
+- `environment`: Environment name to reconcile (required)
+- `--database`, `-d`: Target database name
+- `--rename-column`: Column rename to confirm
+- `--dry-run`: Only show what would happen
+- `--verbose`, `-v`: Enable verbose logging
 
 ### What it does
 
@@ -131,6 +131,6 @@ Reconciliation for environment 'staging' complete.
 
 ## See also
 
-- [Merge Handling](advanced/merge-handling.md) — Complete merge handling guide
-- [Migration Locking](advanced/migration-locking.md) — How migrations are locked
-- [Status](commands/status.md) — Check migration status
+- [Merge Handling](advanced/merge-handling.md): Complete merge handling guide
+- [Migration Locking](advanced/migration-locking.md): How migrations are locked
+- [Status](commands/status.md): Check migration status

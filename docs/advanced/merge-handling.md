@@ -22,12 +22,12 @@ dbwarden merge --database primary
 ```
 
 **Flags:**
-- `--database`, `-d` — Target database name
-- `--rename-column` — Column rename to confirm (format: `table.old=new`)
-- `--rename-table` — Table rename to confirm (format: `old=new`)
-- `--force`, `-f` — Force marking hand-edited migrations
-- `--commit` — Create a git commit with the changes
-- `--verbose`, `-v` — Enable verbose logging
+- `--database`, `-d`: Target database name
+- `--rename-column`: Column rename to confirm (format: `table.old=new`)
+- `--rename-table`: Table rename to confirm (format: `old=new`)
+- `--force`, `-f`: Force marking hand-edited migrations
+- `--commit`: Create a git commit with the changes
+- `--verbose`, `-v`: Enable verbose logging
 
 **Algorithm:**
 1. Check preconditions (clean working tree, no conflict markers, merge-base resolvable)
@@ -48,11 +48,11 @@ dbwarden rebase --database local
 ```
 
 **Flags:**
-- `--database`, `-d` — Target database name
-- `--yes`, `-y` — Skip confirmation prompts
-- `--force`, `-f` — Force operation even against persistent environments
-- `--check` — Only check what would happen, don't make changes
-- `--verbose`, `-v` — Enable verbose logging
+- `--database`, `-d`: Target database name
+- `--yes`, `-y`: Skip confirmation prompts
+- `--force`, `-f`: Force operation even against persistent environments
+- `--check`: Only check what would happen, don't make changes
+- `--verbose`, `-v`: Enable verbose logging
 
 **Algorithm:**
 1. Read local applied migrations
@@ -70,11 +70,11 @@ dbwarden reconcile --environment staging
 ```
 
 **Flags:**
-- `environment` — Environment name to reconcile (required)
-- `--database`, `-d` — Target database name
-- `--rename-column` — Column rename to confirm
-- `--dry-run` — Only show what would happen
-- `--verbose`, `-v` — Enable verbose logging
+- `environment`: Environment name to reconcile (required)
+- `--database`, `-d`: Target database name
+- `--rename-column`: Column rename to confirm
+- `--dry-run`: Only show what would happen
+- `--verbose`, `-v`: Enable verbose logging
 
 ## File Formats
 
@@ -144,9 +144,9 @@ database_config(
 ## Merge Detection
 
 dbwarden detects merges by checking for:
-1. **Divergent generation base** — Newest migration's base checksum doesn't match current model state
-2. **Version collisions** — Multiple migration files share the same version prefix
-3. **Snapshot discontinuity** — Latest snapshot doesn't match model state
+1. **Divergent generation base**: Newest migration's base checksum doesn't match current model state
+2. **Version collisions**: Multiple migration files share the same version prefix
+3. **Snapshot discontinuity**: Latest snapshot doesn't match model state
 
 When detected, `make-migrations` refuses generation and `status` shows `MERGE_PENDING`.
 
@@ -191,6 +191,6 @@ When detected, `make-migrations` refuses generation and `status` shows `MERGE_PE
 
 ## See Also
 
-- [Migration Locking](advanced/migration-locking.md) — How migrations are locked
-- [Offline Integrity](correctness/offline-integrity.md) — Model state file management
-- [CLI Reference](cli-reference.md) — All commands
+- [Migration Locking](advanced/migration-locking.md): How migrations are locked
+- [Offline Integrity](correctness/offline-integrity.md): Model state file management
+- [CLI Reference](cli-reference.md): All commands
