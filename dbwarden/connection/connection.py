@@ -212,3 +212,56 @@ def get_engine(db_name: str | None = None) -> Engine:
     """
     config = get_database(db_name)
     return _get_engine(config.sqlalchemy_url, config.database_type)
+
+
+def hold_migration_connection(db_name: str | None = None) -> Any:
+    """Open a long-lived connection for the entire migration run.
+
+    Unlike get_db_connection() which opens/closes per operation, this
+    returns a raw connection that the caller must close. The connection
+    is NOT returned to the pool; it is held for the duration of the
+    migration run to support session-scoped native locks.
+
+    The caller is responsible for closing the connection.
+
+    Args:
+        db_name: Database name from config. If None, uses default database.
+
+    Returns:
+        A SQLAlchemy Connection object (not a context manager).
+    """
+    global _connection_init_logged
+    config = get_database(db_name)
+
+    sandbox_url = _sandbox_url_var.get()
+    sandbox_db_type = _sandbox_db_type_var.get()
+    url = sandbox_url if sandbox_url is not None else config.sqlalchemy_url
+    db_type = sandbox_db_type if sandbox_db_type is not None else config.database_type
+
+    from sqlalchemy.engine import make_url
+    parsed = make_url(url)
+    actual_db_name = db_name or (parsed.database or "default")
+    logger = get_logger(
+        db_name=actual_db_name,
+        db_type=db_type,
+    )
+
+    engine = _get_engine(url, db_type)
+    _probe_connection(engine, db_type, logger, url)
+
+    if not _connection_init_logged:
+        logger.log_connection_init(db_type)
+        _connection_init_logged = True
+
+    if db_type == "clickhouse":
+        connection = engine.connect()
+    else:
+        connection = engine.connect()
+        postgres_schema = config.postgres_schema
+        if postgres_schema:
+            connection.execute(
+                text("SET search_path TO :postgres_schema, public"),
+                parameters={"postgres_schema": postgres_schema},
+            )
+
+    return connection

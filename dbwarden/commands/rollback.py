@@ -14,7 +14,7 @@ from dbwarden.repositories import (
     get_latest_versions,
     run_migration,
 )
-from dbwarden.repositories.lock_repo import acquire_lock, check_lock, release_lock
+from dbwarden.lock import acquire_lock, check_lock, release_lock
 
 
 def rollback_cmd(
@@ -52,11 +52,23 @@ def rollback_cmd(
 
     lock_acquired = False
     lock_owner = uuid.uuid4().hex
+    _lock_strategy = None
+    _migration_conn = None
     try:
         with PhaseTimer(logger, "Lock acquisition", perf=perf):
-            if not acquire_lock(database, lock_owner):
-                raise LockError("Could not acquire migration lock.")
+            lock_result = acquire_lock(database)
+            if not lock_result.acquired:
+                raise LockError(
+                    f"Could not acquire migration lock. "
+                    f"{lock_result.holder_description}"
+                )
             lock_acquired = True
+            lock_owner = lock_result.owner_id
+            _lock_strategy = lock_result.strategy
+
+            # Open long-lived migration connection for DDL execution
+            from dbwarden.connection.connection import hold_migration_connection
+            _migration_conn = hold_migration_connection(database)
 
         if count is None and to_version is None:
             count = 1
@@ -99,6 +111,7 @@ def rollback_cmd(
                 filename=filename,
                 db_name=database,
                 perf=perf,
+                connection=_migration_conn,
             )
 
             duration = time.time() - start_time
@@ -110,8 +123,14 @@ def rollback_cmd(
         if missing:
             warning(f"Warning: {missing} migration file(s) not found. Skipped.")
     finally:
+        # Close migration connection before releasing the lock
+        if _migration_conn is not None:
+            try:
+                _migration_conn.close()
+            except Exception:
+                pass
         if lock_acquired:
-            if not release_lock(database, lock_owner):
+            if not release_lock(database, strategy=_lock_strategy):
                 logger.error("Migration lock was not released by owner %s", lock_owner)
 
 

@@ -38,7 +38,7 @@ from dbwarden.repositories import (
     run_migration,
     run_repeatable_migration,
 )
-from dbwarden.repositories.lock_repo import acquire_lock, check_lock, release_lock
+from dbwarden.lock import acquire_lock, check_lock, release_lock
 from dbwarden.engine.discovery import (
     get_all_model_tables,
     filter_model_tables_by_name,
@@ -158,6 +158,9 @@ def migrate_single(
 
     lock_acquired = False
     lock_owner = uuid.uuid4().hex
+    _lock_strategy = None
+    _heartbeat = None
+    _migration_conn = None
     try:
         if with_backup and not sandbox:
             backup_directory = backup_dir or os.path.join(os.getcwd(), "backups")
@@ -171,9 +174,33 @@ def migrate_single(
                 create_migrations_table_if_not_exists(db_name)
                 create_lock_table_if_not_exists(db_name)
 
-                if not acquire_lock(db_name, lock_owner):
-                    raise LockError("Could not acquire migration lock.")
+                lock_result = acquire_lock(
+                    db_name,
+                    migration_version=None,
+                    migration_checksum=None,
+                )
+                if not lock_result.acquired:
+                    raise LockError(
+                        f"Could not acquire migration lock. "
+                        f"{lock_result.holder_description}"
+                    )
                 lock_acquired = True
+                lock_owner = lock_result.owner_id
+                _lock_strategy = lock_result.strategy
+
+                # Start heartbeat after successful lock acquisition
+                from dbwarden.lock.heartbeat import HeartbeatTask
+                _heartbeat = HeartbeatTask(
+                    db_name=db_name,
+                    execution_id=lock_result.execution_id,
+                )
+                _heartbeat.start()
+
+                # Open long-lived migration connection for DDL execution
+                # This connection is held for the entire migration run to
+                # support session-scoped native locks (PG advisory, MySQL GET_LOCK)
+                from dbwarden.connection.connection import hold_migration_connection
+                _migration_conn = hold_migration_connection(db_name)
 
         applied_versions = set()
         applied_checksums = set()
@@ -261,6 +288,7 @@ def migrate_single(
                 filename=filename,
                 db_name=db_name,
                 perf=perf,
+                connection=_migration_conn,
             )
 
             if not defer_snapshots:
@@ -304,6 +332,7 @@ def migrate_single(
                     migration_type="runs_always",
                     db_name=db_name,
                     perf=perf,
+                    connection=_migration_conn,
                 )
             else:
                 run_migration(
@@ -314,6 +343,7 @@ def migrate_single(
                     migration_type="runs_always",
                     db_name=db_name,
                     perf=perf,
+                    connection=_migration_conn,
                 )
 
             duration = time.time() - start_time
@@ -332,6 +362,7 @@ def migrate_single(
                 migration_type="runs_on_change",
                 db_name=db_name,
                 perf=perf,
+                connection=_migration_conn,
             )
 
             duration = time.time() - start_time
@@ -364,8 +395,18 @@ def migrate_single(
             increment_migration_errors(actual_db_name)
         raise
     finally:
+        # Stop heartbeat before releasing the lock
+        if _heartbeat is not None:
+            _heartbeat.stop()
+        # Close migration connection before releasing the lock
+        # (on native-lock engines, closing releases the session-scoped lock)
+        if _migration_conn is not None:
+            try:
+                _migration_conn.close()
+            except Exception:
+                pass
         if lock_acquired:
-            if not release_lock(db_name, lock_owner):
+            if not release_lock(db_name, strategy=_lock_strategy):
                 logger.error("Migration lock was not released by owner %s", lock_owner)
         if _sandbox_started:
             from dbwarden.plugin import HookRegistry
