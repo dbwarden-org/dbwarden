@@ -123,6 +123,7 @@ Correctness = [
 [[project.nav]]
 Databases = [
   {Overview = "databases/index.md"},
+  {Locking = "databases/locking.md"},
   {"Round Trip Support" = "databases/round-trip.md"},
   {"Common SQL Databases" = "databases/sql-databases.md"},
   {PostgreSQL = "databases/postgresql/index.md"},
