@@ -255,11 +255,12 @@ Workers submit migration jobs; a single executor process executes them:
 ### Configuration
 
 ```python
-database_config(
-    database_name="analytics",
-    database_type="clickhouse",
-    database_url_sync="clickhouse://...",
-)
+from dbwarden import DbwardenDatabase
+
+class Analytics(DbwardenDatabase):
+    database_name = "analytics"
+    database_type = "clickhouse"
+    database_url_sync = "clickhouse://..."
 ```
 
 ### Production recommendations
@@ -299,15 +300,14 @@ These are the `database_config()` / `DbwardenDatabase` parameters for ClickHouse
 **Core keys** (no plugin required):
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-database_config(
-    database_name="analytics",
-    database_type="clickhouse",
-    database_url_sync="clickhouse://...",
-    ch_cluster="production_cluster",          # str | None (ON CLUSTER name)
-    ch_replicated_database=False,             # bool (Replicated database engine)
-)
+class Analytics(DbwardenDatabase):
+    database_name = "analytics"
+    database_type = "clickhouse"
+    database_url_sync = "clickhouse://..."
+    ch_cluster = "production_cluster"          # str | None (ON CLUSTER name)
+    ch_replicated_database = False             # bool (Replicated database engine)
 ```
 
 | Key | Type | Default | Description |
@@ -320,25 +320,24 @@ See [ON Cluster](on-cluster.md) for full details on cluster modes, DDL injection
 **RBAC keys** (require `dbwarden-ch-rbac` plugin): `dbwarden plugin add dbwarden-ch-rbac`. The plugin owns both these config keys and the handlers that emit their DDL, so declaring them without it installed raises `DBWardenConfigError` at config load.
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 from dbwarden.databases.clickhouse import (
     NamedCollectionSpec, named_collection,
     ChRoleSpec, ChUserSpec, ChRowPolicySpec,
     ChQuotaSpec, ChSettingsProfileSpec, ChGrantSpec,
 )
 
-database_config(
-    database_name="analytics",
-    database_type="clickhouse",
-    database_url_sync="clickhouse://...",
-    ch_named_collections=[...],       # list[NamedCollectionSpec | dict]
-    ch_roles=[...],                   # list[ChRoleSpec | dict]
-    ch_users=[...],                   # list[ChUserSpec | dict]
-    ch_row_policies=[...],            # list[ChRowPolicySpec | dict]
-    ch_quotas=[...],                  # list[ChQuotaSpec | dict]
-    ch_settings_profiles=[...],       # list[ChSettingsProfileSpec | dict]
-    ch_grants=[...],                  # list[ChGrantSpec | dict]
-)
+class Analytics(DbwardenDatabase):
+    database_name = "analytics"
+    database_type = "clickhouse"
+    database_url_sync = "clickhouse://..."
+    ch_named_collections = [...]       # list[NamedCollectionSpec | dict]
+    ch_roles = [...]                   # list[ChRoleSpec | dict]
+    ch_users = [...]                   # list[ChUserSpec | dict]
+    ch_row_policies = [...]            # list[ChRowPolicySpec | dict]
+    ch_quotas = [...]                  # list[ChQuotaSpec | dict]
+    ch_settings_profiles = [...]       # list[ChSettingsProfileSpec | dict]
+    ch_grants = [...]                  # list[ChGrantSpec | dict]
 ```
 
 ## Model examples
@@ -436,25 +435,29 @@ class ParsedEvents(MaterializedView):
 ### RBAC config
 
 ```python
-database_config(
-    database_name="analytics",
-    database_type="clickhouse",
-    database_url_sync="clickhouse://localhost:9000",
-    ch_named_collections=[
+from dbwarden import DbwardenDatabase
+from dbwarden.databases.clickhouse import (
+    named_collection, ChRoleSpec, ChUserSpec, ChGrantSpec,
+)
+
+class Analytics(DbwardenDatabase):
+    database_name = "analytics"
+    database_type = "clickhouse"
+    database_url_sync = "clickhouse://localhost:9000"
+    ch_named_collections = [
         named_collection("ldap_auth", ldap_server="ldap.example.com"),
-    ],
-    ch_roles=[ChRoleSpec("analyst"), ChRoleSpec("engineer")],
-    ch_users=[
+    ]
+    ch_roles = [ChRoleSpec("analyst"), ChRoleSpec("engineer")]
+    ch_users = [
         ChUserSpec(
             name="bob",
             named_collection="ldap_auth",
             default_role="analyst",
         ),
-    ],
-    ch_grants=[
+    ]
+    ch_grants = [
         ChGrantSpec(privileges=["SELECT"], on="analytics.*", to="analyst"),
-    ],
-)
+    ]
 ```
 
 ### S3-backed table with projection
