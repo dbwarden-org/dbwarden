@@ -2,9 +2,9 @@
 
 Learn how dbwarden discovers your SQLAlchemy models for migration generation.
 
-Examples use `database_config(...)` as a compact function alternative. The same
-`model_paths` and `model_tables` fields can be declared on the default
-`DbwardenDatabase` class API.
+Examples use the `database_config(...)` function alternative for compactness.
+The same `model_paths` and `model_tables` fields can be declared on the
+default `DbwardenDatabase` class API.
 
 ## What Is Model Discovery?
 
@@ -19,13 +19,14 @@ Model discovery is the process where dbwarden:
 ### Basic Usage
 
 ```python
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://localhost/myapp",
-    model_paths=["app.models"],  #  Discover models here
-)
+from dbwarden import DbwardenDatabase
+
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://localhost/myapp"
+    model_paths = ["app.models"]  #  Discover models here
 ```
 
 ### What Gets Discovered
@@ -61,13 +62,14 @@ class Order(Base):  #  Discovered
 For single-database projects, `model_paths` is optional:
 
 ```python
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="sqlite",
-    database_url_sync="sqlite:///./app.db",
+from dbwarden import DbwardenDatabase
+
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "sqlite"
+    database_url_sync = "sqlite:///./app.db"
     # No model_paths - dbwarden scans entire codebase
-)
 ```
 
 dbwarden will scan your entire codebase for models.
@@ -79,20 +81,20 @@ Even for single-database projects, specifying `model_paths` makes discovery fast
 For multi-database projects, `model_paths` is **required** for each database:
 
 ```python
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://localhost/main",
-    model_paths=["app.models.primary"],  #  Required
-)
+from dbwarden import DbwardenDatabase
 
-analytics = database_config(
-    database_name="analytics",
-    database_type="postgresql",
-    database_url_sync="postgresql://localhost/analytics",
-    model_paths=["app.models.analytics"],  #  Required
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://localhost/main"
+    model_paths = ["app.models.primary"]  #  Required
+
+class Analytics(DbwardenDatabase):
+    database_name = "analytics"
+    database_type = "postgresql"
+    database_url_sync = "postgresql://localhost/analytics"
+    model_paths = ["app.models.analytics"]  #  Required
 ```
 
 **Why required?** To prevent ambiguity about which models belong to which database.
@@ -260,16 +262,16 @@ model_paths=["app.models", "app.legacy.models"]
 By default, model paths cannot overlap between databases:
 
 ```python
-#  Error: overlap detected
-primary = database_config(
-    database_name="primary",
-    model_paths=["app.models"],
-)
+from dbwarden import DbwardenDatabase
 
-analytics = database_config(
-    database_name="analytics",
-    model_paths=["app.models"],  # Same path!
-)
+#  Error: overlap detected
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    model_paths = ["app.models"]
+
+class Analytics(DbwardenDatabase):
+    database_name = "analytics"
+    model_paths = ["app.models"]  # Same path!
 ```
 
 ### Allow Overlap
@@ -277,17 +279,17 @@ analytics = database_config(
 If models genuinely belong to multiple databases:
 
 ```python
-primary = database_config(
-    database_name="primary",
-    model_paths=["app.shared"],
-    overlap_models=True,  #  Allow overlap
-)
+from dbwarden import DbwardenDatabase
 
-analytics = database_config(
-    database_name="analytics",
-    model_paths=["app.shared"],
-    overlap_models=True,  #  Allow overlap
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    model_paths = ["app.shared"]
+    overlap_models = True  #  Allow overlap
+
+class Analytics(DbwardenDatabase):
+    database_name = "analytics"
+    model_paths = ["app.shared"]
+    overlap_models = True  #  Allow overlap
 ```
 
 Both databases will include the same tables. Make sure this is intentional.
@@ -460,6 +462,7 @@ You can compute `model_paths` dynamically:
 
 ```python
 import os
+from dbwarden import DbwardenDatabase
 
 environment = os.getenv("ENV", "dev")
 
@@ -468,13 +471,12 @@ if environment == "production":
 else:
     model_paths = ["app.models.dev"]
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="...",
-    model_paths=model_paths,
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "..."
+    model_paths = model_paths
 ```
 
 ## What's Next?

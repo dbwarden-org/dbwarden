@@ -5,7 +5,7 @@ Configure your first database in **2 minutes**.
 ## Prerequisites
 
 You should have:
-- Python 3.10+ installed
+- Python 3.12.7+ installed
 - dbwarden installed (`uv add dbwarden`)
 - A database to connect to (or use SQLite)
 

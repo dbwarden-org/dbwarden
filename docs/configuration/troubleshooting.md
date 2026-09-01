@@ -2,8 +2,8 @@
 
 Solutions to common configuration issues.
 
-Configuration sources may use either the default `DbwardenDatabase` class API
-or the supported `database_config(...)` function alternative.
+New projects should declare fields on a `DbwardenDatabase` subclass. The
+`database_config(...)` function alternative is also supported.
 
 ## "No configuration found"
 
@@ -39,20 +39,19 @@ cd /path/to/project
 $ dbwarden migrate
 ```
 
-**Cause 3: No `database_config()` calls**
+**Cause 3: No database configuration**
 
 **Solution:** Add configuration:
 
 ```python
 # dbwarden.py
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="sqlite",
-    database_url_sync="sqlite:///./app.db",
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "sqlite"
+    database_url_sync = "sqlite:///./app.db"
 ```
 
 **Cause 4: Import error in config file**
@@ -544,9 +543,10 @@ from app.models import Base
 from app.services import setup
 
 #  Fast
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-db = database_config(
+class Primary(DbwardenDatabase):
+    ...
 ```
 
 ## Debugging Tips

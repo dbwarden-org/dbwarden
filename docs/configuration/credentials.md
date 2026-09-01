@@ -2,8 +2,8 @@
 
 Never hardcode database credentials in `dbwarden.py`. This page covers how to inject secrets safely.
 
-The default configuration style is a `DbwardenDatabase` subclass. The examples
-below use the equivalent `database_config(...)` function form where it keeps the
+New projects should declare fields on a `DbwardenDatabase` subclass. The
+`database_config(...)` function alternative is shown where it keeps the
 credential-loading pattern concise; both APIs accept the same URL values.
 
 ## The problem
@@ -12,10 +12,11 @@ The quick-start examples show inline connection strings:
 
 ```python
 # Do not ship this
-primary = database_config(
-    database_url_sync="postgresql://admin:s3cr3t@localhost:5432/myapp",
+from dbwarden import DbwardenDatabase
+
+class Primary(DbwardenDatabase):
+    database_url_sync = "postgresql://admin:s3cr3t@localhost:5432/myapp"
     ...
-)
 ```
 
 `dbwarden.py` is Python source. It ends up in version control. Credentials in source are a liability.
@@ -26,16 +27,15 @@ The standard pattern: read from the environment at config load time.
 
 ```python
 import os
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync=os.getenv("DATABASE_URL"),
-    model_paths=["app.models"],
-    secure_values=True,
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = os.getenv("DATABASE_URL")
+    model_paths = ["app.models"]
+    secure_values = True
 ```
 
 `secure_values=True` tells dbwarden to redact the URL in CLI output and logs.
@@ -44,20 +44,19 @@ primary = database_config(
 
 ```python
 import os
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise ValueError("DATABASE_URL is required")
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync=DATABASE_URL,
-    model_paths=["app.models"],
-    secure_values=True,
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = DATABASE_URL
+    model_paths = ["app.models"]
+    secure_values = True
 ```
 
 Without the guard, a missing env var silently passes `None` to `database_url_sync`, which fails later with a confusing error.
@@ -83,18 +82,17 @@ Load it at the top of `dbwarden.py`:
 ```python
 import os
 from dotenv import load_dotenv
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
 load_dotenv()
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync=os.getenv("DATABASE_URL"),
-    model_paths=["app.models"],
-    secure_values=True,
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = os.getenv("DATABASE_URL")
+    model_paths = ["app.models"]
+    secure_values = True
 ```
 
 Add `.env` to `.gitignore`. Commit a `.env.example` with placeholder values:
@@ -109,24 +107,22 @@ Each database gets its own env var:
 
 ```python
 import os
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync=os.getenv("PRIMARY_DATABASE_URL"),
-    model_paths=["app.models"],
-    secure_values=True,
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = os.getenv("PRIMARY_DATABASE_URL")
+    model_paths = ["app.models"]
+    secure_values = True
 
-analytics = database_config(
-    database_name="analytics",
-    database_type="clickhouse",
-    database_url_sync=os.getenv("ANALYTICS_DATABASE_URL"),
-    model_paths=["app.models.analytics"],
-    secure_values=True,
-)
+class Analytics(DbwardenDatabase):
+    database_name = "analytics"
+    database_type = "clickhouse"
+    database_url_sync = os.getenv("ANALYTICS_DATABASE_URL")
+    model_paths = ["app.models.analytics"]
+    secure_values = True
 ```
 
 ## Dev mode with secrets
@@ -134,16 +130,17 @@ analytics = database_config(
 Dev mode can also use env vars, keeping SQLite paths out of source:
 
 ```python
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync=os.getenv("DATABASE_URL"),
-    dev_database_type="sqlite",
-    dev_database_url=os.getenv("DEV_DATABASE_URL", "sqlite:///./dev.db"),
-    model_paths=["app.models"],
-    secure_values=True,
-)
+from dbwarden import DbwardenDatabase
+
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = os.getenv("DATABASE_URL")
+    dev_database_type = "sqlite"
+    dev_database_url = os.getenv("DEV_DATABASE_URL", "sqlite:///./dev.db")
+    model_paths = ["app.models"]
+    secure_values = True
 ```
 
 `DEV_DATABASE_URL` defaults to a local SQLite path if not set, which is reasonable for development.
@@ -171,13 +168,13 @@ migrate:
 
 ## Third-party secret managers
 
-For production systems using Vault, AWS Secrets Manager, or Infisical, fetch the secret before passing it to `database_config()`:
+For production systems using Vault, AWS Secrets Manager, or Infisical, fetch the secret before passing it to `DbwardenDatabase`:
 
 ```python
 import os
 import boto3
 import json
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
 def get_secret(secret_name: str) -> str:
     client = boto3.client("secretsmanager")
@@ -185,14 +182,13 @@ def get_secret(secret_name: str) -> str:
     secret = json.loads(response["SecretString"])
     return secret["database_url"]
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync=get_secret("myapp/production/database"),
-    model_paths=["app.models"],
-    secure_values=True,
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = get_secret("myapp/production/database")
+    model_paths = ["app.models"]
+    secure_values = True
 ```
 
 `dbwarden.py` is plain Python, so any secret retrieval logic is valid here.

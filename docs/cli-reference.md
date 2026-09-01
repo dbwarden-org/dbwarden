@@ -14,8 +14,10 @@ $ dbwarden [GLOBAL_OPTIONS] COMMAND [ARGS] [COMMAND_OPTIONS]
 |---|---|
 | `--dev` | Use `dev_database_url` and `dev_database_type` for selected database |
 | `--strict-translation` | Fail on unsupported/lossy dev SQLite translation |
+| `--disable-skip` | Do not skip databases configured with `skip_if_missing` |
 | `--debug` | Enable DEBUG-level logging (shows per-file model scanning on `make-migrations`) |
 | `--debug-level <LEVEL>` | Set an exact log level: `trace`, `debug`, `info`, `warning`, `error`, `critical`, or `5`/`10`/`20`/`30`/`40`/`50` |
+| `--log-level <COMPONENT:LEVEL>` | Per-component log level (repeatable). Example: `--log-level snapshot:debug` |
 | `--json`/`-j` | Emit structured JSON for display commands and JSON-formatted logs |
 | `--help` | Show help |
 
@@ -68,6 +70,7 @@ Options:
 
 - `--database`/`-d`: Target database
 - `--plan`: Print migration plan JSON without writing files
+- `--sql`: Output raw migration SQL to stdout without writing files
 - `--offline`: Use model state file instead of live database (run `export-models` first)
 - `--verbose`/`-v`: Verbose output
 - `--debug`/`--debug-level <LEVEL>`: Global options (see Global options table). DEBUG shows every model file scanned during discovery.
@@ -76,7 +79,9 @@ Options:
 - `--safe-type-change`: Multi-step safe type change strategy.
 - `--clickhouse-engine-recreate`: Allow automatic ClickHouse table rebuild on engine change.
 - `--drop-preserved-clickhouse-table` / `--keep-preserved-clickhouse-table`: Drop or keep the preserved old ClickHouse table after engine-recreate swap.
+- `--postgres-auto-using`: Emit active `USING` clause on PostgreSQL `ALTER COLUMN TYPE` (default: commented out).
 - `--type`/`-t`: Output prefix: `versioned` (default), `ra`/`runs_always`, or `roc`/`runs_on_change`.
+- `--perf`: Log SQL-generation phase timing.
 
 See [make-migrations](commands/make-migrations.md) for full documentation including rename detection, column-level changes, schema snapshots, and plan format.
 
@@ -169,7 +174,9 @@ Options:
 - `--dry-run` (show what would be applied without executing)
 - `--sandbox` (apply in a temporary sandbox database)
 - `--apply-seeds` (apply pending seeds after migrations, overrides config)
+- `--defer-snapshots` (write one final schema snapshot instead of one after every migration)
 - `--verbose`
+- `--perf` (log per-SQL-statement timing breakdowns)
 
 ### `rollback`
 
@@ -374,6 +381,16 @@ $ dbwarden plugin untrust dbwarden-example
 Revokes consent for a community plugin.
 
 ## Utility
+
+### `recover-model-state`
+
+```bash
+$ dbwarden recover-model-state --database primary
+```
+
+Recovers a deleted model state file by replaying migrations in a sandbox.
+
+Options: `--database`/`-d`
 
 ### `config`
 

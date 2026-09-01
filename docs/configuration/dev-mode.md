@@ -2,9 +2,9 @@
 
 Use SQLite for local development and PostgreSQL in production with the same codebase.
 
-The examples below use the supported `database_config(...)` function alternative
-for compactness. New projects can declare the same fields on a
-`DbwardenDatabase` subclass.
+New projects should declare fields on a `DbwardenDatabase` subclass. The
+`database_config(...)` function alternative is shown where it keeps the
+example concise.
 
 ## What Is Dev Mode?
 
@@ -13,14 +13,15 @@ Dev mode lets you configure **two database URLs**:
 - **Dev URL** - Used when you pass `--dev` flag
 
 ```python
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://localhost/myapp",    # Production
-    dev_database_type="sqlite",
-    dev_database_url="sqlite:///./dev.db",           # Development
-)
+from dbwarden import DbwardenDatabase
+
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://localhost/myapp"    # Production
+    dev_database_type = "sqlite"
+    dev_database_url = "sqlite:///./dev.db"           # Development
 ```
 
 Run commands with `--dev`:
@@ -70,17 +71,16 @@ Easy to share between developers:
 
 ```python
 # dbwarden.py
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://localhost/myapp",
-    dev_database_type="sqlite",                    #  Add this
-    dev_database_url="sqlite:///./dev.db",         #  Add this
-    model_paths=["app.models"],
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://localhost/myapp"
+    dev_database_type = "sqlite"                    #  Add this
+    dev_database_url = "sqlite:///./dev.db"         #  Add this
+    model_paths = ["app.models"]
 ```
 
 ### Step 2: Use Dev Mode
@@ -198,7 +198,7 @@ Some PostgreSQL features aren't available in SQLite:
 
 ### Translation
 
-dbwarden **doesn't translate** SQL between databases. Your migrations should work on both SQLite and PostgreSQL.
+dbwarden **translates types and defaults** for SQLite compatibility when generating SQL from models (see [SQL Translation](../sql-translation.md)), but does not translate arbitrary hand-written SQL in manual migration files. Your manual migrations should work on both SQLite and PostgreSQL.
 
 **Approach 1:** Write portable SQL
 
@@ -220,14 +220,15 @@ CREATE TABLE users (
 **Approach 2:** Use PostgreSQL for dev too
 
 ```python
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://localhost/myapp",
-    dev_database_type="postgresql",                         # Same as prod
-    dev_database_url="postgresql://localhost/myapp_dev",    # Different database
-)
+from dbwarden import DbwardenDatabase
+
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://localhost/myapp"
+    dev_database_type = "postgresql"                         # Same as prod
+    dev_database_url = "postgresql://localhost/myapp_dev"    # Different database
 ```
 
 ## Environment-Based Configuration
@@ -238,6 +239,7 @@ Use environment variables to automatically detect dev:
 
 ```python
 import os
+from dbwarden import DbwardenDatabase
 
 is_dev = os.getenv("ENV", "dev") in ["dev", "development", "local"]
 
@@ -248,12 +250,11 @@ else:
     database_url = os.getenv("DATABASE_URL")
     database_type = "postgresql"
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type=database_type,
-    database_url_sync=database_url,
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = database_type
+    database_url_sync = database_url
 ```
 
 Run commands:
@@ -271,26 +272,26 @@ ENV=production dbwarden migrate
 If you have multiple databases, configure dev mode for each:
 
 ```python
+from dbwarden import DbwardenDatabase
+
 # Primary database
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://localhost/main",
-    dev_database_type="sqlite",
-    dev_database_url="sqlite:///./dev_primary.db",
-    model_paths=["app.models.primary"],
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://localhost/main"
+    dev_database_type = "sqlite"
+    dev_database_url = "sqlite:///./dev_primary.db"
+    model_paths = ["app.models.primary"]
 
 # Analytics database
-analytics = database_config(
-    database_name="analytics",
-    database_type="postgresql",
-    database_url_sync="postgresql://localhost/analytics",
-    dev_database_type="sqlite",
-    dev_database_url="sqlite:///./dev_analytics.db",
-    model_paths=["app.models.analytics"],
-)
+class Analytics(DbwardenDatabase):
+    database_name = "analytics"
+    database_type = "postgresql"
+    database_url_sync = "postgresql://localhost/analytics"
+    dev_database_type = "sqlite"
+    dev_database_url = "sqlite:///./dev_analytics.db"
+    model_paths = ["app.models.analytics"]
 ```
 
 Run against all dev databases:
@@ -305,14 +306,15 @@ $ dbwarden --dev status --all
 ### Pattern 1: SQLite for Dev, PostgreSQL for Prod (Recommended)
 
 ```python
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://localhost/myapp",
-    dev_database_type="sqlite",
-    dev_database_url="sqlite:///./dev.db",
-)
+from dbwarden import DbwardenDatabase
+
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://localhost/myapp"
+    dev_database_type = "sqlite"
+    dev_database_url = "sqlite:///./dev.db"
 ```
 
 **Pros:**
@@ -327,14 +329,15 @@ primary = database_config(
 ### Pattern 2: PostgreSQL for Both
 
 ```python
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://prod-host/myapp",
-    dev_database_type="postgresql",
-    dev_database_url="postgresql://localhost/myapp_dev",
-)
+from dbwarden import DbwardenDatabase
+
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://prod-host/myapp"
+    dev_database_type = "postgresql"
+    dev_database_url = "postgresql://localhost/myapp_dev"
 ```
 
 **Pros:**
@@ -350,6 +353,7 @@ primary = database_config(
 
 ```python
 import os
+from dbwarden import DbwardenDatabase
 
 environment = os.getenv("ENV", "dev")
 
@@ -363,12 +367,11 @@ else:
     database_url = "sqlite:///./dev.db"
     database_type = "sqlite"
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type=database_type,
-    database_url_sync=database_url,
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = database_type
+    database_url_sync = database_url
 ```
 
 ## Testing with Dev Mode

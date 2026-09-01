@@ -2,8 +2,8 @@
 
 Complete reference for database connection URL formats.
 
-The URL examples are API-neutral. In new configurations, assign these values
-to a `DbwardenDatabase` subclass; `database_config(...)` remains supported.
+New projects should declare fields on a `DbwardenDatabase` subclass; the
+`database_config(...)` function alternative remains supported.
 
 ## URL Format
 
@@ -183,11 +183,12 @@ database_url_sync="mysql://user:pass@localhost:3306/myapp"
 Configure with `database_type="mariadb"`:
 
 ```python
-primary = database_config(
-    database_name="primary",
-    database_type="mariadb",
-    database_url_sync="mysql://localhost/myapp",
-)
+from dbwarden import DbwardenDatabase
+
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    database_type = "mariadb"
+    database_url_sync = "mysql://localhost/myapp"
 ```
 
 ## ClickHouse
@@ -235,64 +236,63 @@ database_url_sync="http://user:pass@localhost:8123/myapp?compression=1&connect_t
 
 ```python
 import os
+from dbwarden import DbwardenDatabase
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync=os.getenv("DATABASE_URL"),
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = os.getenv("DATABASE_URL")
 ```
 
 ### With Fallback
 
 ```python
 import os
+from dbwarden import DbwardenDatabase
 
 database_url = os.getenv("DATABASE_URL", "sqlite:///./dev.db")
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql" if "postgresql" in database_url else "sqlite",
-    database_url_sync=database_url,
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql" if "postgresql" in database_url else "sqlite"
+    database_url_sync = database_url
 ```
 
 ### Required Environment Variables
 
 ```python
 import os
+from dbwarden import DbwardenDatabase
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise ValueError("DATABASE_URL environment variable is required")
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync=DATABASE_URL,
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = DATABASE_URL
 ```
 
 ### Multiple Databases
 
 ```python
 import os
+from dbwarden import DbwardenDatabase
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync=os.getenv("PRIMARY_DATABASE_URL"),
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = os.getenv("PRIMARY_DATABASE_URL")
 
-analytics = database_config(
-    database_name="analytics",
-    database_type="postgresql",
-    database_url_sync=os.getenv("ANALYTICS_DATABASE_URL"),
-)
+class Analytics(DbwardenDatabase):
+    database_name = "analytics"
+    database_type = "postgresql"
+    database_url_sync = os.getenv("ANALYTICS_DATABASE_URL")
 ```
 
 ## URL Encoding

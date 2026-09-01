@@ -166,7 +166,7 @@ $ dbwarden migrate --all
 $ dbwarden status --all
 
 # Rollback all
-$ dbwarden rollback --all
+$ dbwarden rollback -d logging
 ```
 
 ### Default Database

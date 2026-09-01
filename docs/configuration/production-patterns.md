@@ -2,9 +2,9 @@
 
 Real-world configuration patterns for production deployments.
 
-The snippets use the supported `database_config(...)` function alternative to
-keep environment-variable patterns compact. The same fields work on the
-default `DbwardenDatabase` class API.
+New projects should declare fields on a `DbwardenDatabase` subclass. The
+`database_config(...)` function alternative is shown where it keeps
+environment-variable patterns concise.
 
 ## Environment Variables
 
@@ -12,52 +12,51 @@ default `DbwardenDatabase` class API.
 
 ```python
 import os
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync=os.getenv("DATABASE_URL"),
-    model_paths=["app.models"],
-    secure_values=True,
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = os.getenv("DATABASE_URL")
+    model_paths = ["app.models"]
+    secure_values = True
 ```
 
 ### With Validation
 
 ```python
 import os
+from dbwarden import DbwardenDatabase
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise ValueError("DATABASE_URL environment variable is required")
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync=DATABASE_URL,
-    model_paths=["app.models"],
-    secure_values=True,
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = DATABASE_URL
+    model_paths = ["app.models"]
+    secure_values = True
 ```
 
 ### With Defaults
 
 ```python
 import os
+from dbwarden import DbwardenDatabase
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync=os.getenv(
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = os.getenv(
         "DATABASE_URL",
         "postgresql://localhost/myapp"  # Fallback
-    ),
-    model_paths=["app.models"],
-)
+    )
+    model_paths = ["app.models"]
 ```
 
 ## Docker
@@ -85,14 +84,14 @@ services:
 ```python
 # dbwarden.py
 import os
+from dbwarden import DbwardenDatabase
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync=os.getenv("DATABASE_URL"),
-    model_paths=["app.models"],
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = os.getenv("DATABASE_URL")
+    model_paths = ["app.models"]
 ```
 
 ### Dockerfile
@@ -180,6 +179,7 @@ data:
 import os
 import json
 import boto3
+from dbwarden import DbwardenDatabase
 
 def get_database_url():
     secret_name = os.getenv("DB_SECRET_NAME")
@@ -194,14 +194,13 @@ def get_database_url():
         f"@{secret['host']}:{secret['port']}/{secret['dbname']}"
     )
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync=get_database_url(),
-    model_paths=["app.models"],
-    secure_values=True,
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = get_database_url()
+    model_paths = ["app.models"]
+    secure_values = True
 ```
 
 ### RDS Connection via IAM
@@ -209,6 +208,7 @@ primary = database_config(
 ```python
 import os
 import boto3
+from dbwarden import DbwardenDatabase
 
 def get_rds_auth_token():
     rds_client = boto3.client("rds")
@@ -223,13 +223,12 @@ database_url = (
     f"@{os.getenv('DB_HOST')}:5432/{os.getenv('DB_NAME')}"
 )
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync=database_url,
-    model_paths=["app.models"],
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = database_url
+    model_paths = ["app.models"]
 ```
 
 ## Multi-Environment
@@ -238,6 +237,7 @@ primary = database_config(
 
 ```python
 import os
+from dbwarden import DbwardenDatabase
 
 ENVIRONMENT = os.getenv("ENVIRONMENT", "dev")
 
@@ -251,14 +251,13 @@ else:
     database_url = "sqlite:///./dev.db"
     database_type = "sqlite"
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type=database_type,
-    database_url_sync=database_url,
-    model_paths=["app.models"],
-    secure_values=(ENVIRONMENT != "dev"),
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = database_type
+    database_url_sync = database_url
+    model_paths = ["app.models"]
+    secure_values = (ENVIRONMENT != "dev")
 ```
 
 ### Separate Config Files
@@ -276,17 +275,16 @@ config_module.setup_databases()
 ```python
 # config/production.py
 import os
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
 def setup_databases():
-    primary = database_config(
-        database_name="primary",
-        default=True,
-        database_type="postgresql",
-        database_url_sync=os.getenv("DATABASE_URL"),
-        model_paths=["app.models"],
-        secure_values=True,
-    )
+    class Primary(DbwardenDatabase):
+        database_name = "primary"
+        default = True
+        database_type = "postgresql"
+        database_url_sync = os.getenv("DATABASE_URL")
+        model_paths = ["app.models"]
+        secure_values = True
 ```
 
 ## Connection Pools
@@ -294,32 +292,34 @@ def setup_databases():
 ### PostgreSQL with Pooling
 
 ```python
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync=(
+from dbwarden import DbwardenDatabase
+
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = (
         "postgresql://user:pass@localhost/myapp"
         "?pool_size=20"
         "&max_overflow=10"
         "&pool_timeout=30"
         "&pool_recycle=3600"
-    ),
-    model_paths=["app.models"],
-)
+    )
+    model_paths = ["app.models"]
 ```
 
 ### External Pooler (PgBouncer)
 
 ```python
+from dbwarden import DbwardenDatabase
+
 # Connection through PgBouncer
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://user:pass@pgbouncer:6432/myapp",
-    model_paths=["app.models"],
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://user:pass@pgbouncer:6432/myapp"
+    model_paths = ["app.models"]
 ```
 
 ## SSL/TLS
@@ -327,25 +327,27 @@ primary = database_config(
 ### PostgreSQL with SSL
 
 ```python
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync=(
+from dbwarden import DbwardenDatabase
+
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = (
         "postgresql://user:pass@host/myapp"
         "?sslmode=require"
         "&sslrootcert=/path/to/ca.pem"
         "&sslcert=/path/to/client-cert.pem"
         "&sslkey=/path/to/client-key.pem"
-    ),
-    model_paths=["app.models"],
-)
+    )
+    model_paths = ["app.models"]
 ```
 
 ### Environment-Based SSL
 
 ```python
 import os
+from dbwarden import DbwardenDatabase
 
 ssl_mode = os.getenv("DB_SSL_MODE", "prefer")
 ca_cert = os.getenv("DB_CA_CERT_PATH", "")
@@ -356,13 +358,12 @@ if ca_cert:
 
 database_url = f"postgresql://user:pass@host/myapp{ssl_params}"
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync=database_url,
-    model_paths=["app.models"],
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = database_url
+    model_paths = ["app.models"]
 ```
 
 ## High Availability
@@ -370,29 +371,31 @@ primary = database_config(
 ### Multiple Replicas
 
 ```python
+import os
+from dbwarden import DbwardenDatabase
+
 # Primary (writes)
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync=os.getenv("PRIMARY_DATABASE_URL"),
-    model_paths=["app.models"],
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = os.getenv("PRIMARY_DATABASE_URL")
+    model_paths = ["app.models"]
 
 # Replica (reads)
-replica = database_config(
-    database_name="replica",
-    database_type="postgresql",
-    database_url_sync=os.getenv("REPLICA_DATABASE_URL"),
-    model_paths=["app.models"],
-    overlap_models=True,
-)
+class Replica(DbwardenDatabase):
+    database_name = "replica"
+    database_type = "postgresql"
+    database_url_sync = os.getenv("REPLICA_DATABASE_URL")
+    model_paths = ["app.models"]
+    overlap_models = True
 ```
 
 ### Automatic Failover
 
 ```python
 import os
+from dbwarden import DbwardenDatabase
 
 # Try primary, fallback to replica
 primary_url = os.getenv("PRIMARY_DATABASE_URL")
@@ -401,13 +404,12 @@ replica_url = os.getenv("REPLICA_DATABASE_URL")
 # Application logic handles failover
 database_url = primary_url  # Start with primary
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync=database_url,
-    model_paths=["app.models"],
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = database_url
+    model_paths = ["app.models"]
 ```
 
 ## Monitoring
@@ -416,6 +418,7 @@ primary = database_config(
 
 ```python
 import os
+from dbwarden import DbwardenDatabase
 
 app_name = os.getenv("APP_NAME", "myapp")
 hostname = os.getenv("HOSTNAME", "unknown")
@@ -425,13 +428,12 @@ database_url = (
     f"?application_name={app_name}-{hostname}"
 )
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync=database_url,
-    model_paths=["app.models"],
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = database_url
+    model_paths = ["app.models"]
 ```
 
 Check active connections:
@@ -468,16 +470,17 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO myapp_use
 ### Rotate Credentials
 
 ```python
+from dbwarden import DbwardenDatabase
+
 # Use short-lived tokens
 database_url = get_temporary_database_credentials()
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync=database_url,
-    model_paths=["app.models"],
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = database_url
+    model_paths = ["app.models"]
 ```
 
 ## CI/CD Integration
