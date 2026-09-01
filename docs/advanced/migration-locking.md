@@ -187,12 +187,7 @@ concurrency:
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `lock.namespace` | `"default"` | Lock scope (allows independent lock streams) |
-| `lock.acquire_wait_timeout` | `0` (fail fast) | Seconds to wait for lock acquisition |
-| `heartbeat.interval` | `15` | Seconds between heartbeat updates |
-| `heartbeat.ttl` | `45` | Seconds after which heartbeat is stale |
-| `recovery.policy` | `halt` | Recovery behavior: `halt`, `resume_idempotent`, `force` |
-| `clickhouse.coordination_profile` | `CH-1` | ClickHouse locking profile |
+| `lock_namespace` | `"default"` | Lock scope (allows independent lock streams) |
 
 ## Distributed locking with Redis
 

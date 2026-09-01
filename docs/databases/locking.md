@@ -113,12 +113,7 @@ The Redis lock uses `SET NX EX` with a configurable TTL (default 60 seconds). Th
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `lock.namespace` | `"default"` | Lock scope (allows independent lock streams) |
-| `lock.acquire_wait_timeout` | `0` (fail fast) | Seconds to wait for lock acquisition |
-| `heartbeat.interval` | `15` | Seconds between heartbeat updates |
-| `heartbeat.ttl` | `45` | Seconds after which heartbeat is stale |
-| `recovery.policy` | `halt` | Recovery behavior: `halt`, `resume_idempotent`, `force` |
-| `clickhouse.coordination_profile` | `CH-1` | ClickHouse locking profile (CH-0 through CH-4) |
+| `lock_namespace` | `"default"` | Lock scope (allows independent lock streams) |
 
 ## See also
 

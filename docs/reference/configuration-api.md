@@ -1,13 +1,71 @@
 # Configuration API Reference
 
-Complete reference for the `database_config()` function and the equivalent
-`DbwardenDatabase` declarative API.
+Complete reference for the `DbwardenDatabase` declarative API and the equivalent
+`database_config()` function.
 
 This is a reference page. For step-by-step guides, see
 [Quick Start](../configuration/quick-start.md), [Concepts](../configuration/concepts.md),
 or [Production Patterns](../configuration/production-patterns.md).
 
-## Function Signature
+## Declarative API (recommended)
+
+Define a concrete subclass of `DbwardenDatabase`. Every field is available as a
+class attribute, and concrete subclasses register automatically when imported.
+
+```python
+from dbwarden import DbwardenDatabase
+
+
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://user:pass@localhost:5432/myapp"
+    model_paths = ["app.models"]
+```
+
+### Inheritance
+
+For configuration that benefits from inheritance, use an abstract base class:
+
+```python
+from dbwarden import DbwardenDatabase
+
+
+class Shared(DbwardenDatabase):
+    __abstract__ = True
+    database_type = "postgresql"
+    model_paths = ["app.models"]
+    plugin_config = {
+        "pg_roles": ["app_owner"],
+    }
+
+
+class Primary(Shared):
+    database_name = "primary"
+    database_url_sync = "postgresql://user:pass@localhost/myapp"
+    default = True
+```
+
+### Plugin keys as class attributes
+
+Plugin keys may be declared directly as class attributes:
+
+```python
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    database_url_sync = "postgresql://user:pass@localhost/myapp"
+    pg_roles = ["app_owner"]
+```
+
+`Primary.handle` is the `DatabaseHandle` returned by the function API. Mutable
+values such as `model_paths`, `model_tables`, and `plugin_config` are copied for
+each registered subclass, so child classes can override them without mutating
+their base class.
+
+## Function API
+
+The equivalent `database_config()` function:
 
 ```python
 def database_config(
@@ -31,113 +89,12 @@ def database_config(
     pg_migration_lock_timeout: int | None = None,
     ch_cluster: str | None = None,
     ch_replicated_database: bool = False,
+    clickhouse_lock_ttl: int | None = None,
+    lock_namespace: str | None = None,
     **plugin_config: Any,
 ) -> DatabaseHandle:
     """Register a database in dbwarden and return a handle with session dependencies."""
 ```
-
-## Plugin-contributed arguments
-
-Backend object keys such as `pg_roles`, `pg_functions`, and `ch_grants` are **not** part of core. Each is owned by the plugin that also supplies its object handler, and arrives through `**plugin_config`.
-
-Core validates every extra keyword against the plugins actually installed:
-
-- A key owned by a plugin that is **not installed** raises `DBWardenConfigError` naming the plugin to install.
-- A key **no plugin owns** raises `DBWardenConfigError` as an unexpected keyword argument, so typos fail immediately.
-
-Both fire when your `dbwarden.py` is loaded, not at migration time.
-
-| Config keys | Plugin |
-|---|---|
-| `pg_roles`, `pg_default_privileges` | `dbwarden-pgsql-rbac` |
-| `pg_domains`, `pg_sequences`, `pg_composite_types` | `dbwarden-pgsql-types` |
-| `pg_extensions`, `pg_functions`, `pg_triggers`, `pg_event_triggers`, `pg_extended_statistics` | `dbwarden-pgsql-extensions` |
-| `ch_named_collections`, `ch_roles`, `ch_users`, `ch_row_policies`, `ch_quotas`, `ch_settings_profiles`, `ch_grants` | `dbwarden-ch-rbac` |
-
-Install with `dbwarden plugin add <name>`. `pg_schema` and `pg_migration_lock_timeout` are core and need no plugin.
-
-## Lock Configuration
-
-dbwarden v2 introduces per-engine native locking with configurable behavior. These settings control lock acquisition, heartbeat, and recovery:
-
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `lock.namespace` | `str` | `"default"` | Lock scope (allows independent lock streams) |
-| `lock.acquire_wait_timeout` | `float` | `0` | Seconds to wait for lock acquisition (0 = fail fast) |
-| `heartbeat.interval` | `float` | `15` | Seconds between heartbeat updates |
-| `heartbeat.ttl` | `int` | `45` | Seconds after which heartbeat is stale |
-| `recovery.policy` | `str` | `"halt"` | Recovery behavior: `halt`, `resume_idempotent`, `force` |
-| `clickhouse.coordination_profile` | `str` | `"CH-1"` | ClickHouse locking profile: `CH-0` through `CH-4` |
-| `clickhouse.keeper_path` | `str` | `"/dbwarden/locks"` | ClickHouse Keeper znode path (CH-2+) |
-| `clickhouse.takeover_grace` | `str` | `"30s"` | ClickHouse proxy takeover grace window (CH-3) |
-
-### Lock strategies by engine
-
-| Engine | Strategy | Grade | Description |
-|--------|----------|-------|-------------|
-| PostgreSQL | Advisory lock | A | Session-level `pg_advisory_lock` on migration connection |
-| MySQL/MariaDB | Named lock | A | `GET_LOCK()` on migration connection |
-| SQLite | BEGIN IMMEDIATE | B | Write lock held for entire migration run |
-| ClickHouse | Lease + fencing token | C | Atomic upsert with TTL-based expiry |
-
-### Configuration example
-
-```python
-from dbwarden import DbwardenDatabase
-
-class Primary(DbwardenDatabase):
-    database_name = "primary"
-    default = True
-    database_type = "postgresql"
-    database_url_sync = "postgresql://user:pass@localhost:5432/myapp"
-    model_paths = ["app.models"]
-    
-    # Lock configuration
-    lock_namespace = "default"
-    lock_acquire_wait_timeout = 0  # fail fast
-    heartbeat_interval = 15
-    heartbeat_ttl = 45
-    recovery_policy = "halt"
-```
-
-## Declarative API
-
-For configuration that benefits from inheritance, define a concrete subclass of
-`DbwardenDatabase`. Every explicit `database_config()` field is available as a
-class attribute, and concrete subclasses register automatically when imported.
-
-```python
-from dbwarden import DbwardenDatabase
-
-
-class Shared(DbwardenDatabase):
-    __abstract__ = True
-    database_type = "postgresql"
-    model_paths = ["app.models"]
-    plugin_config = {
-        "pg_roles": ["app_owner"],
-    }
-
-
-class Primary(Shared):
-    database_name = "primary"
-    database_url_sync = "postgresql://user:pass@localhost/myapp"
-    default = True
-```
-
-Plugin keys may also be declared directly as class attributes:
-
-```python
-class Primary(DbwardenDatabase):
-    database_name = "primary"
-    database_url_sync = "postgresql://user:pass@localhost/myapp"
-    pg_roles = ["app_owner"]
-```
-
-`Primary.handle` is the `DatabaseHandle` returned by the function API. Mutable
-values such as `model_paths`, `model_tables`, and `plugin_config` are copied for
-each registered subclass, so child classes can override them without mutating
-their base class.
 
 ## Required arguments
 
@@ -244,9 +201,17 @@ When `True`, this database is selected when `--database` / `-d` is not specified
 
 **Example:**
 ```python
-# Primary is default
-primary = database_config(
-analytics = database_config(database_name="analytics", ...)  # default=False implied
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://user:pass@localhost:5432/mydb"
+
+class Analytics(DbwardenDatabase):
+    database_name = "analytics"
+    database_type = "clickhouse"
+    database_url_sync = "clickhouse://localhost:8123/analytics"
+    # default=False implied
 ```
 
 Exactly one database must have `default=True`. Having zero or multiple defaults will cause a validation error.
@@ -308,22 +273,20 @@ tables are ignored.
 
 **Example:**
 ```python
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://localhost/myapp",
-    model_paths=["app.models"],
-    model_tables=["users", "posts", "comments"],
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://localhost/myapp"
+    model_paths = ["app.models"]
+    model_tables = ["users", "posts", "comments"]
 
-audit = database_config(
-    database_name="audit",
-    database_type="postgresql",
-    database_url_sync="postgresql://localhost/audit",
-    model_paths=["app.models"],
-    model_tables=["audit_logs"],
-)
+class Audit(DbwardenDatabase):
+    database_name = "audit"
+    database_type = "postgresql"
+    database_url_sync = "postgresql://localhost/audit"
+    model_paths = ["app.models"]
+    model_tables = ["audit_logs"]
 ```
 
 **Overlap validation:** If two databases both set `model_tables` with
@@ -345,13 +308,12 @@ Name of the table dbwarden uses to record applied migrations and repeatable migr
 **Example:**
 
 ```python
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://localhost/myapp",
-    migration_table="custom_migrations",
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://localhost/myapp"
+    migration_table = "custom_migrations"
 ```
 
 Use this when:
@@ -370,13 +332,12 @@ Name of the table dbwarden uses to record applied seeds.
 **Example:**
 
 ```python
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://localhost/myapp",
-    seed_table="custom_seeds",
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://localhost/myapp"
+    seed_table = "custom_seeds"
 ```
 
 Use this when integrating with an existing database that already reserves the seed table name.
@@ -392,13 +353,12 @@ When `True`, dbwarden automatically applies pending code seeds after each succes
 **Example:**
 
 ```python
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://localhost/myapp",
-    auto_apply_seeds=True,
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://localhost/myapp"
+    auto_apply_seeds = True
 ```
 
 Use this when:
@@ -426,14 +386,13 @@ When `--dev` is passed to any dbwarden command:
 
 **Example:**
 ```python
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://prod-host/myapp",
-    dev_database_type="sqlite",
-    dev_database_url="sqlite:///./dev.db",
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://prod-host/myapp"
+    dev_database_type = "sqlite"
+    dev_database_url = "sqlite:///./dev.db"
 ```
 
 Use with:
@@ -469,16 +428,16 @@ When enabled, CLI display commands show the original variable/expression for non
 
 ```python
 import os
+from dbwarden import DbwardenDatabase
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync=DATABASE_URL,
-    secure_values=True,  #  Enable secure display
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = DATABASE_URL
+    secure_values = True  # Enable secure display
 ```
 
 **Without `secure_values`:**
@@ -507,12 +466,11 @@ ClickHouse cluster name. When set, dbwarden appends `ON CLUSTER '<name>'` to eve
 **Example:**
 
 ```python
-analytics = database_config(
-    database_name="analytics",
-    database_type="clickhouse",
-    database_url_sync="clickhouse://clickhouse1:8123/analytics",
-    ch_cluster="production_cluster",
-)
+class Analytics(DbwardenDatabase):
+    database_name = "analytics"
+    database_type = "clickhouse"
+    database_url_sync = "clickhouse://clickhouse1:8123/analytics"
+    ch_cluster = "production_cluster"
 ```
 
 **Validation:**
@@ -535,12 +493,11 @@ When `True`, dbwarden uses the ClickHouse `Replicated` database engine. DDL prop
 **Example:**
 
 ```python
-analytics = database_config(
-    database_name="analytics",
-    database_type="clickhouse",
-    database_url_sync="clickhouse://clickhouse1:8123/analytics",
-    ch_replicated_database=True,
-)
+class Analytics(DbwardenDatabase):
+    database_name = "analytics"
+    database_type = "clickhouse"
+    database_url_sync = "clickhouse://clickhouse1:8123/analytics"
+    ch_replicated_database = True
 ```
 
 **Validation:**
@@ -562,12 +519,11 @@ Lease TTL in seconds for ClickHouse migration locking (CH-0 and CH-1 profiles). 
 **Example:**
 
 ```python
-analytics = database_config(
-    database_name="analytics",
-    database_type="clickhouse",
-    database_url_sync="clickhouse://clickhouse1:8123/analytics",
-    clickhouse_lock_ttl=600,  # 10 minutes
-)
+class Analytics(DbwardenDatabase):
+    database_name = "analytics"
+    database_type = "clickhouse"
+    database_url_sync = "clickhouse://clickhouse1:8123/analytics"
+    clickhouse_lock_ttl = 600  # 10 minutes
 ```
 
 ### `lock_namespace`
@@ -583,20 +539,18 @@ Lock scope for migration locking. Allows independent lock streams so different o
 
 ```python
 # Schema migrations
-schema_db = database_config(
-    database_name="analytics",
-    database_type="clickhouse",
-    database_url_sync="clickhouse://clickhouse1:8123/analytics",
-    lock_namespace="schema",
-)
+class SchemaDb(DbwardenDatabase):
+    database_name = "analytics"
+    database_type = "clickhouse"
+    database_url_sync = "clickhouse://clickhouse1:8123/analytics"
+    lock_namespace = "schema"
 
 # Data operations
-data_db = database_config(
-    database_name="analytics",
-    database_type="clickhouse",
-    database_url_sync="clickhouse://clickhouse1:8123/analytics",
-    lock_namespace="data",
-)
+class DataDb(DbwardenDatabase):
+    database_name = "analytics"
+    database_type = "clickhouse"
+    database_url_sync = "clickhouse://clickhouse1:8123/analytics"
+    lock_namespace = "data"
 ```
 
 ## Return value: `DatabaseHandle`
@@ -614,22 +568,30 @@ a namespace so you never confuse which database a session belongs to:
 
 ```python
 # dbwarden.py
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-primary = database_config(database_name="primary", ...)
-analytics = database_config(database_name="analytics", ...)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://user:pass@localhost/myapp"
+
+class Analytics(DbwardenDatabase):
+    database_name = "analytics"
+    database_type = "clickhouse"
+    database_url_sync = "clickhouse://clickhouse1:8123/analytics"
 ```
 
 ```python
 # routes.py
-from ..dbwarden import primary, analytics
+from ..dbwarden import Primary, Analytics
 
 @router.get("/users")
-async def get_users(session: primary.async_session):
+async def get_users(session: Primary.handle.async_session):
     return await session.execute(...)
 
 @router.get("/reports")
-def get_reports(session: analytics.sync_session):
+def get_reports(session: Analytics.handle.sync_session):
     return session.execute(...)
 ```
 
@@ -678,81 +640,72 @@ Config files are loaded with path traversal protection that ensures the file is 
 ### Minimal single-database setup
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://user:password@localhost:5432/mydb",
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://user:password@localhost:5432/mydb"
 ```
 
 ### With local development (recommended)
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://user:password@localhost:5432/mydb",
-    dev_database_type="sqlite",
-    dev_database_url="sqlite:///./development.db",
-)
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://user:password@localhost:5432/mydb"
+    dev_database_type = "sqlite"
+    dev_database_url = "sqlite:///./development.db"
 ```
 
 ### Multi-database setup
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://user:password@localhost:5432/main"
+    model_paths = ["app.models.api"]
 
-primary = database_config(
-    database_name="primary",
-    default=True,
-    database_type="postgresql",
-    database_url_sync="postgresql://user:password@localhost:5432/main",
-    model_paths=["app.models.api"],
-)
-
-analytics = database_config(
-    database_name="analytics",
-    database_type="clickhouse",
-    database_url_sync="http://clickhouse:password@clickhouse-host:8123/analytics",
-    model_paths=["app.models.analytics"],
-)
+class Analytics(DbwardenDatabase):
+    database_name = "analytics"
+    database_type = "clickhouse"
+    database_url_sync = "http://clickhouse:password@clickhouse-host:8123/analytics"
+    model_paths = ["app.models.analytics"]
 ```
 
 ### ClickHouse with ON CLUSTER
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-analytics = database_config(
-    database_name="analytics",
-    database_type="clickhouse",
-    database_url_sync="clickhouse://clickhouse1:8123/analytics",
-    model_paths=["app.models.analytics"],
-    ch_cluster="production_cluster",
-)
+class Analytics(DbwardenDatabase):
+    database_name = "analytics"
+    database_type = "clickhouse"
+    database_url_sync = "clickhouse://clickhouse1:8123/analytics"
+    model_paths = ["app.models.analytics"]
+    ch_cluster = "production_cluster"
 ```
 
 ### ClickHouse with replicated database
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-analytics = database_config(
-    database_name="analytics",
-    database_type="clickhouse",
-    database_url_sync="clickhouse://clickhouse1:8123/analytics",
-    model_paths=["app.models.analytics"],
-    ch_replicated_database=True,
-)
+class Analytics(DbwardenDatabase):
+    database_name = "analytics"
+    database_type = "clickhouse"
+    database_url_sync = "clickhouse://clickhouse1:8123/analytics"
+    model_paths = ["app.models.analytics"]
+    ch_replicated_database = True
 ```
 
 ## Quick Reference
