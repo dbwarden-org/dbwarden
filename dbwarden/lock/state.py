@@ -92,7 +92,7 @@ def compute_health(
 ) -> str:
     """Compute the health verdict from status row data.
 
-    Returns one of: HEALTHY, STUCK, DEAD, AVAILABLE.
+    Returns one of: HEALTHY, STUCK, DEAD, AVAILABLE, NEEDS_REVIEW, INSPECTING.
     """
     if state in (LockState.COMPLETE, LockState.FAILED, LockState.AVAILABLE):
         return state.value
@@ -104,5 +104,26 @@ def compute_health(
     if state == LockState.DEAD:
         return "DEAD"
 
-    # RUNNING with a heartbeat
+    # RUNNING state - check heartbeat staleness
+    if last_heartbeat_at is None:
+        return "HEALTHY"
+
+    # Parse the heartbeat timestamp and compare with current time
+    if now_seconds is None:
+        import time
+        now_seconds = time.time()
+
+    try:
+        from datetime import datetime
+        # Parse ISO format or common timestamp formats
+        heartbeat_time = datetime.fromisoformat(last_heartbeat_at.replace("Z", "+00:00"))
+        heartbeat_epoch = heartbeat_time.timestamp()
+        elapsed = now_seconds - heartbeat_epoch
+
+        if elapsed > heartbeat_ttl_seconds:
+            return "STUCK"
+    except (ValueError, TypeError):
+        # If we can't parse the timestamp, assume healthy
+        pass
+
     return "HEALTHY"

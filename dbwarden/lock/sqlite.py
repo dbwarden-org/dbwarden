@@ -39,7 +39,7 @@ class SQLiteStrategy:
     """SQLite locking via BEGIN IMMEDIATE transaction.
 
     The entire migration runs in one BEGIN IMMEDIATE transaction,
-    which acquires the reserved/write lock on the database file.
+    which acquires the write lock on the database file.
     Crash releases automatically. Pause holds the lock.
     """
 
@@ -87,8 +87,11 @@ class SQLiteStrategy:
         connection.commit()
 
         # BEGIN IMMEDIATE acquires the write lock
+        # This lock is held on THIS connection until it is closed or committed.
+        # The caller must NOT close this connection until migration is complete.
         try:
             connection.execute(text("BEGIN IMMEDIATE"))
+            logger.info("SQLite BEGIN IMMEDIATE acquired on connection")
         except Exception as exc:
             # SQLITE_BUSY: another writer holds the lock
             logger.warning("Failed to acquire SQLite write lock: %s", exc)

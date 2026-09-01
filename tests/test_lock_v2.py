@@ -63,7 +63,20 @@ class TestLockState:
         assert compute_health(LockState.RUNNING, None) == "HEALTHY"
 
     def test_compute_health_running_with_heartbeat(self):
-        assert compute_health(LockState.RUNNING, "2026-08-22 12:00:00") == "HEALTHY"
+        import time
+        from datetime import datetime, timezone
+        # Use a recent timestamp (within TTL)
+        now = time.time()
+        recent = datetime.fromtimestamp(now - 10, tz=timezone.utc).isoformat()
+        assert compute_health(LockState.RUNNING, recent) == "HEALTHY"
+
+    def test_compute_health_running_stale_heartbeat(self):
+        import time
+        from datetime import datetime, timezone
+        # Use an old timestamp (beyond TTL)
+        now = time.time()
+        old = datetime.fromtimestamp(now - 100, tz=timezone.utc).isoformat()
+        assert compute_health(LockState.RUNNING, old, heartbeat_ttl_seconds=45) == "STUCK"
 
     def test_describe_holder_available(self):
         result = describe_holder(LockState.AVAILABLE, None, None, None, None, None, None, None)

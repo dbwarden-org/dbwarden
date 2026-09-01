@@ -114,6 +114,18 @@ class ClickHouseStrategy:
     def ensure_table(self, connection: Any, schema: str = "public") -> None:
         ensure_lock_table(connection, "clickhouse", schema)
 
+    def check_statement_idempotency(self, sql: str) -> tuple[bool, str | None]:
+        """Check if a SQL statement is idempotent for CH-1 enforcement.
+
+        Returns (is_idempotent, reason). If reason is not None, the statement
+        is non-idempotent and the reason explains why.
+        """
+        if self.allow_non_idempotent:
+            return True, None
+
+        from dbwarden.lock.clickhouse import check_statement_idempotency
+        return check_statement_idempotency(sql)
+
     def acquire(
         self,
         connection: Any,

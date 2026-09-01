@@ -131,8 +131,19 @@ def acquire_lock(
 
     try:
         result = strategy.acquire(conn, status_row, schema)
-    finally:
-        # Close the lock connection (SQLite releases BEGIN IMMEDIATE on close)
+    except Exception:
+        # Close on error
+        try:
+            conn.close()
+        except Exception:
+            pass
+        raise
+
+    # For SQLite, the connection must stay open to hold BEGIN IMMEDIATE.
+    # For other engines, we can close the lock connection since the lock
+    # is either session-scoped (PG advisory) or connection-scoped (MySQL GET_LOCK).
+    # The caller is responsible for managing the connection lifecycle.
+    if effective_db_type != "sqlite" and not result.success:
         try:
             conn.close()
         except Exception:

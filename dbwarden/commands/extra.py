@@ -300,6 +300,22 @@ def unlock_cmd(database: str | None = None, force: bool = False) -> None:
         warning("This will force-release the lock without terminating the holder's connection.")
         info("Use 'dbwarden unlock --force' to skip this prompt in automation.")
 
+        # Prompt for confirmation
+        import sys
+        if sys.stdin.isatty():
+            try:
+                response = input("Are you sure? (yes/no): ").strip().lower()
+                if response != "yes":
+                    info("Aborted.")
+                    return
+            except (EOFError, KeyboardInterrupt):
+                info("Aborted.")
+                return
+        else:
+            # Non-interactive mode: require --force
+            error("Non-interactive mode requires --force to release lock.")
+            return
+
     if force_release_lock(database):
         success("Migration lock released successfully.")
     else:
