@@ -2,8 +2,8 @@ import secrets
 
 from sqlalchemy import text
 
-from dbwarden.database.connection import get_db_connection
-from dbwarden.database.queries import QueryMethod, get_query
+from dbwarden.connection.connection import get_db_connection
+from dbwarden.connection.queries import QueryMethod, get_query
 from dbwarden.logging import get_component_logger
 
 logger = get_component_logger("lock")

@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import create_engine
 
-from dbwarden.database.connection import sandbox_override
+from dbwarden.connection.connection import sandbox_override
 from dbwarden.repositories.migrations_repo import _execute_autocommit
 
 

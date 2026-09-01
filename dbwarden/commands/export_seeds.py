@@ -10,7 +10,7 @@ def export_seeds_cmd(
 
     if HookRegistry.is_registered("seed_export"):
         if all_databases:
-            from dbwarden.database.availability import run_all_databases
+            from dbwarden.connection.availability import run_all_databases
 
             result = run_all_databases(
                 lambda db_name: HookRegistry.execute_single(

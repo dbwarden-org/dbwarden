@@ -1,13 +1,13 @@
 """Table constraints must survive every migration-generation path.
 
-From a bug report: a generated initial migration contained no `uq_` at all —
+From a bug report: a generated initial migration contained no `uq_` at all,
 every `UNIQUE` constraint declared in a model's `class Meta` was missing, so
 `INSERT ... ON CONFLICT (branch_id)` failed at runtime with "there is no unique
 or exclusion constraint matching the ON CONFLICT specification".
 
 `make-migrations` has two generation paths. The snapshot path renders
-constraints through ConstraintHandler; the fallback path — taken when there is
-no schema snapshot, the database is unreachable, or the snapshot diff raises —
+constraints through ConstraintHandler; the fallback path, taken when there is
+no schema snapshot, the database is unreachable, or the snapshot diff raises,
 rendered only columns, indexes and foreign keys, dropping UNIQUE and CHECK
 constraints silently.
 """
@@ -303,7 +303,7 @@ class TestForeignKeyToANewTable:
 
     The add-foreign-key guard checks that the referenced table exists. It
     consulted the constraint handler's own model spec, which only listed tables
-    that declared constraints — so a foreign key pointing at a table with
+    that declared constraints, so a foreign key pointing at a table with
     nothing but columns and a primary key looked like a foreign key to a
     missing table, and was dropped without a word.
     """

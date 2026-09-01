@@ -37,7 +37,15 @@ def _warn_override(object_type: str, plugin: str) -> None:
 
 
 class RegistryDriver:
-    """Orchestrates all registered ObjectHandlers to produce ops and SQL."""
+    """Orchestrates all registered ObjectHandlers to produce ops and SQL.
+
+    The driver collects handlers from both core and plugins, respects
+    ordering constraints, and runs the extract -> canonicalize -> diff
+    pipeline for each handler in the correct order.
+
+    Args:
+        include_plugins: If True, include plugin-registered handlers.
+    """
 
     def __init__(self, *, include_plugins: bool = True) -> None:
         self._handlers: dict[str, ObjectHandler] = {}
@@ -75,6 +83,16 @@ class RegistryDriver:
         model_tables: list[Any],
         config: Any,
     ) -> Tuple[List[Op], List[Op]]:
+        """Run all handlers through the extract -> diff pipeline.
+
+        Args:
+            snapshot: Live database snapshot from ``extract_full_schema_snapshot``.
+            model_tables: List of ``ModelTable`` from SQLAlchemy models.
+            config: The dbwarden configuration object.
+
+        Returns:
+            A tuple of (upgrade_ops, rollback_ops) across all handlers.
+        """
         all_upgrade: list[Op] = []
         all_rollback: list[Op] = []
 

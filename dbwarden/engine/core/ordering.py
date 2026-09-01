@@ -7,6 +7,7 @@ from heapq import heappop, heappush
 from typing import Any
 
 from dbwarden.engine.core.statement_order import StatementOrder
+from dbwarden.exceptions.engine import OrderingError
 
 
 class Anchor(Enum):
@@ -43,10 +44,6 @@ ANCHOR_STATEMENT_ORDER: dict[Anchor, StatementOrder] = {
     Anchor.AFTER_INDEXES: StatementOrder.ALTER_INDEX,
     Anchor.POSTAMBLE: StatementOrder.ALTER_VIEW,
 }
-
-
-class OrderingError(ValueError):
-    pass
 
 
 def validate_ordering(ordering: OrderingConstraint) -> None:

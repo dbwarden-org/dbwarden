@@ -36,7 +36,7 @@ def seed_apply_cmd(
 
     if HookRegistry.is_registered("seed_apply"):
         if all_databases:
-            from dbwarden.database.availability import run_all_databases
+            from dbwarden.connection.availability import run_all_databases
 
             result = run_all_databases(
                 lambda db_name: HookRegistry.execute_single(
@@ -76,7 +76,7 @@ def seed_list_cmd(
 
     if HookRegistry.is_registered("seed_list"):
         if all_databases:
-            from dbwarden.database.availability import run_all_databases
+            from dbwarden.connection.availability import run_all_databases
 
             result = run_all_databases(
                 lambda db_name: HookRegistry.execute_single(
@@ -115,7 +115,7 @@ def seed_rollback_cmd(
 
     if HookRegistry.is_registered("seed_rollback"):
         if all_databases:
-            from dbwarden.database.availability import run_all_databases
+            from dbwarden.connection.availability import run_all_databases
 
             result = run_all_databases(
                 lambda db_name: HookRegistry.execute_single(

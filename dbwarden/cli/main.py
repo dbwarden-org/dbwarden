@@ -836,7 +836,7 @@ def seed_rollback(
 
 def main() -> None:
     """Main entry point for dbwarden CLI."""
-    from dbwarden.database import reset_connection_logging
+    from dbwarden.connection import reset_connection_logging
     from dbwarden.exceptions import DBWardenError
     from dbwarden.output import emit_error_json, error, json_mode
 

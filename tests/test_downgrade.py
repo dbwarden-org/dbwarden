@@ -171,7 +171,7 @@ def test_snapshot_generic_table():
         os.chdir(tmpdir)
         try:
             from dbwarden.config import set_dev_mode
-            from dbwarden.database.connection import get_db_connection
+            from dbwarden.connection.connection import get_db_connection
             from dbwarden.commands.snapshot import _snapshot_generic
             from sqlalchemy import text
 
@@ -199,7 +199,7 @@ def test_snapshot_table_not_found():
         os.chdir(tmpdir)
         try:
             from dbwarden.config import set_dev_mode
-            from dbwarden.database.connection import get_db_connection
+            from dbwarden.connection.connection import get_db_connection
             from dbwarden.commands.snapshot import _snapshot_generic
 
             set_dev_mode(False)

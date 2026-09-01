@@ -16,7 +16,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import declarative_base
 
-from dbwarden.database.connection import get_db_connection
+from dbwarden.connection.connection import get_db_connection
 from dbwarden.config import set_dev_mode
 from dbwarden.repositories import (
     create_migrations_table_if_not_exists,

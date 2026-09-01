@@ -363,7 +363,7 @@ def test_generate_models_with_db_connection():
         os.chdir(tmpdir)
         try:
             from dbwarden.config import set_dev_mode
-            from dbwarden.database.connection import get_db_connection
+            from dbwarden.connection.connection import get_db_connection
             from dbwarden.commands.generate_models import generate_models_cmd
             from sqlalchemy import text
 
@@ -406,7 +406,7 @@ def test_generate_models_with_tables_filter():
         os.chdir(tmpdir)
         try:
             from dbwarden.config import set_dev_mode
-            from dbwarden.database.connection import get_db_connection
+            from dbwarden.connection.connection import get_db_connection
             from dbwarden.commands.generate_models import generate_models_cmd
             from sqlalchemy import text
 

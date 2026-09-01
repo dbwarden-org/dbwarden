@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from dbwarden.config import get_database
-from dbwarden.database.connection import get_db_connection, get_engine
+from dbwarden.connection.connection import get_db_connection, get_engine
 from dbwarden.engine.backends.clickhouse.generate_models import (
     _clean_engine_full,
     _extract_ch_meta,

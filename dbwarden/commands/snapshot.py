@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dbwarden.config import get_database
-from dbwarden.database.connection import get_db_connection
+from dbwarden.connection.connection import get_db_connection
 from dbwarden.exceptions import DBDisconnectedError
 from dbwarden.output import error, sql, subsection, warning
 

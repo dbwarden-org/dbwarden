@@ -460,7 +460,7 @@ class TestAggregatingView:
         assert "sumMergeState(amount_sum)" in select, (
             f"Cascade level should use sumMergeState, got:\n{select}"
         )
-        # The first level (not tested here) still uses sumState — that's correct
+        # The first level (not tested here) still uses sumState; that's correct
 
     def test_plain_source_uses_state_combinator(self):
         """Cascade level emits sumMergeState, not sumState.

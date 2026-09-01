@@ -1,7 +1,7 @@
 from sqlalchemy.engine import make_url
 
 from dbwarden.config import DEFAULT_MIGRATION_TABLE, DEFAULT_SEEDS_TABLE, get_database
-from dbwarden.database.queries.store import (
+from dbwarden.connection.queries.store import (
     CLICKHOUSE_QUERIES,
     MYSQL_QUERIES,
     POSTGRES_QUERIES,

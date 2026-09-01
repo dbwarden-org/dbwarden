@@ -478,7 +478,7 @@ def aggregating_view(
                 continue
             src_type = source_col_types.get(alias)
             if src_type is None:
-                # Aggregate alias not found in source — could be a group-by
+                # Aggregate alias not found in source; could be a group-by
                 # key rather than a state column.  Skipping validation because
                 # the combinator will fall back to *State for plain types.
                 continue
@@ -543,14 +543,14 @@ def _resolve_source_column_types(source: Any) -> dict[str, str]:
 
     * If *source* is an ``AggregatingView`` subclass (has ``Meta.ch`` of type
       ``AggregatingViewSpec``): the column types are derived from the source
-      spec's aggregates — each aggregate's alias maps to its target type
+      spec's aggregates: each aggregate's alias maps to its target type
       (e.g. ``"amount_sum" → "AggregateFunction(sum, Float64)"``).
     * If *source* is a plain model class: column types come from the
       SQLAlchemy ``__table__`` columns.
     * If *source* is a string: attempt to resolve it to a class; if that fails,
-      return an empty dict (bare table name — no type info available).
+      return an empty dict (bare table name; no type info available).
 
-    An empty dict means "no cascade detection possible" — the caller falls back
+    An empty dict means "no cascade detection possible", the caller falls back
     to the default ``*State`` combinator.
     """
     # Resolve string → class if possible
@@ -570,7 +570,7 @@ def _resolve_source_column_types(source: Any) -> dict[str, str]:
                     source = cls
                     break
             else:
-                return {}  # bare table name — no type info
+                return {}  # bare table name; no type info
 
     # If source is an aggregating view, derive types from its spec
     source_spec = getattr(getattr(source, "Meta", None), "ch", None)
@@ -587,7 +587,7 @@ def _resolve_source_column_types(source: Any) -> dict[str, str]:
         result.update(gb_types)
         return result
 
-    # Plain model class — read column types from __table__
+    # Plain model class; read column types from __table__
     table = getattr(source, "__table__", None)
     if table is not None:
         return {col.name: str(col.type) for col in table.columns}

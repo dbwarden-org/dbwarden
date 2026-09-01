@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from dbwarden.database.availability import DatabaseAvailability, MultiDatabaseResult
+from dbwarden.connection.availability import DatabaseAvailability, MultiDatabaseResult
 
 
 def test_multi_database_result_failed_status_has_hard_failure_code():
@@ -16,7 +16,7 @@ def test_multi_database_result_failed_status_has_hard_failure_code():
 
 
 def test_optional_database_configuration_is_available_to_runner(monkeypatch):
-    from dbwarden.database import availability
+    from dbwarden.connection import availability
 
     configs = {
         "primary": SimpleNamespace(skip_if_missing=False, sqlalchemy_url="sqlite:///primary.db"),

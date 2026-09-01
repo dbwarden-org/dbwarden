@@ -120,9 +120,9 @@ def resolve_combinator(func: str, source_column_type: str | None) -> str:
 
     Raises ``TypeError`` when the source column type is incompatible:
 
-    * Function mismatch — source is ``AggregateFunction(sum, T)`` but the
+    * Function mismatch; source is ``AggregateFunction(sum, T)`` but the
       declared aggregate uses a different function (e.g. ``avg``).
-    * Inner-type mismatch — source ``AggregateFunction(sum, UInt32)`` vs
+    * Inner-type mismatch; source ``AggregateFunction(sum, UInt32)`` vs
       declared ``agg.sum(..., "Float64")``.
     * Non-associative function on ``SimpleAggregateFunction`` source.
     """

@@ -8,7 +8,26 @@ from dbwarden.schema.constraint import normalize_check_spec, normalize_unique_sp
 
 
 class ModelColumn:
-    """Represents a column from a SQLAlchemy model."""
+    """Represents a column from a SQLAlchemy model.
+
+    Attributes:
+        name: Column name.
+        type: Normalized SQL type string.
+        nullable: Whether the column allows NULL.
+        primary_key: Whether this column is part of the primary key.
+        unique: Whether this column has a UNIQUE constraint.
+        default: The default value expression, or None.
+        foreign_key: The foreign key reference (e.g. ``"other_table.id"``), or None.
+        codec: ClickHouse codec, or None.
+        comment: Column comment, or None.
+        pg_meta: PostgreSQL-specific metadata dict.
+        ch_meta: ClickHouse-specific metadata dict.
+        my_meta: MySQL/MariaDB-specific metadata dict.
+        sq_meta: SQLite-specific metadata dict.
+        autoincrement: Whether the column auto-increments, or None.
+        fk_on_delete: ON DELETE action for foreign keys, or None.
+        fk_on_update: ON UPDATE action for foreign keys, or None.
+    """
 
     def __init__(
         self,
@@ -106,6 +125,26 @@ def column_foreign_key_is_table_constraint(table: Any, column_name: str) -> bool
 
 @dataclass
 class IndexInfo:
+    """Describes an index for migration generation.
+
+    Attributes:
+        columns: Column names or expressions in the index.
+        name: Explicit index name, or None for auto-generated.
+        unique: Whether this is a UNIQUE index.
+        using: Index method (btree, hash, gist, gin, etc.).
+        where: Partial index WHERE clause, or None.
+        include: INCLUDE columns for covering indexes, or None.
+        with_params: Storage parameters (e.g. fillfactor), or None.
+        tablespace: Tablespace name, or None.
+        nulls_not_distinct: PostgreSQL NULLS NOT DISTINCT, or False.
+        column_sorting: Per-column sort options (ASC/DESC, NULLS FIRST/LAST).
+        postgresql_ops: Per-column operator class names.
+        comment: Index comment, or None.
+        concurrently: Whether to build concurrently (default True).
+        clickhouse_type: ClickHouse index type, or None.
+        clickhouse_granularity: ClickHouse index granularity, or None.
+        expression: Index expression for expression-based indexes.
+    """
     columns: list[str]
     name: str | None = None
     unique: bool = False
@@ -181,7 +220,29 @@ class IndexInfo:
 
 
 class ModelTable:
-    """Represents a table from a SQLAlchemy model."""
+    """Represents a table (or view) from a SQLAlchemy model.
+
+    Attributes:
+        name: Table name.
+        columns: List of ``ModelColumn`` instances.
+        clickhouse_options: ClickHouse engine/codec options dict.
+        object_type: ``"table"``, ``"view"``, or ``"materialized_view"``.
+        foreign_keys: List of foreign key dicts.
+        indexes: List of ``IndexInfo`` or index dicts.
+        comment: Table comment, or None.
+        checks: List of CHECK constraint specs.
+        uniques: List of UNIQUE constraint specs.
+        excludes: List of EXCLUDE constraint specs (PostgreSQL).
+        pg_table: PostgreSQL-specific table metadata dict.
+        my_table: MySQL/MariaDB-specific table metadata dict.
+        sq_table: SQLite-specific table metadata dict.
+        schema: Database schema name, or None for the default.
+        pg_view_definition: PostgreSQL view SQL, or None.
+        pg_view_materialized: Whether this is a materialized view.
+        pg_view_auto_refresh: Whether to auto-refresh the materialized view.
+        pg_policies: List of RLS policy dicts.
+        pg_grants: List of grant dicts.
+    """
 
     def __init__(
         self,

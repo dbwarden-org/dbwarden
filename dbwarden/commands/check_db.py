@@ -3,7 +3,7 @@ from typing import Any
 from sqlalchemy import inspect
 
 from dbwarden.config import get_database
-from dbwarden.database.connection import get_db_connection
+from dbwarden.connection.connection import get_db_connection
 from dbwarden.exceptions import DBDisconnectedError
 from dbwarden.logging import get_logger
 from dbwarden.output import data_table, plain, render, section, warning

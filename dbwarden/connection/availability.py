@@ -103,7 +103,7 @@ def probe_database(
     config: Any | None = None,
 ) -> DatabaseAvailability:
     """Probe one configured database without changing low-level connection behavior."""
-    from dbwarden.database.connection import get_db_connection
+    from dbwarden.connection.connection import get_db_connection
 
     config = config or get_database(database)
     skip_disabled = is_skip_disabled() if disable_skip is None else disable_skip

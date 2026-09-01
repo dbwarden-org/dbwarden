@@ -5,8 +5,8 @@ import time
 from sqlalchemy import Result, Row, text
 from sqlalchemy.orm import Session
 
-from dbwarden.database.connection import get_db_connection
-from dbwarden.database.queries import QueryMethod, get_query
+from dbwarden.connection.connection import get_db_connection
+from dbwarden.connection.queries import QueryMethod, get_query
 from dbwarden.engine.file_parser import DBWARDEN_AUTOCOMMIT_MARKER
 from dbwarden.models import MigrationRecord
 
@@ -58,7 +58,7 @@ def _execute_autocommit(sql_text: str, db_name: str | None = None) -> None:
     is executed against the sandbox instead of the real database.
     """
     from sqlalchemy import create_engine
-    from dbwarden.database.connection import _sandbox_url_var
+    from dbwarden.connection.connection import _sandbox_url_var
 
     sandbox_url = _sandbox_url_var.get()
     if sandbox_url is not None:

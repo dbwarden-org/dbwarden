@@ -13,7 +13,7 @@ class TestLockRepo:
     """Tests for repositories/lock_repo.py functions."""
 
     def _mock_config(self):
-        return patch("dbwarden.database.queries.get_database", return_value=MagicMock(
+        return patch("dbwarden.connection.queries.get_database", return_value=MagicMock(
             database_type="sqlite", migration_table="_dbwarden_migrations"
         ))
 

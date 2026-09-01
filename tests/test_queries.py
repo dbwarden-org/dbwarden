@@ -1,5 +1,5 @@
-from dbwarden.database import queries
-from dbwarden.database.queries import QueryMethod, DEFAULT_POSTGRES_SCHEMA
+from dbwarden.connection import queries
+from dbwarden.connection.queries import QueryMethod, DEFAULT_POSTGRES_SCHEMA
 
 
 def test_postgres_migration_table_query_uses_filename(monkeypatch):

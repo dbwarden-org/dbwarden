@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from dbwarden.database.connection import get_db_connection
+from dbwarden.connection.connection import get_db_connection
 from dbwarden.engine.backends.clickhouse.safety import (
     _CH_OPTION_KEY_MAP,
 )

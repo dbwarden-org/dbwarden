@@ -202,7 +202,7 @@ def recover_model_state_cmd(database: str | None = None) -> None:
             warning("Falling back to SQLite sandbox. Some database-specific SQL may fail.")
     warning(f"Sandbox started ({sandbox_db_type}): {sandbox_url}")
 
-    from dbwarden.database.connection import get_db_connection, sandbox_override
+    from dbwarden.connection.connection import get_db_connection, sandbox_override
 
     failed = 0
     state: dict | None = None
@@ -243,7 +243,7 @@ def recover_model_state_cmd(database: str | None = None) -> None:
         if failed:
             warning(f"Completed with {failed} warning(s). Model state may be incomplete.")
 
-        from dbwarden.database.connection import get_db_connection as _get_sandbox_conn
+        from dbwarden.connection.connection import get_db_connection as _get_sandbox_conn
 
         with _get_sandbox_conn(database) as _sandbox_conn:
             _inspector = sa_inspect(_sandbox_conn)

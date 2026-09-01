@@ -2280,7 +2280,7 @@ def test_offline_pg_reserved_word_quoting(monkeypatch):
 
 def test_offline_pg_reserved_word_columns_and_index_quoted():
     """A reserved-word column (`limit`) is quoted in CREATE TABLE, ADD COLUMN,
-    and its index DDL — the generated migration must apply without syntax error."""
+    and the generated migration DDL must apply without syntax error."""
     set_dev_mode(False)
     with tempfile.TemporaryDirectory() as tmpdir:
         old_cwd = os.getcwd()

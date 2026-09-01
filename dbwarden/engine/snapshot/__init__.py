@@ -71,6 +71,50 @@ from .ch_utils import (
 from .diff import diff_models_against_snapshot
 from .extract import extract_full_schema_snapshot
 from .extract_ch import _extract_clickhouse_schema_snapshot
+from .extract_common import (
+    build_table_entry,
+    introspect_check_constraints,
+    introspect_columns,
+    introspect_foreign_keys,
+    introspect_indexes,
+    introspect_unique_constraints,
+)
+from .extract_mysql import enrich_column_mysql, enrich_table_mysql
+from .extract_pg import (
+    enrich_column_pg,
+    enrich_pg_constraint_extras,
+    enrich_table_pg,
+    extract_pg_database_objects,
+    get_pg_constraint_index_names,
+)
+from .extract_sqlite import enrich_table_sqlite, fixup_sqlite_fk_actions
+from .types import (  # noqa: F401
+    Snapshot,
+    SnapshotCheckConstraint,
+    SnapshotColumn,
+    SnapshotConstraint,
+    SnapshotDomain,
+    SnapshotEventTrigger,
+    SnapshotExtendedStats,
+    SnapshotForeignKey,
+    SnapshotFunction,
+    SnapshotGrant,
+    SnapshotIndex,
+    SnapshotMysqlColumnMeta,
+    SnapshotMysqlTableMeta,
+    SnapshotPgColumnMeta,
+    SnapshotPgTableMeta,
+    SnapshotPgType,
+    SnapshotPolicy,
+    SnapshotRole,
+    SnapshotSchemaGrant,
+    SnapshotSequence,
+    SnapshotSqliteColumnMeta,
+    SnapshotSqliteTableMeta,
+    SnapshotTable,
+    SnapshotTrigger,
+    SnapshotUniqueConstraint,
+)
 from .index_utils import (
     _build_index_name,
     _index_op_from_info,

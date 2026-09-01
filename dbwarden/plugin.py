@@ -57,17 +57,13 @@ LOCK_PATH = Path(".dbwarden") / "plugins.lock"
 PLUGIN_API_VERSION = 1
 PLUGIN_API_ATTR = "DBWARDEN_PLUGIN_API"
 
-
-class PluginApiMismatchError(RuntimeError):
-    def __init__(self, dist_name: str, declared: Any) -> None:
-        super().__init__(
-            f"Plugin '{dist_name}' targets dbwarden plugin API version {declared}, "
-            f"but this dbwarden provides version {PLUGIN_API_VERSION}. "
-            f"Upgrade the plugin, or pin dbwarden to a version that provides "
-            f"API {declared}."
-        )
-        self.dist_name = dist_name
-        self.declared = declared
+from dbwarden.exceptions.plugin import (  # noqa: E402
+    HookConflictError,
+    HookNotRegisteredError,
+    ObjectHandlerConflictError,
+    PluginApiMismatchError,
+    PluginInstallError,
+)
 
 
 KNOWN_VALUE_HOOKS: frozenset[str] = frozenset({
@@ -117,36 +113,6 @@ HOOK_CALL_SPECS: dict[str, tuple[tuple[Any, ...], dict[str, Any]]] = {
     "sandbox_provider_start": (("sqlite",), {}),
     "sandbox_provider_stop": ((), {}),
 }
-
-
-class HookNotRegisteredError(RuntimeError):
-    def __init__(self, hook_name: str) -> None:
-        super().__init__(f"No plugin registered hook '{hook_name}'")
-        self.hook_name = hook_name
-
-
-class HookConflictError(RuntimeError):
-    def __init__(self, hook_name: str, plugins: list[str]) -> None:
-        super().__init__(
-            f"Hook '{hook_name}' registered by {len(plugins)} plugins "
-            f"({', '.join(plugins)}), expected exactly 1"
-        )
-        self.hook_name = hook_name
-        self.plugins = plugins
-
-
-class ObjectHandlerConflictError(RuntimeError):
-    def __init__(self, object_type: str, plugins: list[str]) -> None:
-        super().__init__(
-            f"Object handler '{object_type}' registered by multiple plugins: "
-            f"{', '.join(plugins)}"
-        )
-        self.object_type = object_type
-        self.plugins = plugins
-
-
-class PluginInstallError(RuntimeError):
-    pass
 
 
 @dataclass(frozen=True)
@@ -330,6 +296,16 @@ class ObjectPluginRegistry:
 
 
 class PluginRegistrar:
+    """Entry point for plugin registration.
+
+    Passed to a plugin's ``setup(registrar)`` function. The plugin calls
+    ``register()`` for value hooks and ``register_object_handler()`` for
+    schema diff handlers.
+
+    Attributes:
+        _plugin_name: The distribution name of the registering plugin.
+    """
+
     def __init__(self, plugin_name: str) -> None:
         self._plugin_name = plugin_name
 

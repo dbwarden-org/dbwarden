@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dbwarden.database.connection import sanitize_connection_error
+from dbwarden.connection.connection import sanitize_connection_error
 
 
 def test_connection_error_redacts_url_password():

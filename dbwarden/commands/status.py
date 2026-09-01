@@ -114,7 +114,7 @@ def status_cmd(
 ) -> None:
     """Display migration status: applied and pending migrations."""
     if all_databases:
-        from dbwarden.database.availability import (
+        from dbwarden.connection.availability import (
             DatabaseAvailability,
             MultiDatabaseResult,
             probe_database,

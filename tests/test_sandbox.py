@@ -219,7 +219,7 @@ class TestSandbox:
                 )
 
                 from dbwarden.commands.migrate import migrate_single
-                from dbwarden.database.connection import _engine_cache
+                from dbwarden.connection.connection import _engine_cache
 
                 migrate_single(db_name="primary", sandbox=True)
 

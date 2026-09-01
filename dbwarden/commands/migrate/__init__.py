@@ -136,7 +136,7 @@ def migrate_single(
     _sandbox_cm = None
     _sandbox_started = False
     if sandbox:
-        from dbwarden.database.connection import sandbox_override as _sandbox_ctx
+        from dbwarden.connection.connection import sandbox_override as _sandbox_ctx
         from dbwarden.plugin import HookRegistry
 
         sandbox_url: str | None = None
@@ -429,7 +429,7 @@ def migrate_cmd(
 
     if all_databases:
         from dbwarden.config import get_multi_db_config
-        from dbwarden.database.availability import (
+        from dbwarden.connection.availability import (
             DatabaseAvailability,
             MultiDatabaseResult,
             probe_database,

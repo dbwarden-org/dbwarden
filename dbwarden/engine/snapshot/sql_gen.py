@@ -5,15 +5,12 @@ from typing import Any
 
 from dbwarden.engine.core.models import ModelTable
 from dbwarden.engine.core.statement_order import _assemble_migration, MigrationStatement
+from dbwarden.exceptions.engine import RollbackContractError
 
 from .sql_builders import _build_clickhouse_recreate_table_sql
 
 
 IRREVERSIBLE_ANNOTATION = "dbwarden: irreversible"
-
-
-class RollbackContractError(ValueError):
-    """Raised when generated rollback SQL violates the rollback contract."""
 
 
 _IRREVERSIBLE_ROLLBACK_OPS: frozenset[str] = frozenset({
@@ -87,6 +84,26 @@ def snapshot_diff_to_sql(
     enforce_rollback_contract: bool = False,
     acknowledge_irreversible: bool = False,
 ) -> tuple[str, str, list[Any]]:
+    """Convert upgrade and rollback ops into migration SQL files.
+
+    Args:
+        upgrade_ops: List of op dicts for the forward migration.
+        rollback_ops: List of op dicts for the rollback migration.
+        database: Database connection string override.
+        db_name: Database name for multi-db setups.
+        safe_type_change: If True, use ALTER COLUMN TYPE with safety checks.
+        concurrent: If True, create indexes concurrently (PostgreSQL).
+        postgres_auto_using: If True, infer USING clause for type changes.
+        enforce_rollback_contract: If True, reject ops without valid rollback.
+        acknowledge_irreversible: If True, allow irreversible ops with a warning.
+
+    Returns:
+        A tuple of (upgrade_sql, rollback_sql, rollback_contract_warnings).
+
+    Raises:
+        RollbackContractError: If enforce_rollback_contract is True and an
+            op has no valid rollback.
+    """
     from dbwarden.engine.discovery import (
         generate_add_column_sql,
         generate_create_table_sql,

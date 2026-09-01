@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from sqlalchemy import text
 
-from dbwarden.database.connection import get_db_connection
-from dbwarden.database.queries import QueryMethod, get_seed_query, get_seed_table_name
+from dbwarden.connection.connection import get_db_connection
+from dbwarden.connection.queries import QueryMethod, get_seed_query, get_seed_table_name
 from dbwarden.models import SeedRecord
 
 

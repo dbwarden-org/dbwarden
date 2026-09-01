@@ -280,7 +280,7 @@ def ch_view_tables_from_models(
                             src_tablename = getattr(cls, "__tablename__", None)
                             break
                 if src_tablename is None:
-                    src_tablename = target  # bare table name — not a CH view, so no dep edge
+                    src_tablename = target  # bare table name; not a CH view, so no dep edge
             else:
                 src_tablename = None
 
@@ -288,7 +288,7 @@ def ch_view_tables_from_models(
                 deps = dep_graph.setdefault(tablename, set())
                 deps.add(src_tablename)
 
-    # Topological sort (Kahn's algorithm) — leaf/innermost first
+    # Topological sort (Kahn's algorithm), leaf/innermost first
     sorted_names: list[str] = []
     visited: set[str] = set()
 

@@ -67,7 +67,7 @@ This also means:
 - No schema drift discovered in production: drift is caught at `make-migrations` time
 - Migrations that can be generated in CI without a database connection
 
-dbwarden is not a wrapper around Alembic. It is a different approach to the same problem. Alembic asks you to describe *how* to change the database; dbwarden asks you to describe *what* the schema should be. Alembic can autogenerate revisions, but each one becomes an imperative Python artifact you own, edit, and chain — the revision history is the source of truth. With dbwarden the models stay the source of truth, and the output is plain SQL.
+dbwarden is not a wrapper around Alembic. It is a different approach to the same problem. Alembic asks you to describe *how* to change the database; dbwarden asks you to describe *what* the schema should be. Alembic can autogenerate revisions, but each one becomes an imperative Python artifact you own, edit, and chain, the revision history is the source of truth. With dbwarden the models stay the source of truth, and the output is plain SQL.
 
 Unlike tools that apply declarative diffs directly to the database, dbwarden still produces versioned, reviewable migration files with explicit rollbacks: declarative authoring without giving up auditable deploy artifacts.
 

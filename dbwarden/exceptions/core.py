@@ -1,11 +1,15 @@
+"""Core dbwarden exceptions."""
+from __future__ import annotations
+
+
 class DBWardenError(Exception):
-    """Base exception for dbwarden errors."""
+    """Base exception for all dbwarden errors."""
 
     pass
 
 
 class DirectoryNotFoundError(DBWardenError):
-    """Raised when migrations directory is not found."""
+    """Raised when the migrations directory is not found."""
 
     pass
 
@@ -29,7 +33,7 @@ class VersionNotFoundError(DBWardenError):
 
 
 class PendingMigrationsError(DBWardenError):
-    """Raised when there are pending migrations but operation requires none."""
+    """Raised when there are pending migrations but the operation requires none."""
 
     pass
 
@@ -71,29 +75,12 @@ class DBDisconnectedError(DatabaseError):
 
 
 class ImmutableChangeError(DBWardenError):
-    """Raised when a schema change would require modifying an immutable option.
+    """Raised when a schema change would modify an immutable option.
 
     Some ClickHouse table options (e.g. PARTITION BY, PRIMARY KEY) cannot be
-    changed after table creation.  This error refuses the change and explains
+    changed after table creation. This error refuses the change and explains
     the immutable constraint and available alternatives (recreate + data copy
     via ``data_op()``).
     """
 
     pass
-
-
-__all__ = [
-    "ConfigurationError",
-    "DBDisconnectedError",
-    "DBWardenConfigError",
-    "DBWardenError",
-    "DatabaseError",
-    "DirectoryNotFoundError",
-    "ImmutableChangeError",
-    "LockError",
-    "NoMigrationsError",
-    "NoSeedsError",
-    "PendingMigrationsError",
-    "SeedError",
-    "VersionNotFoundError",
-]

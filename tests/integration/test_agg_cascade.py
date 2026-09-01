@@ -1,17 +1,17 @@
-"""Cascading aggregating view container test — asserts VALUES, not SQL shape.
+"""Cascading aggregating view container test: asserts VALUES, not SQL shape.
 
 The critical combinator distinction: ``sumState(x)`` vs ``sumMergeState(x)``.
 Both parse. A wrong combinator at a cascade level produces silently wrong
 numbers, not an error. The only thing that can disagree is real data through
-a real cascade — mocked SQL assertions pass tautologically.
+a real cascade; mocked SQL assertions pass tautologically.
 
 This file has TWO test classes:
 
-1. ``TestCascadeCorrectSQL`` — uses hand-written DDL with the *correct*
+1. ``TestCascadeCorrectSQL``: uses hand-written DDL with the *correct*
    combinator (sumMergeState at cascade levels). This establishes that the
    cascade mechanism works in ClickHouse and the test infrastructure is sound.
 
-2. ``TestCascadeViaDbWardenAPI`` — uses ``aggregating_view()`` / ``to_dict()``
+2. ``TestCascadeViaDbWardenAPI``: uses ``aggregating_view()`` / ``to_dict()``
    to generate DDL. **Before the fix**: generates wrong combinators, so the
    test fails. **After the fix**: generates correct combinators, test passes.
    This is the gate.
@@ -258,5 +258,5 @@ class TestCascadeViaDbWardenAPI:
             f"Cascade produced wrong values: {result}.\n"
             f"The MV SELECT was:\n{daily_select}\n"
             f"Expected sumMergeState for cascade level, but likely got "
-            f"sumState (state-of-a-state — invalid or silently wrong)."
+            f"sumState (state-of-a-state; invalid or silently wrong)."
         )
