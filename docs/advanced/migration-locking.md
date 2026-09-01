@@ -1,25 +1,33 @@
 # Migration Locking
 
-dbwarden uses a database-level lock to prevent concurrent schema mutation. This page explains how it works, what happens when it fails, and how to recover from a stuck lock.
+dbwarden uses per-engine native locking to prevent concurrent schema mutation. This page explains how it works, what happens when it fails, and how to recover from a stuck lock.
 
 ## How locking works
 
 When `dbwarden migrate` runs, it:
 
-1. Acquires a lock row in the `dbwarden_lock` table (created on first use; the table name is `dbwarden_lock`, not `_dbwarden_lock`)
-2. Executes all pending migrations within that lock
-3. Releases the lock on success or failure
+1. Acquires a native lock on the database engine (advisory lock for PostgreSQL, named lock for MySQL, BEGIN IMMEDIATE for SQLite, lease for ClickHouse)
+2. Writes a status row in the `dbwarden_lock` table for observability
+3. Starts a background heartbeat to detect stale workers
+4. Executes all pending migrations
+5. Stops the heartbeat and releases the lock on success or failure
 
-The lock is stored in the target database itself: no external service (Redis, filesystem) is required.
+The lock mechanism varies by engine:
+
+| Engine | Lock Type | Grade | Auto-release on crash |
+|--------|-----------|-------|----------------------|
+| PostgreSQL | Session-level advisory lock | A | Yes (connection teardown) |
+| MySQL/MariaDB | Named user lock (GET_LOCK) | A | Yes (connection teardown) |
+| SQLite | BEGIN IMMEDIATE transaction | B | Yes (journal cleanup) |
+| ClickHouse | Lease row with fencing token | C | After TTL expiry |
 
 If a second `migrate` invocation starts while the first holds the lock, it fails immediately with:
 
 ```
-LockError: Migration lock is already held. Another migration process may be running.
-Use 'dbwarden unlock' to release the lock if necessary.
+LockError: Could not acquire migration lock. <holder diagnostics>
 ```
 
-dbwarden does not retry on lock failure. The calling process (CI job, deploy script) must decide whether to retry or abort.
+dbwarden does not retry on lock failure by default. The calling process (CI job, deploy script) must decide whether to retry or abort.
 
 ## Inspecting lock state
 
@@ -36,31 +44,40 @@ Migration lock: INACTIVE
 Output when locked:
 
 ```
-Migration lock: ACTIVE
-Another migration process may be running.
+Migration lock status
+  State:       RUNNING
+  Health:      HEALTHY
+  Execution:   abc123...
+  Host:        deploy-runner-7
+  PID:         1234
+  Migration:   V042
+  Acquired:    2026-08-22 12:03:14Z
+  Heartbeat:   2026-08-22 12:04:01Z
 ```
 
-Use the `locked_at` timestamp in the lock table to determine whether the lock is held by a live process or is stale.
+Health verdicts:
 
-## When a migration fails mid-run
+- **HEALTHY**: Lock held, heartbeat is fresh
+- **STUCK**: Lock held, heartbeat is stale (process may be paused or dead)
+- **DEAD**: Lock free, status row shows dead worker
+- **AVAILABLE**: No lock held
 
-If a migration raises an error after partial execution:
+## Heartbeat
 
-1. dbwarden rolls back the in-flight transaction (if the database supports transactional DDL, PostgreSQL does, MySQL does not)
-2. The lock is released
-3. The CLI exits non-zero
+dbwarden runs a background heartbeat that updates the `last_heartbeat_at` timestamp every 15 seconds. This allows other processes to detect stale or dead workers.
 
-For PostgreSQL, partial application within a migration file is rolled back atomically. The migration remains in "pending" state.
+On native-lock engines (PostgreSQL, MySQL), heartbeat failure is an observability event only; the migration continues. On fallback engines (ClickHouse), heartbeat failure is fatal after a configurable grace period.
 
-For MySQL and databases without transactional DDL, partial application is possible. Inspect the database state manually before retrying.
+The heartbeat runs on a separate connection to avoid interfering with the migration connection.
 
 ## Stuck lock recovery
 
-A lock becomes stale when:
+A lock becomes stuck when:
 
 - The migration process was killed (SIGKILL, OOM, machine restart)
 - A CI job was cancelled mid-run
 - A deploy container was stopped before migrate completed
+- The process is paused (GC, SIGSTOP, CPU starvation)
 
 **Before unlocking, confirm no migration is running:**
 
@@ -74,7 +91,7 @@ ps aux | grep <pid>
 If the process is genuinely dead:
 
 ```bash
-# 1. Confirm lock state
+# 1. Confirm lock state and holder
 $ dbwarden lock-status --database primary
 
 # 2. Inspect migration history to see what ran last
@@ -84,21 +101,61 @@ $ dbwarden history --database primary
 $ dbwarden status --database primary
 
 # 4. Release the stale lock
-$ dbwarden unlock --database primary
+$ dbwarden unlock --database primary --force
 
 # 5. Retry migration
 $ dbwarden migrate --database primary
 ```
+
+The `--force` flag skips the confirmation prompt. Without it, `unlock` shows holder diagnostics and requires confirmation.
+
+## Recovery state machine
+
+When a new worker acquires the lock and detects a dead predecessor, it enters the recovery state machine:
+
+```
+AVAILABLE → RUNNING → COMPLETE
+                     → FAILED
+                     → DEAD (detected by new acquirer)
+                          → INSPECTING
+                               → COMPLETE (all steps applied)
+                               → resume (safely resumable)
+                               → NEEDS_REVIEW (human decision)
+```
+
+The INSPECTING state compares the recorded migration checksum with the candidate migration. If they match, the migration can be resumed. If they don't match, the worker transitions to NEEDS_REVIEW and waits for human intervention.
 
 ## When NOT to use `unlock`
 
 Do not run `unlock` if:
 
 - You are unsure whether a migration process is still running
-- The `locked_at` timestamp is recent (within seconds or minutes); the process may still be alive
+- The lock status shows HEALTHY with a recent heartbeat
 - Multiple processes share a database and you cannot confirm all are idle
 
 Releasing a lock held by a live migration process will allow a second migration to start concurrently, which can corrupt schema state.
+
+## ClickHouse coordination profiles
+
+ClickHouse has no session-scoped user locks, so dbwarden uses a lease-based approach with coordination profiles:
+
+| Profile | Description | Grade |
+|---------|-------------|-------|
+| CH-0 | Lease row with fencing token | C |
+| CH-1 | CH-0 + strict idempotency enforcement | C |
+| CH-2 | CH-1 + Keeper-backed lock | C |
+| CH-3 | Migration proxy choke point | A- |
+| CH-4 | Singleton executor | A* |
+
+CH-0 and CH-1 are implemented in core. CH-2, CH-3, and CH-4 require external infrastructure and are documented as deployment options.
+
+### CH-1 idempotency
+
+Under CH-1, non-idempotent statements are refused unless `--allow-non-idempotent` is passed:
+
+- Idempotent: `CREATE TABLE IF NOT EXISTS`, `DROP TABLE IF EXISTS`, `ALTER TABLE ADD COLUMN IF NOT EXISTS`
+- Non-idempotent: `RENAME`, `MODIFY COLUMN`, `UPDATE`, `DELETE`
+- Unknown: treated as non-idempotent for safety
 
 ## Preventing concurrent migration in CI
 
@@ -126,13 +183,16 @@ concurrency:
 
 `cancel-in-progress: false` queues the second run instead of cancelling it, which avoids orphaned locks from killed jobs.
 
-### 6. Confirm status
+## Configuration
 
-Run `dbwarden status` to verify no pending migrations remain:
-
-```bash
-$ dbwarden status --database primary
-```
+| Key | Default | Description |
+|-----|---------|-------------|
+| `lock.namespace` | `"default"` | Lock scope (allows independent lock streams) |
+| `lock.acquire_wait_timeout` | `0` (fail fast) | Seconds to wait for lock acquisition |
+| `heartbeat.interval` | `15` | Seconds between heartbeat updates |
+| `heartbeat.ttl` | `45` | Seconds after which heartbeat is stale |
+| `recovery.policy` | `halt` | Recovery behavior: `halt`, `resume_idempotent`, `force` |
+| `clickhouse.coordination_profile` | `CH-1` | ClickHouse locking profile |
 
 ## Distributed locking with Redis
 
@@ -151,20 +211,16 @@ async with migration_lock() as locked:
 
 The Redis lock uses `SETNX` + `EXPIRE` with a default TTL of 60 seconds.
 If the application crashes while holding the lock, Redis releases it
-automatically after the TTL expires. Long-running migrations should
-specify a custom TTL or implement lock extension.
-
-The lock is also used internally by the `POST /migrate` FastAPI endpoint
-to serialize migration requests across application instances.
+automatically after the TTL expires.
 
 ### Database-level vs Redis lock
 
 | Aspect | Database lock | Redis lock |
 |--------|---------------|------------|
-| Scope | CLI commands (`migrate`, `seed`) | FastAPI `POST /migrate` endpoint |
+| Scope | CLI commands (`migrate`, `rollback`, `downgrade`) | FastAPI `POST /migrate` endpoint |
 | Storage | `dbwarden_lock` table in the target database | Redis key |
-| TTL | No TTL: manual `unlock` required after crash | 60-second default TTL |
-| Failure mode | Blocks other CLI commands until released | Auto-released after TTL |
+| TTL | Heartbeat-based stale detection (default 45s); native locks auto-release on connection close | 60-second default TTL |
+| Failure mode | Detects stale locks via heartbeat; recovery state machine guides recovery | Auto-released after TTL |
 | External dependency | None (uses the database itself) | Redis required |
 
 Both locks can be used independently or together; they guard different

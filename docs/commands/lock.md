@@ -7,15 +7,110 @@ Inspect and recover migration lock state.
 ```bash
 $ dbwarden lock-status --database primary
 $ dbwarden unlock --database primary
+$ dbwarden unlock --database primary --force
 ```
 
-## Options
+## `lock-status`
 
-- `--database`, `-d`
+Shows detailed lock status including state, health, holder information, and heartbeat age.
+
+### Output
+
+When unlocked:
+
+```
+Migration lock: INACTIVE
+```
+
+When locked:
+
+```
+Migration lock status
+  State:       RUNNING
+  Health:      HEALTHY
+  Execution:   abc123...
+  Host:        deploy-runner-7
+  PID:         1234
+  Migration:   V042
+  Acquired:    2026-08-22 12:03:14Z
+  Heartbeat:   2026-08-22 12:04:01Z
+```
+
+### Health verdicts
+
+- **HEALTHY**: Lock held, heartbeat is fresh
+- **STUCK**: Lock held, heartbeat is stale (process may be paused or dead)
+- **DEAD**: Lock free, status row shows dead worker
+- **AVAILABLE**: No lock held
+
+### JSON output
+
+```bash
+$ DBWARDEN_OUTPUT=json dbwarden lock-status --database primary
+```
+
+```json
+{
+  "database": "primary",
+  "locked": true,
+  "state": "RUNNING",
+  "health": "HEALTHY",
+  "execution_id": "abc123...",
+  "host": "deploy-runner-7",
+  "pid": 1234,
+  "migration_version": "V042"
+}
+```
+
+## `unlock`
+
+Releases the migration lock. Without `--force`, shows holder diagnostics and requires confirmation.
+
+### Options
+
+- `--database`, `-d` - Target database name
+- `--force`, `-f` - Skip confirmation and force-release the lock
+
+### Behavior
+
+Without `--force`:
+
+```
+Lock holder information
+  State:       RUNNING
+  Host:        deploy-runner-7
+  PID:         1234
+  Execution:   abc123...
+  Migration:   V042
+  Acquired:    2026-08-22 12:03:14Z
+  Heartbeat:   2026-08-22 12:04:01Z
+This will force-release the lock without terminating the holder's connection.
+Use 'dbwarden unlock --force' to skip this prompt in automation.
+```
+
+With `--force`:
+
+```
+Migration lock released successfully.
+```
+
+### When to use
+
+- After confirming no migration process is running
+- When the lock status shows STUCK or DEAD
+- In automation scripts (always use `--force`)
+
+### When NOT to use
+
+- If a migration process might still be running
+- If the lock status shows HEALTHY with a recent heartbeat
+- Without first checking `lock-status` and `history`
 
 ## Notes
 
-- use `lock-status` to inspect lock state
-- use `unlock` only when lock is stale and no migration is running
+- `lock-status` reads the full status row including heartbeat age
+- `unlock` uses `force_release_lock()` which sets state to AVAILABLE
+- For native-lock engines (PostgreSQL, MySQL), the actual lock is released when the holder's connection closes
+- The status row is updated to reflect the release
 
 See also: [Migration Locking](../advanced/migration-locking.md)

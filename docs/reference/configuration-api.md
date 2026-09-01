@@ -54,6 +54,50 @@ Both fire when your `dbwarden.py` is loaded, not at migration time.
 
 Install with `dbwarden plugin add <name>`. `pg_schema` and `pg_migration_lock_timeout` are core and need no plugin.
 
+## Lock Configuration
+
+dbwarden v2 introduces per-engine native locking with configurable behavior. These settings control lock acquisition, heartbeat, and recovery:
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `lock.namespace` | `str` | `"default"` | Lock scope (allows independent lock streams) |
+| `lock.acquire_wait_timeout` | `float` | `0` | Seconds to wait for lock acquisition (0 = fail fast) |
+| `heartbeat.interval` | `float` | `15` | Seconds between heartbeat updates |
+| `heartbeat.ttl` | `int` | `45` | Seconds after which heartbeat is stale |
+| `recovery.policy` | `str` | `"halt"` | Recovery behavior: `halt`, `resume_idempotent`, `force` |
+| `clickhouse.coordination_profile` | `str` | `"CH-1"` | ClickHouse locking profile: `CH-0` through `CH-4` |
+| `clickhouse.keeper_path` | `str` | `"/dbwarden/locks"` | ClickHouse Keeper znode path (CH-2+) |
+| `clickhouse.takeover_grace` | `str` | `"30s"` | ClickHouse proxy takeover grace window (CH-3) |
+
+### Lock strategies by engine
+
+| Engine | Strategy | Grade | Description |
+|--------|----------|-------|-------------|
+| PostgreSQL | Advisory lock | A | Session-level `pg_advisory_lock` on migration connection |
+| MySQL/MariaDB | Named lock | A | `GET_LOCK()` on migration connection |
+| SQLite | BEGIN IMMEDIATE | B | Write lock held for entire migration run |
+| ClickHouse | Lease + fencing token | C | Atomic upsert with TTL-based expiry |
+
+### Configuration example
+
+```python
+from dbwarden import DbwardenDatabase
+
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    default = True
+    database_type = "postgresql"
+    database_url_sync = "postgresql://user:pass@localhost:5432/myapp"
+    model_paths = ["app.models"]
+    
+    # Lock configuration
+    lock_namespace = "default"
+    lock_acquire_wait_timeout = 0  # fail fast
+    heartbeat_interval = 15
+    heartbeat_ttl = 45
+    recovery_policy = "halt"
+```
+
 ## Declarative API
 
 For configuration that benefits from inheritance, define a concrete subclass of
