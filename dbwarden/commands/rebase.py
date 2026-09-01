@@ -91,7 +91,13 @@ def rebase_cmd(
     # Find the merge-base version from the superseded markers
     merge_base_version = _find_merge_base_version(migrations_dir, superseded_applied)
 
-    if merge_base_version:
+    # R9.5: Check for irreversible superseded migrations
+    has_irreversible = _check_irreversible_superseded(migrations_dir, superseded_applied)
+    if has_irreversible:
+        warning("Superseded migration(s) contain irreversible declarations.")
+        info("Rollback path blocked. Falling back to reset...")
+        _reset_database(database, yes, verbose)
+    elif merge_base_version:
         info(f"Rolling back to merge-base version {merge_base_version}...")
         from dbwarden.commands.rollback import rollback_cmd
 
@@ -147,18 +153,98 @@ def _find_merge_base_version(migrations_dir: str, superseded_versions: list[str]
     return None
 
 
+def _check_irreversible_superseded(migrations_dir: str, superseded_versions: list[str]) -> bool:
+    """Check if any superseded migration contains an irreversible declaration.
+
+    R9.5: A branch migration carrying an explicit irreversible declaration
+    that was applied locally blocks the rollback path.
+    """
+    from dbwarden.engine.file_parser import parse_rollback_statements
+
+    for version in superseded_versions:
+        for f in Path(migrations_dir).glob(f"*__{version}_*.sql"):
+            try:
+                # Check for irreversible marker in the file
+                content = f.read_text()
+                if "dbwarden:irreversible" in content:
+                    logger.warning("Found irreversible declaration in %s", f.name)
+                    return True
+
+                # Also check if rollback section is empty or contains placeholder
+                rollback_statements = parse_rollback_statements(f)
+                if not rollback_statements:
+                    # No rollback section means it's effectively irreversible
+                    logger.warning("No rollback section in %s (effectively irreversible)", f.name)
+                    return True
+
+            except Exception as e:
+                logger.debug("Failed to check reversibility for %s: %s", f.name, e)
+
+    return False
+
+
 def _reset_database(database: str | None, yes: bool, verbose: bool) -> None:
     """Reset the database by dropping and re-creating.
 
     This is the fallback path when rollback to merge-base fails.
+    R7.5: Before reset, print row counts of non-empty tables.
     """
     from dbwarden.config import get_database
     from dbwarden.connection.connection import get_db_connection
 
     config = get_database(database)
 
+    # R7.5: Print row counts before reset
     if not yes:
         warning("This will drop and re-create the database.")
+        info("Current table row counts:")
+        try:
+            with get_db_connection(database) as conn:
+                if config.database_type == "sqlite":
+                    result = conn.execute(
+                        text("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+                    )
+                    tables = [row[0] for row in result.fetchall()]
+                    for table in tables:
+                        try:
+                            count_result = conn.execute(text(f"SELECT COUNT(*) FROM {table}"))
+                            count = count_result.scalar()
+                            if count and count > 0:
+                                info(f"  {table}: {count} rows")
+                        except Exception:
+                            pass
+                elif config.database_type == "postgresql":
+                    schema = getattr(config, "postgres_schema", "public") or "public"
+                    result = conn.execute(
+                        text(
+                            f"SELECT table_name FROM information_schema.tables "
+                            f"WHERE table_schema = '{schema}' AND table_type = 'BASE TABLE'"
+                        )
+                    )
+                    tables = [row[0] for row in result.fetchall()]
+                    for table in tables:
+                        try:
+                            count_result = conn.execute(text(f"SELECT COUNT(*) FROM {schema}.{table}"))
+                            count = count_result.scalar()
+                            if count and count > 0:
+                                info(f"  {schema}.{table}: {count} rows")
+                        except Exception:
+                            pass
+                elif config.database_type in ("mysql", "mariadb"):
+                    result = conn.execute(text("SHOW TABLES"))
+                    tables = [row[0] for row in result.fetchall()]
+                    for table in tables:
+                        try:
+                            count_result = conn.execute(text(f"SELECT COUNT(*) FROM {table}"))
+                            count = count_result.scalar()
+                            if count and count > 0:
+                                info(f"  {table}: {count} rows")
+                        except Exception:
+                            pass
+        except Exception as e:
+            logger.debug("Failed to get row counts: %s", e)
+
+        info("Consider dumping fixtures or using the seeds plugin before reset.")
         response = input("Are you sure? (yes/no): ")
         if response.lower() != "yes":
             info("Aborted.")

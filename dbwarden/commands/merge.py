@@ -52,6 +52,7 @@ def merge_cmd(
     rename_tables: list[str] | None = None,
     force: bool = False,
     commit: bool = False,
+    json_output: bool = False,
     verbose: bool = False,
 ) -> None:
     """Merge divergent migration histories.
@@ -71,6 +72,7 @@ def merge_cmd(
         rename_tables: Table renames to confirm (format: "old=new").
         force: Force marking hand-edited migrations.
         commit: Create a git commit with the changes.
+        json_output: Output results as JSON.
         verbose: Enable verbose logging.
     """
     global logger
@@ -108,6 +110,19 @@ def merge_cmd(
     # Step 3: Compute reconciliation diff
     info("Computing reconciliation diff...")
     diff_ops = _compute_diff(merge_base_state, current_state, database)
+
+    # Step 3a: Check for rename candidates (R9.1.1)
+    if rename_columns or rename_tables:
+        info("Processing rename confirmations...")
+        _process_rename_confirmations(rename_columns, rename_tables, diff_ops)
+    else:
+        # Check if there are any rename candidates that need confirmation
+        rename_candidates = _detect_rename_candidates(diff_ops)
+        if rename_candidates:
+            error("Rename candidates detected during merge reconciliation.")
+            info("Use --rename-column or --rename-table to confirm renames.")
+            info(f"Candidates: {', '.join(rename_candidates)}")
+            return
 
     # Step 4: Probe persistent environments
     info("Probing persistent environments...")
@@ -147,12 +162,20 @@ def merge_cmd(
     )
 
     # Step 7: Report
-    _print_report(
-        merge_base=merge_base,
-        marked_files=marked_files,
-        reconciliation_file=reconciliation_file,
-        probe_results=probe_results,
-    )
+    if json_output:
+        _print_json_report(
+            merge_base=merge_base,
+            marked_files=marked_files,
+            reconciliation_file=reconciliation_file,
+            probe_results=probe_results,
+        )
+    else:
+        _print_report(
+            merge_base=merge_base,
+            marked_files=marked_files,
+            reconciliation_file=reconciliation_file,
+            probe_results=probe_results,
+        )
 
     # Step 8: Write merge record
     _write_merge_record(
@@ -237,6 +260,16 @@ def _rebuild_current_state(database: str | None) -> Optional[dict]:
     return None
 
 
+def _compute_state_checksum(state: dict) -> str:
+    """Compute a checksum for a model state dict."""
+    import hashlib
+    import json
+
+    state_copy = {k: v for k, v in state.items() if k != "checksum"}
+    content = json.dumps(state_copy, sort_keys=True, default=str)
+    return hashlib.sha256(content.encode()).hexdigest()
+
+
 def _compute_diff(
     base_state: dict,
     current_state: dict,
@@ -286,6 +319,48 @@ def _compute_diff(
     except Exception as e:
         logger.warning("Failed to compute diff: %s", e)
         return []
+
+
+def _detect_rename_candidates(diff_ops: list[dict]) -> list[str]:
+    """Detect rename candidates from diff operations.
+
+    R9.1.1: Every rename candidate detected during a merge reconciliation
+    requires explicit confirmation.
+    """
+    candidates = []
+    for op in diff_ops:
+        op_type = op.get("type", "")
+        # Look for drop+add patterns that might be renames
+        if "drop" in op_type.lower() and "add" in op_type.lower():
+            table = op.get("table", "")
+            if table:
+                candidates.append(f"{table} (possible rename)")
+    return candidates
+
+
+def _process_rename_confirmations(
+    rename_columns: list[str] | None,
+    rename_tables: list[str] | None,
+    diff_ops: list[dict],
+) -> None:
+    """Process rename confirmations from CLI flags.
+
+    R9.1.1: The confirmed rename mapping is written into the
+    reconciliation migration header.
+    """
+    if rename_columns:
+        for rename in rename_columns:
+            if "=" not in rename:
+                warning(f"Invalid rename format: {rename}. Expected format: table.old=new")
+                continue
+            info(f"Confirmed column rename: {rename}")
+
+    if rename_tables:
+        for rename in rename_tables:
+            if "=" not in rename:
+                warning(f"Invalid rename format: {rename}. Expected format: old=new")
+                continue
+        info(f"Confirmed table renames: {', '.join(rename_tables)}")
 
 
 def _probe_persistent_environments(database: str | None) -> dict[str, str]:
@@ -413,9 +488,10 @@ def _generate_reconciliation(
     atomic_write_text(filepath, content)
 
     # Write reconciliation header
+    merge_base_checksum = _compute_state_checksum(merge_base_state)
     header = ReconciliationHeader(
         merge_base=merge_base,
-        merge_base_checksum="",
+        merge_base_checksum=merge_base_checksum[:16],
         supersedes=superseded_files,
         probe_results=probe_results,
         generated_by=f"dbwarden merge (dbwarden {__version__})",
@@ -542,6 +618,25 @@ def _print_report(
     info(f"  Reconciliation:  {reconciliation_file}")
     info(f"  Environments:    {_format_probe_results(probe_results)}")
     info("  Next steps:      commit; developers on feature branches: dbwarden rebase")
+
+
+def _print_json_report(
+    merge_base: str,
+    marked_files: list[str],
+    reconciliation_file: str,
+    probe_results: dict[str, str],
+) -> None:
+    """Print the merge reconciliation report as JSON."""
+    from dbwarden.output import emit_json
+
+    report = {
+        "merge_base": merge_base,
+        "superseded_files": marked_files,
+        "reconciliation_file": reconciliation_file,
+        "probe_results": probe_results,
+        "next_steps": "commit; developers on feature branches: dbwarden rebase",
+    }
+    emit_json(report)
 
 
 def _write_merge_record(

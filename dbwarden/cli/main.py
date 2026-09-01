@@ -728,6 +728,9 @@ def merge(
     commit: bool = typer.Option(
         False, "--commit", help="Create a git commit with the changes"
     ),
+    json_output: bool = typer.Option(
+        False, "--json", help="Output results as JSON"
+    ),
     verbose: bool = typer.Option(
         False, "--verbose", "-v", help="Enable verbose logging"
     ),
@@ -741,6 +744,7 @@ def merge(
         rename_tables=rename_table,
         force=force,
         commit=commit,
+        json_output=json_output,
         verbose=verbose,
     )
 
