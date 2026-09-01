@@ -55,6 +55,7 @@ CH-1 adds strict idempotency checking on top of CH-0. Non-idempotent statements 
 **Why it exists:** Even with CH-0's lease, a stale worker can execute non-idempotent DDL after losing its lease. Idempotent DDL (`CREATE TABLE IF NOT EXISTS`, `DROP TABLE IF EXISTS`) is safe to re-execute; non-idempotent DDL is not. By refusing non-idempotent statements, CH-1 limits the blast radius of the stale-worker window to idempotent operations only.
 
 **Idempotent** (allowed):
+
 - `CREATE TABLE/VIEW/DICTIONARY IF NOT EXISTS`
 - `DROP TABLE/VIEW/DICTIONARY IF EXISTS`
 - `ALTER TABLE ADD COLUMN IF NOT EXISTS`
@@ -62,6 +63,7 @@ CH-1 adds strict idempotency checking on top of CH-0. Non-idempotent statements 
 - Metadata-only alters (COMMENT, TTL)
 
 **Non-idempotent** (refused):
+
 - `RENAME` (no idempotent form)
 - `MODIFY COLUMN` (rewrites data)
 - `UPDATE` / `DELETE` (data mutations)

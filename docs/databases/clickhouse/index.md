@@ -210,6 +210,7 @@ WHERE NOT EXISTS (
 CH-1 adds strict idempotency checking. Non-idempotent statements are refused unless `--allow-non-idempotent` is passed:
 
 **Idempotent** (allowed):
+
 - `CREATE TABLE IF NOT EXISTS`
 - `DROP TABLE IF EXISTS`
 - `ALTER TABLE ADD COLUMN IF NOT EXISTS`
@@ -217,6 +218,7 @@ CH-1 adds strict idempotency checking. Non-idempotent statements are refused unl
 - Metadata-only alters (COMMENT, TTL)
 
 **Non-idempotent** (refused):
+
 - `RENAME` (no idempotent form)
 - `MODIFY COLUMN` (rewrites data)
 - `UPDATE` / `DELETE` (data mutations)
