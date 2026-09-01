@@ -64,3 +64,52 @@ $ dbwarden make-migrations
 - [Type Mapping](type-mapping.md) : SQLAlchemy type → PostgreSQL type normalization
 - [Storage Parameters](storage-params.md) : Table and index storage parameters, autovacuum tuning
 - [Migration Safety](migration-safety.md) : Safety classification table
+
+## Migration locking
+
+dbwarden uses **session-level advisory locks** for PostgreSQL migrations. This provides strong mutual exclusion without requiring external services.
+
+### How it works
+
+When `dbwarden migrate` runs:
+
+1. Opens a dedicated migration connection
+2. Verifies the target is a primary (not a read replica) via `pg_is_in_recovery()`
+3. Detects transaction-pooling proxies (PgBouncer) and refuses if detected
+4. Acquires a session-level advisory lock via `pg_try_advisory_lock()`
+5. Holds the connection and lock for the entire migration run
+6. Releases the lock when the connection closes
+
+### Lock properties
+
+- **Scope**: Session-level (tied to the connection, not the transaction)
+- **Release**: Automatic on connection close (crash-safe)
+- **Fencing**: Stale workers cannot mutate; their next statement fails at the protocol layer
+- **Re-entrancy**: Refuses nested runs on the same namespace/connection
+
+### Primary vs replica
+
+dbwarden refuses to acquire locks on read replicas:
+
+```sql
+SELECT pg_is_in_recovery()  -- Must return false
+```
+
+This prevents the common mistake of running migrations against a replica.
+
+### Transaction pooling detection
+
+dbwarden detects transaction-pooling proxies like PgBouncer by calling `pg_backend_pid()` twice across a statement boundary. If the backend PIDs differ, the lock is refused because session-level advisory locks are meaningless under transaction pooling.
+
+### Configuration
+
+```python
+database_config(
+    database_name="primary",
+    database_type="postgresql",
+    database_url_sync="postgresql://...",
+    pg_migration_lock_timeout=5000,  # ms, for DDL lock_timeout
+)
+```
+
+The `pg_migration_lock_timeout` sets PostgreSQL's `lock_timeout` for DDL operations, preventing indefinite waits on table locks.

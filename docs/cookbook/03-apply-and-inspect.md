@@ -28,13 +28,14 @@ $ dbwarden migrate --database primary
 When you run `migrate`, dbwarden:
 
 1. Creates the metadata table (`_dbwarden_migrations`) if it doesn't exist
-2. Creates the lock table (`_dbwarden_lock`) if it doesn't exist
-3. Acquires a migration lock (prevents concurrent runs)
-4. Reads all migration files and filters to pending (unapplied) ones
-5. Executes the `-- upgrade` SQL of each pending migration
-6. Records each migration's version, checksum, and timestamp
-7. Writes a schema snapshot file for future diffs
-8. Releases the lock
+2. Creates the lock table (`dbwarden_lock`) if it doesn't exist
+3. Acquires a native lock (advisory lock for PostgreSQL, named lock for MySQL, BEGIN IMMEDIATE for SQLite)
+4. Writes a status row for observability and starts a heartbeat
+5. Reads all migration files and filters to pending (unapplied) ones
+6. Executes the `-- upgrade` SQL of each pending migration
+7. Records each migration's version, checksum, and timestamp
+8. Writes a schema snapshot file for future diffs
+9. Stops the heartbeat and releases the lock
 
 ```
 [dbwarden] Applying primary__0001_create_core_tables...
@@ -190,7 +191,7 @@ Database: primary
     products (6 columns)
     tags (2 columns)
   Migration table: _dbwarden_migrations (present)
-  Lock table: _dbwarden_lock (present)
+  Lock table: dbwarden_lock (present)
 ```
 
 This confirms the database is reachable and has the expected schema.

@@ -25,6 +25,7 @@ projects and integration examples.
 - [RBAC](rbac.md) : Roles, users, row policies, quotas, settings profiles, grants (needs `dbwarden-ch-rbac`)
 - [Data Operations](data-operations.md) : Partition operations, mutations, `OPTIMIZE`, `POPULATE`
 - [Safety Classification](safety.md) : Classification levels, `--force`, and the recreate pipeline
+- [Migration Locking](../../advanced/clickhouse-locking.md) : Lock strategies, ON CLUSTER, idempotency, and production setup
 
 ## Quick-start
 
@@ -170,6 +171,118 @@ These are not gaps: they are deliberate boundaries, documented with reasoning so
 | **SYSTEM commands** | Operational concern, not schema management. Not declarable in a model. |
 | **Server config (`config.xml`)** | Infrastructure. Same boundary as PostgreSQL's `postgresql.conf`. |
 | **Secret values** | Declare-only by design (see [named-collections](named-collections.md)). Values are not diffed. |
+
+## Migration locking and coordination
+
+ClickHouse has no session-scoped user locks, no synchronous compare-and-swap on table rows, and non-transactional DDL. dbwarden implements a coordination profile system to handle this:
+
+### Coordination profiles
+
+| Profile | Description | Grade | Use case |
+|---------|-------------|-------|----------|
+| **CH-0** | Lease row with fencing token | C | Non-production, human-gated |
+| **CH-1** | CH-0 + strict idempotency enforcement | C | Production with idempotent migrations |
+| **CH-2** | CH-1 + Keeper-backed lock | C | Replicated deployments with clickhouse-keeper |
+| **CH-3** | Migration proxy choke point | A- | Production with dedicated migration proxy |
+| **CH-4** | Singleton executor | A* | Kubernetes with dedicated executor pod |
+
+### CH-0: Lease with fencing token
+
+The baseline profile uses a lease row in `dbwarden_lock` with a fencing token:
+
+```sql
+INSERT INTO dbwarden_lock (namespace, execution_id, fencing_token, expires_at, ...)
+SELECT ...
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbwarden_lock FINAL
+    WHERE namespace = :ns AND expires_at > now()
+)
+```
+
+- **Acquisition**: Atomic conditional upsert; fencing token incremented from max
+- **Heartbeat**: Separate connection updates `last_heartbeat_at` every 15s
+- **Expiry**: Lease expires after `ttl_seconds` (default 120s)
+- **Residual risk**: Fence check and DDL statement are not atomic; a paused worker can mutate after lease loss
+
+### CH-1: Idempotency enforcement
+
+CH-1 adds strict idempotency checking. Non-idempotent statements are refused unless `--allow-non-idempotent` is passed:
+
+**Idempotent** (allowed):
+- `CREATE TABLE IF NOT EXISTS`
+- `DROP TABLE IF EXISTS`
+- `ALTER TABLE ADD COLUMN IF NOT EXISTS`
+- `ALTER TABLE DROP COLUMN IF EXISTS`
+- Metadata-only alters (COMMENT, TTL)
+
+**Non-idempotent** (refused):
+- `RENAME` (no idempotent form)
+- `MODIFY COLUMN` (rewrites data)
+- `UPDATE` / `DELETE` (data mutations)
+
+**Unknown** (treated as non-idempotent for safety)
+
+### CH-2: Keeper-backed lock
+
+For replicated deployments with clickhouse-keeper (ZooKeeper-compatible):
+
+- Lock via ephemeral-sequential znodes
+- Crash → session expiry → znode vanishes
+- Fencing token = znode sequence number (monotonic by construction)
+- Status row maintained for observability
+
+### CH-3: Migration proxy
+
+All migration DDL flows through a single migration proxy process:
+
+- Proxy holds the lock (CH-2 or CH-0)
+- Workers connect only to the proxy, not directly to ClickHouse
+- Network-restricted migration user (proxy-only DDL access)
+- Takeover: `KILL QUERY WHERE initial_user = 'dbwarden_migration'` during grace window
+
+### CH-4: Singleton executor
+
+Workers submit migration jobs; a single executor process executes them:
+
+- Workers have no DDL credentials
+- Executor is the only mutation channel
+- Enforced by deployment platform (Kubernetes Job with `parallelism: 1`)
+- Executor holds CH-2 Keeper lock as defense in depth
+
+### Configuration
+
+```python
+database_config(
+    database_name="analytics",
+    database_type="clickhouse",
+    database_url_sync="clickhouse://...",
+    # Lock coordination profile
+    clickhouse_coordination_profile="CH-1",  # CH-0, CH-1, CH-2, CH-3, CH-4
+    clickhouse_keeper_path="/dbwarden/locks",  # CH-2+ only
+    clickhouse_takeover_grace="30s",  # CH-3 only
+    clickhouse_proxy_dsn="clickhouse://proxy:9000/",  # CH-3 only
+)
+```
+
+### Production recommendations
+
+1. **Start with CH-1**: Enforce idempotency for all migrations
+2. **Upgrade to CH-2** if you have clickhouse-keeper (better liveness)
+3. **Upgrade to CH-3** for zero-downtime production (migration proxy)
+4. **Use CH-4** in Kubernetes with dedicated executor pods
+
+### Idempotency checklist
+
+Before enabling CH-1 in production, verify all migrations are idempotent:
+
+```bash
+# Check migration files for non-idempotent patterns
+grep -E "RENAME|MODIFY COLUMN|UPDATE|DELETE" migrations/primary/*.sql
+
+# Test migration idempotency
+dbwarden migrate --database analytics
+dbwarden migrate --database analytics  # Should be no-op
+```
 
 ## Known gaps
 
