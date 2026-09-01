@@ -582,10 +582,13 @@ def status(
     all_databases: bool = typer.Option(
         False, "--all", "-a", help="Show status for all databases"
     ),
+    all_environments: bool = typer.Option(
+        False, "--all-environments", help="Show status for all registered environments"
+    ),
 ):
     """Show migration status (applied and pending)."""
     validate_directory()
-    handle_status(database=database, all_databases=all_databases)
+    handle_status(database=database, all_databases=all_databases, all_environments=all_environments)
 
 
 @app.command()

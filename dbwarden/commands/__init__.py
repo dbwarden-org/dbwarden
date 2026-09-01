@@ -139,9 +139,9 @@ def handle_history(database: str | None = None) -> None:
     history_cmd(database=database)
 
 
-def handle_status(database: str | None = None, all_databases: bool = False) -> None:
+def handle_status(database: str | None = None, all_databases: bool = False, all_environments: bool = False) -> None:
     """Handle status command."""
-    status_cmd(database=database, all_databases=all_databases)
+    status_cmd(database=database, all_databases=all_databases, all_environments=all_environments)
 
 
 def handle_check_db(output_format: str, database: str | None = None) -> None:

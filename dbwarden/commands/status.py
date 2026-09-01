@@ -132,8 +132,20 @@ def status_single(database: str | None = None) -> None:
 def status_cmd(
     database: str | None = None,
     all_databases: bool = False,
+    all_environments: bool = False,
 ) -> None:
-    """Display migration status: applied and pending migrations."""
+    """Display migration status: applied and pending migrations.
+
+    Args:
+        database: Target database name.
+        all_databases: Show status for all configured databases.
+        all_environments: Show status for all registered environments.
+    """
+    # R4.4: --all-environments shows per-environment status
+    if all_environments:
+        _show_all_environments_status(database)
+        return
+
     if all_databases:
         from dbwarden.connection.availability import (
             DatabaseAvailability,
@@ -238,3 +250,35 @@ def _render_status_payload(payload: dict) -> None:
 
     if pending_versions:
         get_logger().info(f"Pending migrations: {', '.join(pending_versions)}")
+
+
+def _show_all_environments_status(database: str | None = None) -> None:
+    """Show status for all registered environments (R4.4)."""
+    from dbwarden.merge.environments import load_environments
+
+    envs = load_environments(database)
+
+    if not envs:
+        info("No environments registered.")
+        return
+
+    if json_mode():
+        payloads = []
+        for env_name, env_config in envs.items():
+            payload = {
+                "environment": env_name,
+                "persistent": env_config.persistent,
+                "status": "registered",
+            }
+            payloads.append(payload)
+        emit_json({"environments": payloads})
+        return
+
+    section("Environment Status")
+    for env_name, env_config in envs.items():
+        persistent_str = "persistent" if env_config.persistent else "disposable"
+        info(f"  {env_name}: {persistent_str}")
+
+    info("")
+    info("To check database status for an environment, set the URL environment variable")
+    info("and run: dbwarden status --database <name>")
