@@ -745,6 +745,64 @@ def merge(
     )
 
 
+@app.command()
+def rebase(
+    database: str | None = typer.Option(
+        None, "--database", "-d", help="Target database name"
+    ),
+    yes: bool = typer.Option(
+        False, "--yes", "-y", help="Skip confirmation prompts"
+    ),
+    force: bool = typer.Option(
+        False, "--force", "-f", help="Force operation even against persistent environments"
+    ),
+    check: bool = typer.Option(
+        False, "--check", help="Only check what would happen, don't make changes"
+    ),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Enable verbose logging"
+    ),
+):
+    """Recover a disposable environment after a merge."""
+    validate_directory()
+    from dbwarden.commands.rebase import rebase_cmd
+    rebase_cmd(
+        database=database,
+        yes=yes,
+        force=force,
+        check_only=check,
+        verbose=verbose,
+    )
+
+
+@app.command()
+def reconcile(
+    environment: str = typer.Argument(..., help="Environment name to reconcile"),
+    database: str | None = typer.Option(
+        None, "--database", "-d", help="Target database name"
+    ),
+    rename_column: list[str] | None = typer.Option(
+        None, "--rename-column", help="Column rename to confirm"
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Only show what would happen"
+    ),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Enable verbose logging"
+    ),
+):
+    """Recover a persistent environment after a dirty merge."""
+    validate_directory()
+    from dbwarden.commands.reconcile import reconcile_cmd
+    reconcile_cmd(
+        environment=environment,
+        database=database,
+        rename_columns=rename_column,
+        dry_run=dry_run,
+        verbose=verbose,
+    )
+
+
 @seed_app.command("create")
 def seed_create(
     description: str = typer.Argument(..., help="Description for the seed"),
