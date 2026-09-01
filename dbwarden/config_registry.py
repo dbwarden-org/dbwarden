@@ -67,6 +67,8 @@ def database_config(
     pg_migration_lock_timeout: int | None = None,
     ch_cluster: str | None = None,
     ch_replicated_database: bool = False,
+    clickhouse_lock_ttl: int | None = None,
+    lock_namespace: str | None = None,
     **plugin_config: Any,
 ) -> DatabaseHandle:
     """Declare a database.
@@ -97,6 +99,8 @@ def database_config(
         pg_migration_lock_timeout=pg_migration_lock_timeout,
         ch_cluster=ch_cluster,
         ch_replicated_database=ch_replicated_database,
+        clickhouse_lock_ttl=clickhouse_lock_ttl,
+        lock_namespace=lock_namespace,
     )
     return _register_config_values(values, plugin_config)
 
@@ -171,6 +175,7 @@ _DECLARATIVE_FIELDS = {
     "model_paths", "model_tables", "dev_database_type", "dev_database_url", "overlap_models",
     "auto_apply_seeds", "seed_table", "pg_schema", "pg_migration_lock_timeout",
     "ch_cluster", "ch_replicated_database",
+    "clickhouse_lock_ttl", "lock_namespace",
 }
 _DECLARATIVE_DEFAULTS = {
     "database_type": "sqlite",
@@ -192,6 +197,8 @@ _DECLARATIVE_DEFAULTS = {
     "pg_migration_lock_timeout": None,
     "ch_cluster": None,
     "ch_replicated_database": False,
+    "clickhouse_lock_ttl": None,
+    "lock_namespace": None,
 }
 _MUTABLE_FIELDS = {"model_paths", "model_tables"}
 

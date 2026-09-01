@@ -71,7 +71,6 @@ database_config(
     database_type="clickhouse",
     database_url_sync="clickhouse://default:@localhost:8123/analytics",
     model_paths=["app/analytics_models"],
-    # clickhouse_coordination_profile defaults to "CH-0"
 )
 ```
 
@@ -139,7 +138,6 @@ class Analytics(DbwardenDatabase):
     database_type = "clickhouse"
     database_url_sync = "clickhouse://default:@localhost:8123/analytics"
     model_paths = ["app/analytics_models"]
-    clickhouse_coordination_profile = "CH-1"
 ```
 
 Or with `database_config()`:
@@ -152,7 +150,6 @@ database_config(
     database_type="clickhouse",
     database_url_sync="clickhouse://default:@localhost:8123/analytics",
     model_paths=["app/analytics_models"],
-    clickhouse_coordination_profile="CH-1",
 )
 ```
 
@@ -285,7 +282,6 @@ class Analytics(DbwardenDatabase):
     database_url_sync = "clickhouse://default:@clickhouse1:8123/analytics"
     model_paths = ["app/analytics_models"]
     ch_cluster = "production_cluster"
-    clickhouse_coordination_profile = "CH-2"
 ```
 
 Or with `database_config()`:
@@ -299,8 +295,6 @@ database_config(
     database_url_sync="clickhouse://default:@clickhouse1:8123/analytics",
     model_paths=["app/analytics_models"],
     ch_cluster="production_cluster",
-    clickhouse_coordination_profile="CH-2",
-    clickhouse_keeper_path="/dbwarden/locks",  # optional, this is the default
 )
 ```
 
@@ -395,7 +389,6 @@ database_config(
     database_url_sync="clickhouse://dbwarden_migration:secure_password@proxy-host:8123/analytics",
     model_paths=["app/analytics_models"],
     ch_cluster="production_cluster",
-    clickhouse_coordination_profile="CH-2",
 )
 
 async def run_migration():
@@ -416,7 +409,7 @@ if __name__ == "__main__":
 ```python
 from dbwarden import DbwardenDatabase
 
-class Analytics(DbwardenDatabase):
+class AnalyticsWorker(DbwardenDatabase):
     database_name = "analytics"
     default = True
     database_type = "clickhouse"
@@ -430,17 +423,16 @@ class Analytics(DbwardenDatabase):
 **Proxy node (DDL access):**
 
 ```python
-from dbwarden import database_config
+from dbwarden import DbwardenDatabase
 
-database_config(
-    database_name="analytics",
-    database_type="clickhouse",
+class AnalyticsProxy(DbwardenDatabase):
+    database_name = "analytics"
+    default = True
+    database_type = "clickhouse"
     # Proxy uses the migration user (has DDL privileges)
-    database_url_sync="clickhouse://dbwarden_migration:secure_password@proxy-host:8123/analytics",
-    model_paths=["app/analytics_models"],
-    ch_cluster="production_cluster",
-    clickhouse_coordination_profile="CH-2",
-)
+    database_url_sync = "clickhouse://dbwarden_migration:secure_password@proxy-host:8123/analytics"
+    model_paths = ["app/analytics_models"]
+    ch_cluster = "production_cluster"
 ```
 
 ### CH-3 verification
@@ -523,7 +515,6 @@ data:
         database_url_sync="clickhouse://dbwarden_migration:secure_password@clickhouse1:8123/analytics",
         model_paths=["app/analytics_models"],
         ch_cluster="production_cluster",
-        clickhouse_coordination_profile="CH-2",
     )
 ```
 
@@ -619,7 +610,6 @@ database_config(
     database_url_sync="clickhouse://dbwarden_migration:secure_password@clickhouse1:8123/analytics",
     model_paths=["app/analytics_models"],
     ch_cluster="production_cluster",
-    clickhouse_coordination_profile="CH-2",
 )
 ```
 
@@ -664,10 +654,10 @@ spec:
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `clickhouse_coordination_profile` | `"CH-0"` | Coordination profile: `CH-0`, `CH-1`, `CH-2`, `CH-3`, `CH-4` |
-| `clickhouse_keeper_path` | `"/dbwarden/locks"` | ZooKeeper/keeper znode path (CH-2+) |
-| `clickhouse_lock_ttl` | `120` | Lease TTL in seconds (CH-0/CH-1) |
-| `lock_namespace` | `"default"` | Lock scope (allows independent lock streams) |
+| `ch_cluster` | `None` | ClickHouse cluster name. Appends `ON CLUSTER '<name>'` to every DDL statement. |
+| `ch_replicated_database` | `False` | Use ClickHouse `Replicated` database engine. Mutually exclusive with `ch_cluster`. |
+| `clickhouse_lock_ttl` | `120` | Lease TTL in seconds for CH-0/CH-1. How long a migration lock is held before auto-expiring. |
+| `lock_namespace` | `"default"` | Lock scope. Allows independent lock streams (e.g., separate schema migrations from data operations). |
 
 ## Troubleshooting
 

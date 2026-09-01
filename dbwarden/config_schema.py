@@ -122,6 +122,9 @@ class DatabaseEntry:
     # ClickHouse cluster configuration
     ch_cluster: str | None = None
     ch_replicated_database: bool = False
+    # ClickHouse lock tuning
+    clickhouse_lock_ttl: int | None = field(default=None, validator=_validate_lock_timeout)
+    lock_namespace: str | None = field(default=None, validator=_validate_migration_table)
     # Backend object keys contributed by plugins (pg_roles, ch_grants, and so on).
     # Kept as a dict so core does not have to know each plugin's key list.
     plugin_config: dict[str, Any] = field(factory=dict)

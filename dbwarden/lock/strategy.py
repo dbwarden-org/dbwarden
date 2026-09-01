@@ -132,10 +132,11 @@ def _generate_owner_id() -> str:
     return uuid.uuid4().hex
 
 
-def get_strategy(db_type: str) -> LockStrategy:
+def get_strategy(db_type: str, **kwargs: Any) -> LockStrategy:
     """Select the lock strategy for the given database type.
 
     Auto-dispatches to the appropriate engine-specific implementation.
+    Keyword arguments are forwarded to the strategy constructor.
     """
     if db_type == "postgresql":
         from dbwarden.lock.postgresql import PostgreSQLStrategy
@@ -145,7 +146,7 @@ def get_strategy(db_type: str) -> LockStrategy:
         return MySQLStrategy()
     if db_type == "clickhouse":
         from dbwarden.lock.clickhouse import ClickHouseStrategy
-        return ClickHouseStrategy()
+        return ClickHouseStrategy(**kwargs)
     # Default: SQLite (Grade B)
     from dbwarden.lock.sqlite import SQLiteStrategy
     return SQLiteStrategy()

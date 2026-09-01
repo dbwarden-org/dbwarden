@@ -169,6 +169,8 @@ At least one of `database_url_sync` or `database_url_async` must be provided.
 | `pg_migration_lock_timeout` | `int | None` | `None` | PostgreSQL lock timeout in seconds for migration DDL; prevents indefinite waits on conflicting locks |
 | `ch_cluster` | `str | None` | `None` | ClickHouse cluster name; appends `ON CLUSTER '<name>'` to every DDL statement. Mutually exclusive with `ch_replicated_database` |
 | `ch_replicated_database` | `bool` | `False` | ClickHouse replicated database engine; DDL propagates automatically via ZooKeeper, `ON CLUSTER` must be omitted. Mutually exclusive with `ch_cluster` |
+| `clickhouse_lock_ttl` | `int | None` | `None` | ClickHouse lease TTL in seconds (CH-0/CH-1). Defaults to 120 if not set. |
+| `lock_namespace` | `str | None` | `None` | Lock scope. Allows independent lock streams. Defaults to `"default"` if not set. |
 
 ## Field descriptions
 
@@ -548,6 +550,55 @@ analytics = database_config(
 
 See [ON Cluster](../databases/clickhouse/on-cluster.md) for the comparison between ON CLUSTER and replicated database modes.
 
+### `clickhouse_lock_ttl`
+
+Lease TTL in seconds for ClickHouse migration locking (CH-0 and CH-1 profiles). Controls how long a migration lock is held before auto-expiring. Default is 120 seconds.
+
+**Use when:**
+
+- Your migrations take longer than 2 minutes and the lock expires mid-run
+- You want a shorter lock window for faster failover
+
+**Example:**
+
+```python
+analytics = database_config(
+    database_name="analytics",
+    database_type="clickhouse",
+    database_url_sync="clickhouse://clickhouse1:8123/analytics",
+    clickhouse_lock_ttl=600,  # 10 minutes
+)
+```
+
+### `lock_namespace`
+
+Lock scope for migration locking. Allows independent lock streams so different operations (schema migrations, data operations) can run concurrently without conflicting.
+
+**Use when:**
+
+- You run schema migrations and data operations as separate processes
+- You need independent lock streams for different deployment stages
+
+**Example:**
+
+```python
+# Schema migrations
+schema_db = database_config(
+    database_name="analytics",
+    database_type="clickhouse",
+    database_url_sync="clickhouse://clickhouse1:8123/analytics",
+    lock_namespace="schema",
+)
+
+# Data operations
+data_db = database_config(
+    database_name="analytics",
+    database_type="clickhouse",
+    database_url_sync="clickhouse://clickhouse1:8123/analytics",
+    lock_namespace="data",
+)
+```
+
 ## Return value: `DatabaseHandle`
 
 `database_config()` returns a `DatabaseHandle` object with two
@@ -727,6 +778,8 @@ analytics = database_config(
 | `pg_migration_lock_timeout` |  No | `None` | PostgreSQL lock timeout (seconds) for migrations |
 | `ch_cluster` |  No | `None` | ClickHouse cluster name for ON CLUSTER DDL |
 | `ch_replicated_database` |  No | `False` | ClickHouse replicated database engine |
+| `clickhouse_lock_ttl` |  No | `None` | ClickHouse lease TTL in seconds |
+| `lock_namespace` |  No | `None` | Lock scope for independent streams |
 
 ## Related Documentation
 

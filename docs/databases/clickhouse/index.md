@@ -259,11 +259,6 @@ database_config(
     database_name="analytics",
     database_type="clickhouse",
     database_url_sync="clickhouse://...",
-    # Lock coordination profile
-    clickhouse_coordination_profile="CH-1",  # CH-0, CH-1, CH-2, CH-3, CH-4
-    clickhouse_keeper_path="/dbwarden/locks",  # CH-2+ only
-    clickhouse_takeover_grace="30s",  # CH-3 only
-    clickhouse_proxy_dsn="clickhouse://proxy:9000/",  # CH-3 only
 )
 ```
 

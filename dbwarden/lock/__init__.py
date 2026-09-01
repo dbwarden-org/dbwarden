@@ -70,7 +70,7 @@ class LockAcquisition:
 def acquire_lock(
     db_name: str | None = None,
     *,
-    namespace: str = "default",
+    namespace: str | None = None,
     migration_version: str | None = None,
     migration_checksum: str | None = None,
 ) -> LockAcquisition:
@@ -87,6 +87,16 @@ def acquire_lock(
     config = get_database(db_name)
     db_type = config.database_type
     schema = getattr(config, "postgres_schema", "public") or "public"
+
+    # Resolve namespace: explicit arg > config default > "default"
+    effective_namespace = namespace or getattr(config, "lock_namespace", None) or "default"
+
+    # Build strategy kwargs from config
+    strategy_kwargs: dict[str, Any] = {}
+    if db_type == "clickhouse":
+        ttl = getattr(config, "clickhouse_lock_ttl", None)
+        if ttl is not None:
+            strategy_kwargs["ttl_seconds"] = ttl
 
     # For lock operations, we need a raw connection (not inside engine.begin()).
     # SQLite needs BEGIN IMMEDIATE which can't run inside an existing transaction.
@@ -105,12 +115,12 @@ def acquire_lock(
         # Raw connection without BEGIN — SQLite strategy manages its own transaction
         conn = engine.connect()
 
-    strategy = get_strategy(db_type)
+    strategy = get_strategy(db_type, **strategy_kwargs)
     execution_id = _generate_execution_id()
     owner_id = _generate_owner_id()
 
     status_row = StatusRow(
-        namespace=namespace,
+        namespace=effective_namespace,
         execution_id=execution_id,
         owner_id=owner_id,
         migration_version=migration_version,
@@ -133,7 +143,7 @@ def acquire_lock(
         execution_id=execution_id,
         owner_id=owner_id,
         strategy=strategy,
-        namespace=namespace,
+        namespace=effective_namespace,
         holder_description=result.holder_description,
         error=result.error,
     )
