@@ -151,7 +151,7 @@ CH-0 and CH-1 are implemented in core. CH-2, CH-3, and CH-4 require external inf
 
 ### CH-1 idempotency
 
-Under CH-1, non-idempotent statements are refused unless `--allow-non-idempotent` is passed:
+Under CH-1, non-idempotent statements are refused:
 
 - Idempotent: `CREATE TABLE IF NOT EXISTS`, `DROP TABLE IF EXISTS`, `ALTER TABLE ADD COLUMN IF NOT EXISTS`
 - Non-idempotent: `RENAME`, `MODIFY COLUMN`, `UPDATE`, `DELETE`

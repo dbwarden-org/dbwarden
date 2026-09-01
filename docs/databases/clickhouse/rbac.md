@@ -245,16 +245,12 @@ This is checked at config load time. If the server reports that RBAC storage is 
 
 ## Drop gating
 
-`DROP USER`, `DROP ROLE`, etc. require `--clickhouse-allow-drop-rbac`:
+`DROP USER`, `DROP ROLE`, etc. are gated by the `dbwarden-ch-rbac` plugin. The plugin must be installed and configured to allow RBAC drops.
 
-```bash
-dbwarden migrate -d analytics --clickhouse-allow-drop-rbac
-```
-
-Without it, RBAC drop statements are skipped:
+Without the plugin or proper configuration, RBAC drop statements are skipped:
 
 ```
-INFO: RBAC drop skipped: use --clickhouse-allow-drop-rbac to enable
+INFO: RBAC drop skipped: plugin not configured for drops
 ```
 
 This prevents accidental deactivation of users during migration runs.
@@ -264,7 +260,7 @@ This prevents accidental deactivation of users during migration runs.
 | Change | Safety |
 |--------|--------|
 | Add RBAC object | INFO |
-| Drop RBAC object | WARN (gated by `--clickhouse-allow-drop-rbac`) |
+| Drop RBAC object | WARN (gated by plugin configuration) |
 | Modify user settings | INFO |
 | Modify grant set | INFO |
 | Change row policy expression | WARN |

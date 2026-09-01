@@ -147,7 +147,7 @@ The canonicalizer has **zero version branching**: a single code path covers 24.3
 | | `derive_agg_target_columns()` utility | Done |
 | RBAC | Roles, users, settings profiles, quotas, row policies, grants | Done |
 | | `storage != 'users.xml'` filter | Done |
-| | Drop gating (`--clickhouse-allow-drop-rbac`) | Done |
+| | Drop gating (plugin configuration) | Done |
 | Named collections | Key-set diffed, values declare-only | Done |
 | Class-based views | `ChView`, `MaterializedView`, `AggregatingView` mixin bases | Done |
 | | `CHViewMeta`: Meta class for view models | Done |
@@ -207,7 +207,7 @@ WHERE NOT EXISTS (
 
 ### CH-1: Idempotency enforcement
 
-CH-1 adds strict idempotency checking. Non-idempotent statements are refused unless `--allow-non-idempotent` is passed:
+CH-1 adds strict idempotency checking. Non-idempotent statements are refused:
 
 **Idempotent** (allowed):
 
@@ -498,7 +498,7 @@ class S3Logs(Base):
 
 ```bash
 # Point dbwarden at an existing ClickHouse instance
-$ dbwarden generate-models -d analytics --url clickhouse://user:pass@host:9000/analytics
+$ dbwarden generate-models -d analytics
 
 # Models are written to models/analytics/*.py with ch_table() / materialized_view()
 # declarations that match the live schema exactly
@@ -559,7 +559,7 @@ $ dbwarden make-migrations --plan -d analytics
 # CREATE USER IF NOT EXISTS alice ...       (INFO)
 # DROP USER bob                             (WARN: gated)
 
-$ dbwarden migrate -d analytics --clickhouse-allow-drop-rbac
+$ dbwarden migrate -d analytics
 ```
 
 ### Materialize a projection on existing data

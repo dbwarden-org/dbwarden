@@ -432,11 +432,11 @@ Multi-pair `RENAME TABLE` with ON CLUSTER requires all tables to exist on the sa
 
 ### Non-idempotent statements with ON CLUSTER
 
-Under coordination profile CH-1, non-idempotent statements like `RENAME` are refused. This is independent of ON CLUSTER; the idempotency check runs before DDL injection. Use `--allow-non-idempotent` to override, or restructure the migration to use idempotent forms.
+Under coordination profile CH-1, non-idempotent statements like `RENAME` are refused. This is independent of ON CLUSTER; the idempotency check runs before DDL injection. Restructure the migration to use idempotent forms instead.
 
 ## See also
 
 - [Migration Locking](../../advanced/clickhouse-locking.md): Coordination profiles (CH-0 through CH-4), idempotency enforcement, and production lock strategies
 - [Immutability](immutability.md): What can never change, and what forces a table recreate
 - [Safety Classification](safety.md): Change classification levels and `--force`
-- [Config Reference](config-reference.md): All `DbwardenDatabase` / `database_config()` parameters
+- [Config Reference](../../reference/configuration-api.md): All `DbwardenDatabase` / `database_config()` parameters

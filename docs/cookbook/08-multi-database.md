@@ -116,24 +116,8 @@ The settings commands allow runtime configuration changes without editing `dbwar
 # View current configuration
 $ dbwarden settings show --all
 
-# Set a default database
-$ dbwarden settings default-database primary
-
-# Add a new database entry
-$ dbwarden settings database-add reporting postgresql://localhost:5432/reporting \
-    --type postgresql \
-    --model-path app.models.reporting
-
-# Or add a MySQL database
-$ dbwarden settings database-add legacy mysql+pymysql://localhost:3306/legacy \
-    --type mysql \
-    --model-path app.models.legacy
-
-# Remove a database
-$ dbwarden settings database-remove reporting
-
-# Rename a database
-$ dbwarden settings database-rename analytics analytics_v2
+# To modify configuration, edit dbwarden.py directly.
+# Settings commands are read-only; changes are made by editing the Python config file.
 ```
 
 Settings commands modify the `dbwarden.py` file directly using AST-based mutation. The changes are permanent and committed to version control.

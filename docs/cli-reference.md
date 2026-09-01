@@ -186,7 +186,7 @@ $ dbwarden rollback --database primary --count 2
 $ dbwarden rollback --database primary --to-version 0007
 ```
 
-Options: `--database`, `--count`, `--to-version`, `--verbose`
+Options: `--database`, `--count`, `--to-version`, `--verbose`, `--perf`
 
 ### `downgrade`
 
@@ -194,7 +194,7 @@ Options: `--database`, `--count`, `--to-version`, `--verbose`
 $ dbwarden downgrade --to 0005 --database primary
 ```
 
-Options: `--to` (required), `--database`, `--verbose`
+Options: `--to` (required), `--database`, `--verbose`, `--perf`
 
 ### `make-rollback`
 

@@ -83,7 +83,7 @@ Conceptual flow:
 
 ```python
 def get_engine(config):
-    url = config.sqlalchemy_url
+    url = config.database_url_sync
     if config.database_type == "clickhouse":
         url = normalize_clickhouse_dialect(url)
     return create_engine(url)

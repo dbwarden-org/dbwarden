@@ -116,7 +116,7 @@ clickhouse-client --query "SELECT * FROM analytics.dbwarden_lock"
 
 ## CH-1: Idempotency enforcement
 
-CH-1 adds strict idempotency checking on top of CH-0. Non-idempotent statements (`RENAME`, `MODIFY COLUMN`, `UPDATE`, `DELETE`) are refused unless `--allow-non-idempotent` is passed.
+CH-1 adds strict idempotency checking on top of CH-0. Non-idempotent statements (`RENAME`, `MODIFY COLUMN`, `UPDATE`, `DELETE`) are refused by default.
 
 **Why it exists:** Even with CH-0's lease, a stale worker can execute non-idempotent DDL after losing its lease. Idempotent DDL (`CREATE TABLE IF NOT EXISTS`, `DROP TABLE IF EXISTS`) is safe to re-execute; non-idempotent DDL is not. By refusing non-idempotent statements, CH-1 limits the blast radius of the stale-worker window to idempotent operations only.
 
@@ -207,13 +207,17 @@ dbwarden lock-status -d analytics
 
 ### Overriding CH-1 for non-idempotent migrations
 
-If you must run a non-idempotent migration (e.g., a one-time RENAME), pass `--allow-non-idempotent`:
+If you must run a non-idempotent migration (e.g., a one-time RENAME), restructure it to use an idempotent form:
 
-```bash
-dbwarden migrate -d analytics --allow-non-idempotent
+```sql
+-- Instead of:
+ALTER TABLE events RENAME TO events_v2;
+
+-- Use:
+ALTER TABLE IF EXISTS events RENAME TO events_v2;
 ```
 
-This skips the idempotency check for that run. Use with caution; the migration must not be re-executed.
+Or drop to CH-0 temporarily by removing the idempotency check in your deployment.
 
 ---
 
@@ -403,9 +407,9 @@ database_config(
 async def run_migration():
     redis = Redis.from_url("redis://localhost:6379")
     async with migration_lock(redis, key="analytics_migration"):
-        # Import and run migration logic
-        from dbwarden.engine import migrate
-        await migrate("analytics")
+        # Run migration via CLI
+        import subprocess
+        subprocess.run(["dbwarden", "migrate", "-d", "analytics"])
 
 if __name__ == "__main__":
     asyncio.run(run_migration())
@@ -687,11 +691,7 @@ ALTER TABLE IF EXISTS events RENAME TO events_v2;
 -- Or restructure to avoid RENAME
 ```
 
-Or override for a one-time migration:
-
-```bash
-dbwarden migrate -d analytics --allow-non-idempotent
-```
+Or restructure the migration to use idempotent forms:
 
 ### "Lease expired" error
 
