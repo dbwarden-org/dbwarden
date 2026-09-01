@@ -184,10 +184,24 @@ When detected, `make-migrations` refuses generation and `status` shows `MERGE_PE
 
 ## Known Limitations
 
-- **MariaDB:** Snapshot support is incomplete; merge-base resolution uses `model_state.json` only
+- **MariaDB:** Snapshot support is incomplete; merge-base resolution uses `model_state.json` only. Rename detection features degrade as they do in the legacy live-fallback path. The mandatory confirmation rule (§9.1.1) becomes the primary safeguard for MariaDB merges.
 - **Git required:** All merge operations require git to be available
 - **No Python data migrations:** Manual migrations are SQL-only
 - **No revision branching/merging:** Linear versioned sequence per database
+
+### MariaDB Specifics
+
+MariaDB has limited snapshot support compared to PostgreSQL. When merging on a MariaDB database:
+
+- **Snapshot-based rename detection** is degraded because MariaDB snapshots don't capture all column metadata
+- **Merge-base resolution** uses only `model_state.json`, not the full snapshot
+- **Mandatory confirmation** is required for all rename candidates during merge (§9.1.1)
+- **Column type changes** may not be fully detected without a complete snapshot
+
+For MariaDB projects, consider:
+- Using `--rename-column` and `--rename-table` flags explicitly during merge
+- Verifying the reconciliation migration carefully before applying
+- Running `dbwarden diff` after merge to confirm no unexpected changes
 
 ## See Also
 
