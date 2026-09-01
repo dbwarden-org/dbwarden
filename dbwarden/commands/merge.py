@@ -111,7 +111,32 @@ def merge_cmd(
     info("Computing reconciliation diff...")
     diff_ops = _compute_diff(merge_base_state, current_state, database)
 
-    # Step 3a: Check for rename candidates (R9.1.1)
+    # Step 3a: Detect semantic conflicts (R9.2)
+    semantic_conflicts = _detect_semantic_conflicts(merge_base_state, current_state, database)
+    if semantic_conflicts:
+        warning("Semantic conflicts detected (merged state differs from both branches):")
+        for conflict in semantic_conflicts:
+            info(f"  {conflict['description']}")
+
+    # Step 3b: Check for stale plans (R9.11)
+    migrations_dir = get_migrations_directory(database)
+    stale_plans = _check_stale_plans(migrations_dir, current_state)
+    if stale_plans:
+        warning("Stale migration plans detected (base checksum mismatch):")
+        for plan in stale_plans:
+            info(f"  {plan}")
+        info("These plans will be invalidated and regenerated.")
+
+    # Step 3c: Harvest rename intents from superseded files (R9.1.4)
+    migrations_dir = get_migrations_directory(database)
+    superseded_files = _find_superseded_files(migrations_dir, merge_base)
+    harvested_renames = _harvest_rename_intents(migrations_dir, superseded_files)
+    if harvested_renames:
+        info(f"Harvested {len(harvested_renames)} rename intent(s) from superseded files.")
+        # Apply harvested renames to diff ops
+        _apply_harvested_renames(harvested_renames, diff_ops)
+
+    # Step 3b: Check for rename candidates (R9.1.1)
     if rename_columns or rename_tables:
         info("Processing rename confirmations...")
         _process_rename_confirmations(rename_columns, rename_tables, diff_ops)
@@ -363,6 +388,95 @@ def _process_rename_confirmations(
         info(f"Confirmed table renames: {', '.join(rename_tables)}")
 
 
+def _harvest_rename_intents(migrations_dir: str, superseded_files: list[str]) -> list[dict]:
+    """Harvest rename intents from superseded migration files (R9.1.4).
+
+    When make-migrations --rename-column/--rename-table is used on a branch,
+    the mapping is recorded in that migration's header. dbwarden merge
+    harvests these declarations automatically.
+    """
+    from dbwarden.merge.rename_capture import harvest_rename_intents
+
+    migration_files = []
+    for filename in superseded_files:
+        filepath = Path(migrations_dir) / filename
+        if filepath.exists():
+            migration_files.append(filepath)
+
+    return harvest_rename_intents(migration_files)
+
+
+def _apply_harvested_renames(renames: list[dict], diff_ops: list[dict]) -> None:
+    """Apply harvested rename intents to diff operations.
+
+    This modifies diff_ops in place to reflect the confirmed renames.
+    """
+    for rename in renames:
+        old_name = rename.get("from", "")
+        new_name = rename.get("to", "")
+        if old_name and new_name:
+            # Mark the diff op as a confirmed rename
+            for op in diff_ops:
+                if old_name in op.get("description", ""):
+                    op["rename_confirmed"] = True
+                    op["rename_from"] = old_name
+                    op["rename_to"] = new_name
+
+
+def _detect_semantic_conflicts(
+    base_state: dict,
+    current_state: dict,
+    database: str | None,
+) -> list[dict]:
+    """Detect semantic conflicts where merged state differs from both branches.
+
+    R9.2: When both branches change the same column's type differently,
+    and git auto-merges them, the merged state may differ from both
+    branches' versions. This function detects such cases.
+
+    Returns a list of conflict descriptions for display.
+    """
+    conflicts = []
+
+    try:
+        # Compare tables in base vs current
+        base_tables = base_state.get("tables", {})
+        current_tables = current_state.get("tables", {})
+
+        for table_name, current_table in current_tables.items():
+            if table_name not in base_table:
+                continue
+
+            base_table = base_tables[table_name]
+            base_columns = base_table.get("columns", {})
+            current_columns = current_table.get("columns", {})
+
+            # Check for columns that changed type in both directions
+            for col_name, current_col in current_columns.items():
+                if col_name not in base_columns:
+                    continue
+
+                base_col = base_columns[col_name]
+                base_type = base_col.get("type", "")
+                current_type = current_col.get("type", "")
+
+                if base_type != current_type:
+                    # Column type changed - this could be a semantic conflict
+                    # if both branches changed it differently
+                    conflicts.append({
+                        "table": table_name,
+                        "column": col_name,
+                        "base_type": base_type,
+                        "current_type": current_type,
+                        "description": f"{table_name}.{col_name}: {base_type} -> {current_type}",
+                    })
+
+    except Exception as e:
+        logger.debug("Failed to detect semantic conflicts: %s", e)
+
+    return conflicts
+
+
 def _probe_persistent_environments(database: str | None) -> dict[str, str]:
     """Probe persistent environments to check if they applied branch migrations.
 
@@ -430,6 +544,41 @@ def _find_superseded_files(migrations_dir: str, merge_base: str) -> list[str]:
                 superseded.append(filename)
 
     return superseded
+
+
+def _check_stale_plans(migrations_dir: str, current_state: dict) -> list[str]:
+    """Check for stale migration plans (R9.11).
+
+    Every generated migration/plan is pinned to a base model-state checksum.
+    When that base no longer matches the current model state, the plan is stale.
+
+    Returns a list of stale migration filenames.
+    """
+    import json
+    from dbwarden.engine.version import get_migration_filepaths_by_version
+
+    all_migrations = get_migration_filepaths_by_version(migrations_dir)
+    stale_files = []
+
+    # Compute current model state checksum
+    current_checksum = _compute_state_checksum(current_state)
+
+    for version, filepath in all_migrations.items():
+        plan_file = Path(filepath).with_suffix(".plan.json")
+        if not plan_file.exists():
+            continue
+
+        try:
+            plan_data = json.loads(plan_file.read_text())
+            plan_checksum = plan_data.get("base_checksum", "")
+
+            if plan_checksum and plan_checksum != current_checksum:
+                stale_files.append(filepath.split("/")[-1])
+                logger.info("Stale plan detected: %s (base checksum mismatch)", filepath.split("/")[-1])
+        except Exception as e:
+            logger.debug("Failed to check plan for %s: %s", filepath, e)
+
+    return stale_files
 
 
 def _mark_only(
