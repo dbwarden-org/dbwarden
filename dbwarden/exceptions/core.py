@@ -44,6 +44,24 @@ class LockError(DBWardenError):
     pass
 
 
+class LockAcquireTimeout(LockError):
+    """Raised when the migration lock cannot be acquired within the timeout."""
+
+    pass
+
+
+class LockStuck(LockError):
+    """Raised when a lock is held but the heartbeat is stale (STUCK state)."""
+
+    pass
+
+
+class RecoveryRequired(LockError):
+    """Raised when a dead worker is detected and recovery is needed."""
+
+    pass
+
+
 class DatabaseError(DBWardenError):
     """Raised when there is a database error."""
 

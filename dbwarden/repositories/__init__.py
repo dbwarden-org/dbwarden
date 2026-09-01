@@ -11,10 +11,10 @@ from dbwarden.repositories.migrations_repo import (
     run_migration,
     run_repeatable_migration,
 )
-from dbwarden.repositories.lock_repo import (
+from dbwarden.lock import (
     acquire_lock,
     check_lock,
-    create_lock_table_if_not_exists,
+    ensure_lock_table as create_lock_table_if_not_exists,
     force_release_lock,
     release_lock,
 )
