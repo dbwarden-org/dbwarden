@@ -372,6 +372,15 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON analytics.* TO dbwarden_app;
 </clickhouse>
 ```
 
+The permission model is the core of CH-3:
+
+| User | Privileges | Used by | Purpose |
+|------|-----------|---------|---------|
+| `dbwarden_app` | `SELECT, INSERT, UPDATE, DELETE` on `analytics.*` | Worker nodes | Data read/write only. No DDL. |
+| `dbwarden_migration` | `CREATE, ALTER, DROP, RENAME` on `*.*` | Proxy node only | Schema changes only. No DML. |
+
+Workers can read and write data but cannot create, alter, or drop tables. The proxy can change schema but does not serve application traffic. Since only the proxy has DDL credentials, concurrent migration is structurally impossible.
+
 **4. Run the migration proxy:**
 
 The proxy is a thin process that holds the CH-2 lock and accepts DDL commands:
