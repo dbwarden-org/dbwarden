@@ -144,10 +144,26 @@ def merge_cmd(
         # Check if there are any rename candidates that need confirmation
         rename_candidates = _detect_rename_candidates(diff_ops)
         if rename_candidates:
-            error("Rename candidates detected during merge reconciliation.")
-            info("Use --rename-column or --rename-table to confirm renames.")
-            info(f"Candidates: {', '.join(rename_candidates)}")
-            return
+            # R9.1.5: Ranked-candidate wizard
+            if sys.stdin.isatty():
+                info("Rename candidates detected. Starting confirmation wizard...")
+                confirmed = _prompt_rename_wizard(rename_candidates)
+                if not confirmed:
+                    error("No renames confirmed. Aborting merge.")
+                    return
+            else:
+                # R9.1.6: CI contract - fail with JSON error
+                error("Rename candidates detected in non-interactive mode.")
+                info("Use --rename-column or --rename-table to confirm renames.")
+                if json_output:
+                    import json
+                    error_json = {
+                        "error": "rename_candidates_detected",
+                        "candidates": rename_candidates,
+                        "message": "Use --rename-column or --rename-table to confirm renames.",
+                    }
+                    print(json.dumps(error_json, indent=2))
+                return
 
     # Step 4: Probe persistent environments
     info("Probing persistent environments...")
@@ -271,18 +287,44 @@ def _get_merge_base_state(merge_base: str, database: str | None) -> Optional[dic
 
 
 def _rebuild_current_state(database: str | None) -> Optional[dict]:
-    """Rebuild current model state from merged models."""
-    from dbwarden.commands.make_migrations.pipeline import get_model_state_path
+    """Rebuild current model state from merged models.
 
-    state_path = get_model_state_path(database)
-    if state_path.exists():
-        try:
-            return json.loads(state_path.read_text())
-        except Exception as e:
-            logger.error("Failed to read current model state: %s", e)
+    §5 Step 2: The merged model_state.json may be conflicted, stale,
+    or hand-merged (untrusted). Discard it and regenerate from the
+    merged models: the equivalent of export-models, computed offline
+    from the model definitions.
+    """
+    try:
+        from dbwarden.engine.discovery import get_all_model_tables, auto_discover_model_paths
+        from dbwarden.engine.offline import model_state_to_dict
+        from dbwarden.config import get_database
+
+        config = get_database(database)
+        model_paths = config.model_paths
+
+        if model_paths is None:
+            model_paths = auto_discover_model_paths()
+
+        if not model_paths:
+            logger.warning("No model paths found for state rebuild")
             return None
 
-    return None
+        # Discover model tables from merged models
+        tables = get_all_model_tables(model_paths, db_name=database)
+
+        if not tables:
+            logger.warning("No tables found in models for state rebuild")
+            return None
+
+        # Convert to model state dict (equivalent of export-models)
+        state = model_state_to_dict(tables)
+
+        logger.info("Rebuilt current model state from %d tables", len(tables))
+        return state
+
+    except Exception as e:
+        logger.error("Failed to rebuild current model state: %s", e)
+        return None
 
 
 def _compute_state_checksum(state: dict) -> str:
@@ -388,6 +430,42 @@ def _process_rename_confirmations(
         info(f"Confirmed table renames: {', '.join(rename_tables)}")
 
 
+def _prompt_rename_wizard(candidates: list[str]) -> list[str]:
+    """Interactive wizard for confirming renames (R9.1.5).
+
+    Presents candidates ranked by confidence with evidence shown,
+    one decision per screen, with batch acceptance.
+    """
+    import sys
+
+    confirmed = []
+    for candidate in candidates:
+        info(f"\nRename candidate: {candidate}")
+        info("Evidence: Possible drop+add pattern detected")
+
+        while True:
+            try:
+                response = input("[a]ccept / [r]eject / [d]rop+create: ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                # Non-interactive mode
+                return []
+
+            if response == "a":
+                confirmed.append(candidate)
+                info(f"  Confirmed: {candidate}")
+                break
+            elif response == "r":
+                info(f"  Rejected: {candidate}")
+                break
+            elif response == "d":
+                info(f"  Marked as drop+create: {candidate}")
+                break
+            else:
+                info("  Please enter 'a', 'r', or 'd'")
+
+    return confirmed
+
+
 def _harvest_rename_intents(migrations_dir: str, superseded_files: list[str]) -> list[dict]:
     """Harvest rename intents from superseded migration files (R9.1.4).
 
@@ -480,12 +558,15 @@ def _detect_semantic_conflicts(
 def _probe_persistent_environments(database: str | None) -> dict[str, str]:
     """Probe persistent environments to check if they applied branch migrations.
 
+    R8.2: Environments that were unknown at merge time (unreachable) are
+    probed on the next status/migrate run against them; if found dirty,
+    migrate refuses to run the normal chain and directs the operator
+    to reconcile.
+
     For each persistent environment, reads its applied-migration metadata table
     and checks whether any to-be-superseded migration version appears there.
     """
     from dbwarden.merge.environments import get_persistent_environments
-    from dbwarden.merge.git_utils import get_file_at_commit
-    from dbwarden.engine.version import get_migrations_directory
 
     persistent_envs = get_persistent_environments(database)
     results = {}
@@ -508,15 +589,66 @@ def _probe_persistent_environments(database: str | None) -> dict[str, str]:
                 results[env] = "unknown"
                 continue
 
-            # In a full implementation, this would connect to the environment
-            # and query its migration table. For now, mark as unknown.
-            results[env] = "unknown"
+            # Connect to the environment and check its migration table
+            try:
+                from sqlalchemy import create_engine, text
+                from dbwarden.connection.queries import get_migration_table_name
+
+                engine = create_engine(env_url)
+                migration_table = get_migration_table_name(database)
+
+                with engine.connect() as conn:
+                    # Check if migration table exists
+                    result = conn.execute(
+                        text(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{migration_table}'")
+                    )
+                    if not result.fetchone():
+                        results[env] = "clean"
+                        continue
+
+                    # Get applied versions
+                    result = conn.execute(
+                        text(f"SELECT version FROM {migration_table} WHERE version IS NOT NULL")
+                    )
+                    applied_versions = {row[0] for row in result.fetchall()}
+
+                    # Check for superseded versions
+                    superseded = _find_superseded_versions(database)
+                    dirty_versions = applied_versions.intersection(superseded)
+
+                    if dirty_versions:
+                        results[env] = "dirty"
+                        logger.info("Environment %s has dirty migrations: %s", env, dirty_versions)
+                    else:
+                        results[env] = "clean"
+
+                engine.dispose()
+
+            except Exception as e:
+                logger.debug("Failed to probe environment %s: %s", env, e)
+                results[env] = "unknown"
 
         except Exception as e:
             logger.debug("Failed to probe environment %s: %s", env, e)
             results[env] = "unknown"
 
     return results
+
+
+def _find_superseded_versions(database: str | None) -> set[str]:
+    """Find all superseded migration versions."""
+    from dbwarden.merge.marker import is_superseded
+    from dbwarden.engine.version import get_migrations_directory, get_migration_filepaths_by_version
+
+    migrations_dir = get_migrations_directory(database)
+    all_migrations = get_migration_filepaths_by_version(migrations_dir)
+
+    superseded = set()
+    for version, filepath in all_migrations.items():
+        if is_superseded(filepath):
+            superseded.add(version)
+
+    return superseded
 
 
 def _find_superseded_files(migrations_dir: str, merge_base: str) -> list[str]:

@@ -253,7 +253,11 @@ def _render_status_payload(payload: dict) -> None:
 
 
 def _show_all_environments_status(database: str | None = None) -> None:
-    """Show status for all registered environments (R4.4)."""
+    """Show status for all registered environments (R4.4).
+
+    R8.1: status --all-environments MUST surface unreconciled dirty
+    environments until reconciliation completes.
+    """
     from dbwarden.merge.environments import load_environments
 
     envs = load_environments(database)
@@ -270,6 +274,10 @@ def _show_all_environments_status(database: str | None = None) -> None:
                 "persistent": env_config.persistent,
                 "status": "registered",
             }
+            # Check for merge records to determine reconciliation status
+            reconciliation_status = _check_reconciliation_status(env_name)
+            if reconciliation_status:
+                payload["reconciliation_status"] = reconciliation_status
             payloads.append(payload)
         emit_json({"environments": payloads})
         return
@@ -277,8 +285,41 @@ def _show_all_environments_status(database: str | None = None) -> None:
     section("Environment Status")
     for env_name, env_config in envs.items():
         persistent_str = "persistent" if env_config.persistent else "disposable"
-        info(f"  {env_name}: {persistent_str}")
+        reconciliation_status = _check_reconciliation_status(env_name)
+        status_str = f" ({reconciliation_status})" if reconciliation_status else ""
+        info(f"  {env_name}: {persistent_str}{status_str}")
 
     info("")
     info("To check database status for an environment, set the URL environment variable")
     info("and run: dbwarden status --database <name>")
+
+
+def _check_reconciliation_status(environment: str) -> str:
+    """Check if an environment has pending reconciliation.
+
+    R8.1: Surfaces unreconciled dirty environments.
+    """
+    import json
+    from pathlib import Path
+
+    merges_dir = Path(".dbwarden") / "merges"
+    if not merges_dir.exists():
+        return ""
+
+    # Check merge records for this environment
+    for record_file in merges_dir.glob("*.json"):
+        try:
+            record = json.loads(record_file.read_text())
+            probe_results = record.get("probe_results", {})
+            env_status = probe_results.get(environment)
+
+            if env_status == "dirty":
+                return "RECONCILE_PENDING"
+            elif env_status == "unknown":
+                return "UNKNOWN"
+            elif env_status == "reconciled":
+                return "reconciled"
+        except Exception:
+            pass
+
+    return ""

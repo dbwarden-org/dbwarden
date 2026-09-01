@@ -232,17 +232,51 @@ def _generate_reconciliation(
 
 
 def _apply_reconciliation(reconciliation_file: str, database: str | None) -> None:
-    """Apply the reconciliation migration with lock discipline."""
-    from dbwarden.commands.migrate import migrate_cmd
+    """Apply the reconciliation migration with lock discipline.
 
-    # For now, just log the action
-    # In a full implementation, this would:
-    # 1. Acquire lock
-    # 2. Execute the SQL
-    # 3. Record the application
-    # 4. Release lock
-    info(f"  Would apply: {reconciliation_file}")
-    info("  (Apply not yet implemented for environment reconciliation)")
+    §8 Step 4: Apply it (with the same lock discipline as migrate),
+    record the application in E's metadata table as a reconciliation
+    entry linked to the merge record (§6.2), then verify convergence.
+    """
+    from dbwarden.lock import acquire_lock, release_lock
+    from dbwarden.engine.file_parser import parse_upgrade_statements
+    from dbwarden.repositories import run_migration
+
+    # Read the SQL from the reconciliation file
+    filepath = Path(reconciliation_file)
+    if not filepath.exists():
+        error(f"Reconciliation file not found: {reconciliation_file}")
+        return
+
+    sql_statements = parse_upgrade_statements(str(filepath))
+    if not sql_statements:
+        warning("No SQL statements found in reconciliation file.")
+        return
+
+    # Acquire lock
+    lock_result = acquire_lock(database)
+    if not lock_result.acquired:
+        error(f"Could not acquire migration lock: {lock_result.holder_description}")
+        return
+
+    try:
+        # Execute the SQL
+        version = filepath.stem.split("__")[1].split("_")[0] if "__" in filepath.stem else None
+        run_migration(
+            sql_statements=sql_statements,
+            version=version,
+            migration_operation="upgrade",
+            filename=filepath.name,
+            db_name=database,
+        )
+
+        # Verify convergence
+        info("Verifying convergence...")
+        from dbwarden.commands.diff import diff_cmd
+        diff_cmd(database=database, verbose=False)
+
+    finally:
+        release_lock(database, strategy=lock_result.strategy)
 
 
 def _update_merge_record(environment: str, reconciliation_file: str) -> None:
