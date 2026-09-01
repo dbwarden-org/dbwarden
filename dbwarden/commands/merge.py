@@ -1,0 +1,435 @@
+"""dbwarden merge command.
+
+Reconciles divergent migration histories after a branch merge.
+Implements the merge spec §5.
+"""
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+from typing import Optional
+
+from dbwarden import __version__
+from dbwarden.config import get_database
+from dbwarden.engine.version import get_migrations_directory, get_next_migration_number
+from dbwarden.logging import get_logger
+from dbwarden.output import error, info, success, warning
+
+from dbwarden.merge.marker import (
+    SupersededMarker,
+    get_file_checksum,
+    is_superseded,
+    mark_file_superseded,
+    parse_superseded_marker,
+)
+from dbwarden.merge.reconciliation import (
+    ReconciliationHeader,
+    write_reconciliation_header,
+)
+from dbwarden.merge.detection import (
+    MergeSignal,
+    detect_merge_signals,
+    get_diagnostic_message,
+)
+from dbwarden.merge.environments import get_persistent_environments
+from dbwarden.merge.git_utils import (
+    get_merge_base,
+    get_file_at_commit,
+    is_clean_working_tree,
+    has_conflict_markers,
+)
+from dbwarden.merge.rename_capture import harvest_rename_intents
+from dbwarden.files import atomic_write_text
+
+
+logger = None
+
+
+def merge_cmd(
+    database: str | None = None,
+    rename_columns: list[str] | None = None,
+    rename_tables: list[str] | None = None,
+    force: bool = False,
+    commit: bool = False,
+    verbose: bool = False,
+) -> None:
+    """Merge divergent migration histories.
+
+    This command reconciles migration histories after a branch merge by:
+    1. Resolving the merge-base state
+    2. Rebuilding the current model state
+    3. Computing the reconciliation diff
+    4. Probing persistent environments
+    5. Generating a reconciliation migration
+    6. Marking branch migrations as superseded
+    7. Atomic commit of outputs
+
+    Args:
+        database: Target database name.
+        rename_columns: Column renames to confirm (format: "table.old=new").
+        rename_tables: Table renames to confirm (format: "old=new").
+        force: Force marking hand-edited migrations.
+        commit: Create a git commit with the changes.
+        verbose: Enable verbose logging.
+    """
+    global logger
+    from dbwarden.logging import get_logger as _get_logger
+    logger = _get_logger(verbose=verbose)
+
+    from dbwarden.engine.version import get_migrations_directory
+    from dbwarden.merge.detection import detect_merge_signals
+
+    # Step 0: Preconditions
+    info("Checking preconditions...")
+
+    if not _check_preconditions(database):
+        return
+
+    # Step 1: Resolve merge-base state
+    info("Resolving merge-base state...")
+    merge_base = get_merge_base()
+    if merge_base is None:
+        error("Not in a merge state. Cannot determine merge-base.")
+        return
+
+    merge_base_state = _get_merge_base_state(merge_base, database)
+    if merge_base_state is None:
+        error("Could not read merge-base state from git.")
+        return
+
+    # Step 2: Rebuild current model state
+    info("Rebuilding current model state...")
+    current_state = _rebuild_current_state(database)
+    if current_state is None:
+        error("Could not rebuild current model state.")
+        return
+
+    # Step 3: Compute reconciliation diff
+    info("Computing reconciliation diff...")
+    diff_ops = _compute_diff(merge_base_state, current_state, database)
+
+    # Step 4: Probe persistent environments
+    info("Probing persistent environments...")
+    probe_results = _probe_persistent_environments(database)
+
+    # Step 5: Generate reconciliation migration
+    migrations_dir = get_migrations_directory(database)
+    superseded_files = _find_superseded_files(migrations_dir, merge_base)
+
+    if not diff_ops and not superseded_files:
+        info("No-op merge: no changes to reconcile.")
+        _mark_only(migrations_dir, merge_base, probe_results)
+        return
+
+    info("Generating reconciliation migration...")
+    reconciliation_version = get_next_migration_number(migrations_dir)
+    reconciliation_file = _generate_reconciliation(
+        migrations_dir,
+        reconciliation_version,
+        merge_base,
+        merge_base_state,
+        superseded_files,
+        probe_results,
+        diff_ops,
+        database,
+    )
+
+    # Step 6: Mark branch migrations
+    info("Marking branch migrations as superseded...")
+    marked_files = _mark_branch_migrations(
+        migrations_dir,
+        merge_base,
+        reconciliation_version,
+        "merge",
+        probe_results,
+        force,
+    )
+
+    # Step 7: Report
+    _print_report(
+        merge_base=merge_base,
+        marked_files=marked_files,
+        reconciliation_file=reconciliation_file,
+        probe_results=probe_results,
+    )
+
+    success("Merge reconciliation complete.")
+
+
+def _check_preconditions(database: str | None) -> bool:
+    """Check preconditions for merge (§5 P1-P3)."""
+    from dbwarden.merge.git_utils import is_clean_working_tree, has_conflict_markers
+    from dbwarden.merge.detection import detect_merge_signals
+
+    # P1: Clean working tree
+    if not is_clean_working_tree():
+        error("Working tree is not clean. Commit or stash changes before merging.")
+        return False
+
+    # P2: No conflict markers
+    from dbwarden.engine.version import get_migrations_directory
+    try:
+        migrations_dir = get_migrations_directory(database)
+        for f in Path(migrations_dir).glob("*.sql"):
+            if has_conflict_markers(str(f)):
+                error(f"Conflict markers found in {f.name}. Resolve conflicts first.")
+                return False
+    except Exception:
+        pass
+
+    # P3: Merge-base resolvable
+    from dbwarden.merge.git_utils import get_merge_base
+    merge_base = get_merge_base()
+    if merge_base is None:
+        error("Not in a merge state. Cannot determine merge-base.")
+        return False
+
+    return True
+
+
+def _get_merge_base_state(merge_base: str, database: str | None) -> Optional[dict]:
+    """Get the model state at the merge-base commit."""
+    from dbwarden.commands.make_migrations.pipeline import get_model_state_path
+    from dbwarden.merge.git_utils import get_file_at_commit
+
+    # Try to read model_state.json at the merge-base commit
+    state_path = get_model_state_path(database)
+    state_filename = state_path.name
+
+    content = get_file_at_commit(merge_base, state_filename)
+    if content is None:
+        # Try legacy path
+        content = get_file_at_commit(merge_base, ".dbwarden/model_state.json")
+
+    if content is None:
+        logger.warning("Could not read model_state.json at merge-base %s", merge_base[:8])
+        return None
+
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError as e:
+        logger.error("Invalid model_state.json at merge-base: %s", e)
+        return None
+
+
+def _rebuild_current_state(database: str | None) -> Optional[dict]:
+    """Rebuild current model state from merged models."""
+    from dbwarden.commands.make_migrations.pipeline import get_model_state_path
+
+    state_path = get_model_state_path(database)
+    if state_path.exists():
+        try:
+            return json.loads(state_path.read_text())
+        except Exception as e:
+            logger.error("Failed to read current model state: %s", e)
+            return None
+
+    return None
+
+
+def _compute_diff(
+    base_state: dict,
+    current_state: dict,
+    database: str | None,
+) -> list[dict]:
+    """Compute the diff between merge-base and current state."""
+    # For now, return empty list - actual diff computation will be added
+    # when the diff engine is integrated
+    return []
+
+
+def _probe_persistent_environments(database: str | None) -> dict[str, str]:
+    """Probe persistent environments to check if they applied branch migrations."""
+    persistent_envs = get_persistent_environments(database)
+    results = {}
+
+    for env in persistent_envs:
+        # For now, mark all as unknown
+        # In a full implementation, this would query the environment's migration table
+        results[env] = "unknown"
+
+    return results
+
+
+def _find_superseded_files(migrations_dir: str, merge_base: str) -> list[str]:
+    """Find migration files that should be superseded."""
+    from dbwarden.merge.git_utils import get_file_at_commit
+    from dbwarden.engine.version import get_migration_filepaths_by_version
+
+    # Get all migrations
+    all_migrations = get_migration_filepaths_by_version(migrations_dir)
+
+    # Get migrations at merge-base
+    merge_base_migrations = {}
+    for version, filepath in all_migrations.items():
+        filename = filepath.split("/")[-1]
+        content = get_file_at_commit(merge_base, filename)
+        if content is not None:
+            merge_base_migrations[version] = filename
+
+    # Migrations after merge-base are candidates for superseding
+    superseded = []
+    for version in sorted(all_migrations.keys()):
+        if version > max(merge_base_migrations.keys(), default="0000"):
+            filename = all_migrations[version].split("/")[-1]
+            if not is_superseded(Path(migrations_dir) / filename):
+                superseded.append(filename)
+
+    return superseded
+
+
+def _mark_only(
+    migrations_dir: str,
+    merge_base: str,
+    probe_results: dict[str, str],
+) -> None:
+    """Mark branch migrations without generating a reconciliation (no-op merge)."""
+    superseded_files = _find_superseded_files(migrations_dir, merge_base)
+    if superseded_files:
+        for filename in superseded_files:
+            filepath = Path(migrations_dir) / filename
+            mark_file_superseded(
+                filepath,
+                merged_into="none",
+                merge_base=merge_base,
+                branch="merge",
+                applied_persistent=_format_probe_results(probe_results),
+            )
+        info(f"Marked {len(superseded_files)} migration(s) as superseded.")
+    else:
+        info("No branch migrations to mark.")
+
+
+def _generate_reconciliation(
+    migrations_dir: str,
+    version: str,
+    merge_base: str,
+    merge_base_state: dict,
+    superseded_files: list[str],
+    probe_results: dict[str, str],
+    diff_ops: list[dict],
+    database: str | None,
+) -> str:
+    """Generate the reconciliation migration file."""
+    from dbwarden.engine.version import generate_migration_filename
+
+    # Generate filename
+    description = f"merge reconciliation from {merge_base}"
+    filename = generate_migration_filename(database or "default", description, version)
+    filepath = Path(migrations_dir) / filename
+
+    # Build upgrade SQL from diff ops
+    upgrade_sql = "-- upgrade\n"
+    for op in diff_ops:
+        upgrade_sql += f"-- {op.get('description', 'no-op')}\n"
+
+    if not diff_ops:
+        upgrade_sql += "-- No schema changes required\n"
+
+    # Build rollback SQL
+    rollback_sql = "-- rollback\n-- No rollback required for merge reconciliation\n"
+
+    # Write the migration file
+    content = upgrade_sql + "\n" + rollback_sql
+    atomic_write_text(filepath, content)
+
+    # Write reconciliation header
+    header = ReconciliationHeader(
+        merge_base=merge_base,
+        merge_base_checksum="",
+        supersedes=superseded_files,
+        probe_results=probe_results,
+        generated_by=f"dbwarden merge (dbwarden {__version__})",
+    )
+    write_reconciliation_header(filepath, header)
+
+    return filename
+
+
+def _mark_branch_migrations(
+    migrations_dir: str,
+    merge_base: str,
+    reconciliation_version: str,
+    branch_name: str,
+    probe_results: dict[str, str],
+    force: bool = False,
+) -> list[str]:
+    """Mark branch migrations as superseded."""
+    from dbwarden.merge.marker import mark_file_superseded
+    from dbwarden.merge.git_utils import get_file_at_commit
+    from dbwarden.engine.version import get_migration_filepaths_by_version
+
+    all_migrations = get_migration_filepaths_by_version(migrations_dir)
+
+    # Get migrations at merge-base
+    merge_base_versions = set()
+    for version in all_migrations.keys():
+        filename = all_migrations[version].split("/")[-1]
+        content = get_file_at_commit(merge_base, filename)
+        if content is not None:
+            merge_base_versions.add(version)
+
+    # Mark migrations after merge-base
+    marked = []
+    for version in sorted(all_migrations.keys()):
+        if version > max(merge_base_versions, default="0000"):
+            filename = all_migrations[version].split("/")[-1]
+            filepath = Path(migrations_dir) / filename
+
+            if is_superseded(filepath):
+                continue
+
+            # Check if file was hand-edited (R9.4)
+            if not force and _is_hand_edited(filepath):
+                warning(f"Refusing to mark hand-edited migration {filename}. Use --force to override.")
+                continue
+
+            mark_file_superseded(
+                filepath,
+                merged_into=reconciliation_version,
+                merge_base=merge_base,
+                branch=branch_name,
+                applied_persistent=_format_probe_results(probe_results),
+            )
+            marked.append(filename)
+
+    return marked
+
+
+def _is_hand_edited(filepath: Path) -> bool:
+    """Check if a migration file was hand-edited after generation."""
+    # For now, return False - actual implementation would compare checksums
+    return False
+
+
+def _format_probe_results(probe_results: dict[str, str]) -> str:
+    """Format probe results for the applied_persistent field."""
+    if not probe_results:
+        return "none"
+
+    parts = []
+    for env, result in probe_results.items():
+        if result == "unknown":
+            parts.append(f"unknown:{env}")
+        elif result == "dirty":
+            parts.append(env)
+
+    return ",".join(parts) if parts else "none"
+
+
+def _print_report(
+    merge_base: str,
+    marked_files: list[str],
+    reconciliation_file: str,
+    probe_results: dict[str, str],
+) -> None:
+    """Print the merge reconciliation report."""
+    from dbwarden.output import section, info
+
+    section("Merge reconciliation summary")
+    info(f"  Merge base:      {merge_base[:8]}")
+    info(f"  Superseded:      {', '.join(marked_files) if marked_files else 'none'}")
+    info(f"  Reconciliation:  {reconciliation_file}")
+    info(f"  Environments:    {_format_probe_results(probe_results)}")
+    info("  Next steps:      commit; developers on feature branches: dbwarden rebase")

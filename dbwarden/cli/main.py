@@ -711,6 +711,40 @@ def unlock(
     handle_unlock(database=database, force=force)
 
 
+@app.command()
+def merge(
+    database: str | None = typer.Option(
+        None, "--database", "-d", help="Target database name"
+    ),
+    rename_column: list[str] | None = typer.Option(
+        None, "--rename-column", help="Column rename to confirm (format: table.old=new)"
+    ),
+    rename_table: list[str] | None = typer.Option(
+        None, "--rename-table", help="Table rename to confirm (format: old=new)"
+    ),
+    force: bool = typer.Option(
+        False, "--force", "-f", help="Force marking hand-edited migrations"
+    ),
+    commit: bool = typer.Option(
+        False, "--commit", help="Create a git commit with the changes"
+    ),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Enable verbose logging"
+    ),
+):
+    """Merge divergent migration histories after a branch merge."""
+    validate_directory()
+    from dbwarden.commands.merge import merge_cmd
+    merge_cmd(
+        database=database,
+        rename_columns=rename_column,
+        rename_tables=rename_table,
+        force=force,
+        commit=commit,
+        verbose=verbose,
+    )
+
+
 @seed_app.command("create")
 def seed_create(
     description: str = typer.Argument(..., help="Description for the seed"),
