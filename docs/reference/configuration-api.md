@@ -29,6 +29,8 @@ def database_config(
     secure_values: bool = False,
     pg_schema: str | None = None,
     pg_migration_lock_timeout: int | None = None,
+    ch_cluster: str | None = None,
+    ch_replicated_database: bool = False,
     **plugin_config: Any,
 ) -> DatabaseHandle:
     """Register a database in dbwarden and return a handle with session dependencies."""
@@ -165,6 +167,8 @@ At least one of `database_url_sync` or `database_url_async` must be provided.
 | `secure_values` | `bool` | `False` | if `True`, display commands show variable names instead of resolved values |
 | `pg_schema` | `str | None` | `None` | PostgreSQL schema name; sets `search_path` on connection so all unqualified references use that schema |
 | `pg_migration_lock_timeout` | `int | None` | `None` | PostgreSQL lock timeout in seconds for migration DDL; prevents indefinite waits on conflicting locks |
+| `ch_cluster` | `str | None` | `None` | ClickHouse cluster name; appends `ON CLUSTER '<name>'` to every DDL statement. Mutually exclusive with `ch_replicated_database` |
+| `ch_replicated_database` | `bool` | `False` | ClickHouse replicated database engine; DDL propagates automatically via ZooKeeper, `ON CLUSTER` must be omitted. Mutually exclusive with `ch_cluster` |
 
 ## Field descriptions
 
@@ -482,6 +486,55 @@ URL: DATABASE_URL (expression)
 
 Always set `secure_values=True` in production to prevent credential exposure in logs.
 
+### `ch_cluster`
+
+ClickHouse cluster name. When set, dbwarden appends `ON CLUSTER '<name>'` to every DDL statement (CREATE, ALTER, DROP, RENAME, DETACH, ATTACH) for this database.
+
+**Use when:**
+- You have a multi-node ClickHouse cluster and want DDL distributed automatically
+- You want explicit control over which DDL goes to which cluster
+
+**Example:**
+```python
+analytics = database_config(
+    database_name="analytics",
+    database_type="clickhouse",
+    database_url_sync="clickhouse://clickhouse1:8123/analytics",
+    ch_cluster="production_cluster",
+)
+```
+
+**Validation:**
+- Mutually exclusive with `ch_replicated_database` (setting both raises `ConfigurationError`)
+- Must be a non-empty string when set
+- Cluster name must match a cluster defined in ClickHouse's `remote_servers.xml`
+
+See [ON Cluster](../databases/clickhouse/on-cluster.md) for full details on DDL injection, supported statement types, and the recreate pipeline.
+
+### `ch_replicated_database`
+
+When `True`, dbwarden uses the ClickHouse `Replicated` database engine. DDL propagates automatically through ZooKeeper, so `ON CLUSTER` must be omitted.
+
+**Use when:**
+- You want automatic DDL replication via ZooKeeper without explicit `ON CLUSTER` clauses
+- Your tables use `Replicated*` engine variants
+
+**Example:**
+```python
+analytics = database_config(
+    database_name="analytics",
+    database_type="clickhouse",
+    database_url_sync="clickhouse://clickhouse1:8123/analytics",
+    ch_replicated_database=True,
+)
+```
+
+**Validation:**
+- Mutually exclusive with `ch_cluster` (setting both raises `ConfigurationError`)
+- When `True`, use `Replicated*` engine variants (e.g., `replicated_merge_tree()`) in your models
+
+See [ON Cluster](../databases/clickhouse/on-cluster.md) for the comparison between ON CLUSTER and replicated database modes.
+
 ## Return value: `DatabaseHandle`
 
 `database_config()` returns a `DatabaseHandle` object with two
@@ -610,6 +663,34 @@ analytics = database_config(
 )
 ```
 
+### ClickHouse with ON CLUSTER
+
+```python
+from dbwarden import database_config
+
+analytics = database_config(
+    database_name="analytics",
+    database_type="clickhouse",
+    database_url_sync="clickhouse://clickhouse1:8123/analytics",
+    model_paths=["app.models.analytics"],
+    ch_cluster="production_cluster",
+)
+```
+
+### ClickHouse with replicated database
+
+```python
+from dbwarden import database_config
+
+analytics = database_config(
+    database_name="analytics",
+    database_type="clickhouse",
+    database_url_sync="clickhouse://clickhouse1:8123/analytics",
+    model_paths=["app.models.analytics"],
+    ch_replicated_database=True,
+)
+```
+
 ## Quick Reference
 
 | Parameter | Required? | Default | Use When |
@@ -631,6 +712,8 @@ analytics = database_config(
 | `secure_values` |  No | `False` | Hide credentials in output |
 | `pg_schema` |  No | `None` | PostgreSQL schema name for search_path |
 | `pg_migration_lock_timeout` |  No | `None` | PostgreSQL lock timeout (seconds) for migrations |
+| `ch_cluster` |  No | `None` | ClickHouse cluster name for ON CLUSTER DDL |
+| `ch_replicated_database` |  No | `False` | ClickHouse replicated database engine |
 
 ## Related Documentation
 

@@ -65,6 +65,8 @@ def database_config(
     seed_table: str | None = None,
     pg_schema: str | None = None,
     pg_migration_lock_timeout: int | None = None,
+    ch_cluster: str | None = None,
+    ch_replicated_database: bool = False,
     **plugin_config: Any,
 ) -> DatabaseHandle:
     """Declare a database.
@@ -93,6 +95,8 @@ def database_config(
         seed_table=seed_table,
         pg_schema=pg_schema,
         pg_migration_lock_timeout=pg_migration_lock_timeout,
+        ch_cluster=ch_cluster,
+        ch_replicated_database=ch_replicated_database,
     )
     return _register_config_values(values, plugin_config)
 
@@ -166,6 +170,7 @@ _DECLARATIVE_FIELDS = {
     "secure_values", "skip_if_missing", "default", "migrations_dir", "migration_table",
     "model_paths", "model_tables", "dev_database_type", "dev_database_url", "overlap_models",
     "auto_apply_seeds", "seed_table", "pg_schema", "pg_migration_lock_timeout",
+    "ch_cluster", "ch_replicated_database",
 }
 _DECLARATIVE_DEFAULTS = {
     "database_type": "sqlite",
@@ -185,6 +190,8 @@ _DECLARATIVE_DEFAULTS = {
     "seed_table": None,
     "pg_schema": None,
     "pg_migration_lock_timeout": None,
+    "ch_cluster": None,
+    "ch_replicated_database": False,
 }
 _MUTABLE_FIELDS = {"model_paths", "model_tables"}
 

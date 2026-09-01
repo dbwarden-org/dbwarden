@@ -26,6 +26,10 @@ None of the database drivers are installed by default. Install the extra for you
 
 See [Installation](../installation.md) for full details.
 
+## Locking
+
+dbwarden uses per-engine native locking to prevent concurrent schema mutation. See [Locking Architecture](locking.md) for the general model, per-backend details, and recovery procedures.
+
 ## Config Examples
 
 The default configuration style uses `DbwardenDatabase` subclasses. The

@@ -25,6 +25,7 @@ projects and integration examples.
 - [RBAC](rbac.md) : Roles, users, row policies, quotas, settings profiles, grants (needs `dbwarden-ch-rbac`)
 - [Data Operations](data-operations.md) : Partition operations, mutations, `OPTIMIZE`, `POPULATE`
 - [Safety Classification](safety.md) : Classification levels, `--force`, and the recreate pipeline
+- [ON Cluster](on-cluster.md) : Cluster modes, DDL propagation, and replicated databases
 - [Migration Locking](../../advanced/clickhouse-locking.md) : Lock strategies, ON CLUSTER, idempotency, and production setup
 
 ## Quick-start
@@ -296,9 +297,30 @@ These are real reverse-engineering / round-trip gaps, not deliberate exclusions.
 
 ## Config keys
 
-These are the **only** `database_config()` parameters for ClickHouse. Exact key shapes, documented because undocumented config keys are what assistants hallucinate.
+These are the `database_config()` / `DbwardenDatabase` parameters for ClickHouse. Exact key shapes, documented because undocumented config keys are what assistants hallucinate.
 
-**Every key below requires the `dbwarden-ch-rbac` plugin:** `dbwarden plugin add dbwarden-ch-rbac`. The plugin owns both these config keys and the handlers that emit their DDL, so declaring them without it installed raises `DBWardenConfigError` at config load.
+**Core keys** (no plugin required):
+
+```python
+from dbwarden import database_config
+
+database_config(
+    database_name="analytics",
+    database_type="clickhouse",
+    database_url_sync="clickhouse://...",
+    ch_cluster="production_cluster",          # str | None (ON CLUSTER name)
+    ch_replicated_database=False,             # bool (Replicated database engine)
+)
+```
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `ch_cluster` | `str \| None` | `None` | Cluster name. Appends `ON CLUSTER '<name>'` to every DDL statement. Mutually exclusive with `ch_replicated_database`. |
+| `ch_replicated_database` | `bool` | `False` | Use `Replicated` database engine. DDL propagates automatically via ZooKeeper; `ON CLUSTER` must be omitted. Mutually exclusive with `ch_cluster`. |
+
+See [ON Cluster](on-cluster.md) for full details on cluster modes, DDL injection, and replicated databases.
+
+**RBAC keys** (require `dbwarden-ch-rbac` plugin): `dbwarden plugin add dbwarden-ch-rbac`. The plugin owns both these config keys and the handlers that emit their DDL, so declaring them without it installed raises `DBWardenConfigError` at config load.
 
 ```python
 from dbwarden import database_config
