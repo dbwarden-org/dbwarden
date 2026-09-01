@@ -148,8 +148,12 @@ def _find_merge_base_version(migrations_dir: str, superseded_versions: list[str]
 
 
 def _reset_database(database: str | None, yes: bool, verbose: bool) -> None:
-    """Reset the database by dropping and re-creating."""
+    """Reset the database by dropping and re-creating.
+
+    This is the fallback path when rollback to merge-base fails.
+    """
     from dbwarden.config import get_database
+    from dbwarden.connection.connection import get_db_connection
 
     config = get_database(database)
 
@@ -161,6 +165,53 @@ def _reset_database(database: str | None, yes: bool, verbose: bool) -> None:
             return
 
     info("Resetting database...")
-    # In a full implementation, this would drop and re-create the database
-    # For now, just log the action
-    warning("Database reset not yet implemented. Please reset manually.")
+
+    try:
+        # Get the database name from the URL
+        from sqlalchemy.engine import make_url
+        url = make_url(config.sqlalchemy_url)
+        db_name = url.database
+
+        if not db_name:
+            error("Could not determine database name from URL.")
+            return
+
+        # Drop all tables in the database
+        with get_db_connection(database) as conn:
+            if config.database_type == "sqlite":
+                # SQLite: drop all user tables
+                result = conn.execute(
+                    text("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+                )
+                tables = [row[0] for row in result.fetchall()]
+                for table in tables:
+                    conn.execute(text(f"DROP TABLE IF EXISTS {table}"))
+                    info(f"  Dropped table: {table}")
+            elif config.database_type == "postgresql":
+                # PostgreSQL: drop all tables in the schema
+                schema = getattr(config, "postgres_schema", "public") or "public"
+                result = conn.execute(
+                    text(
+                        f"SELECT table_name FROM information_schema.tables "
+                        f"WHERE table_schema = '{schema}' AND table_type = 'BASE TABLE'"
+                    )
+                )
+                tables = [row[0] for row in result.fetchall()]
+                for table in tables:
+                    conn.execute(text(f"DROP TABLE IF EXISTS {schema}.{table} CASCADE"))
+                    info(f"  Dropped table: {schema}.{table}")
+            elif config.database_type in ("mysql", "mariadb"):
+                # MySQL: drop all tables in the database
+                result = conn.execute(text("SHOW TABLES"))
+                tables = [row[0] for row in result.fetchall()]
+                for table in tables:
+                    conn.execute(text(f"DROP TABLE IF EXISTS {table}"))
+                    info(f"  Dropped table: {table}")
+            else:
+                error(f"Database reset not supported for {config.database_type}")
+                return
+
+        info(f"Database reset complete. {len(tables)} table(s) dropped.")
+
+    except Exception as e:
+        error(f"Failed to reset database: {e}")

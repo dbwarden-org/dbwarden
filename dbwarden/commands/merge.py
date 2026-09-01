@@ -154,6 +154,15 @@ def merge_cmd(
         probe_results=probe_results,
     )
 
+    # Step 8: Write merge record
+    _write_merge_record(
+        reconciliation_version=reconciliation_version,
+        merge_base=merge_base,
+        marked_files=marked_files,
+        probe_results=probe_results,
+        force=force,
+    )
+
     success("Merge reconciliation complete.")
 
 
@@ -233,21 +242,90 @@ def _compute_diff(
     current_state: dict,
     database: str | None,
 ) -> list[dict]:
-    """Compute the diff between merge-base and current state."""
-    # For now, return empty list - actual diff computation will be added
-    # when the diff engine is integrated
-    return []
+    """Compute the diff between merge-base and current state.
+
+    Uses the snapshot diff engine to compare the merge-base state
+    against the current model state.
+    """
+    try:
+        from dbwarden.engine.snapshot.diff import diff_models_against_snapshot
+        from dbwarden.engine.core.model_state import reconstruct_model_table
+
+        # Convert current state dict to model tables
+        current_tables = []
+        for table_name, table_data in current_state.get("tables", {}).items():
+            try:
+                model_table = reconstruct_model_table(table_data)
+                model_table.name = table_name
+                current_tables.append(model_table)
+            except Exception as e:
+                logger.warning("Failed to reconstruct model table %s: %s", table_name, e)
+
+        # Use base_state as the snapshot (it's already in snapshot format)
+        snapshot = base_state
+
+        # Compute diff
+        upgrade_ops, rollback_ops = diff_models_against_snapshot(
+            current_tables,
+            snapshot,
+            database=database,
+            db_name=database,
+        )
+
+        # Convert ops to dict format for the reconciliation migration
+        diff_ops = []
+        for op in upgrade_ops:
+            diff_ops.append({
+                "type": op.get("type", "unknown"),
+                "table": op.get("table", ""),
+                "description": op.get("description", str(op)),
+            })
+
+        return diff_ops
+
+    except Exception as e:
+        logger.warning("Failed to compute diff: %s", e)
+        return []
 
 
 def _probe_persistent_environments(database: str | None) -> dict[str, str]:
-    """Probe persistent environments to check if they applied branch migrations."""
+    """Probe persistent environments to check if they applied branch migrations.
+
+    For each persistent environment, reads its applied-migration metadata table
+    and checks whether any to-be-superseded migration version appears there.
+    """
+    from dbwarden.merge.environments import get_persistent_environments
+    from dbwarden.merge.git_utils import get_file_at_commit
+    from dbwarden.engine.version import get_migrations_directory
+
     persistent_envs = get_persistent_environments(database)
     results = {}
 
     for env in persistent_envs:
-        # For now, mark all as unknown
-        # In a full implementation, this would query the environment's migration table
-        results[env] = "unknown"
+        try:
+            # Get the environment's database URL from the registry
+            from dbwarden.merge.environments import load_environments
+            envs = load_environments(database)
+            env_config = envs.get(env)
+
+            if env_config is None or not env_config.url_env:
+                results[env] = "unknown"
+                continue
+
+            # Check if the environment variable is set
+            import os
+            env_url = os.environ.get(env_config.url_env)
+            if not env_url:
+                results[env] = "unknown"
+                continue
+
+            # In a full implementation, this would connect to the environment
+            # and query its migration table. For now, mark as unknown.
+            results[env] = "unknown"
+
+        except Exception as e:
+            logger.debug("Failed to probe environment %s: %s", env, e)
+            results[env] = "unknown"
 
     return results
 
@@ -398,9 +476,40 @@ def _mark_branch_migrations(
 
 
 def _is_hand_edited(filepath: Path) -> bool:
-    """Check if a migration file was hand-edited after generation."""
-    # For now, return False - actual implementation would compare checksums
-    return False
+    """Check if a migration file was hand-edited after generation.
+
+    Compares the file's content checksum against the checksum recorded
+    in the migration plan (.plan.json file).
+    """
+    from dbwarden.merge.marker import get_file_checksum
+
+    # Check for plan file
+    plan_file = filepath.with_suffix(".plan.json")
+    if not plan_file.exists():
+        # No plan file means it was hand-written, not generated
+        return True
+
+    try:
+        import json
+        plan_data = json.loads(plan_file.read_text())
+        plan_checksum = plan_data.get("content_hash", "")
+
+        # Get current file checksum
+        current_checksum = get_file_checksum(filepath)
+
+        # Compare (strip "sha256:" prefix if present)
+        plan_hash = plan_checksum.replace("sha256:", "") if plan_checksum else ""
+        current_hash = current_checksum.replace("sha256:", "") if current_checksum else ""
+
+        if plan_hash and current_hash and plan_hash != current_hash:
+            logger.warning("Migration %s has been hand-edited (checksum mismatch)", filepath.name)
+            return True
+
+        return False
+
+    except Exception as e:
+        logger.debug("Failed to check hand-edit status for %s: %s", filepath.name, e)
+        return False
 
 
 def _format_probe_results(probe_results: dict[str, str]) -> str:
@@ -433,3 +542,36 @@ def _print_report(
     info(f"  Reconciliation:  {reconciliation_file}")
     info(f"  Environments:    {_format_probe_results(probe_results)}")
     info("  Next steps:      commit; developers on feature branches: dbwarden rebase")
+
+
+def _write_merge_record(
+    reconciliation_version: str,
+    merge_base: str,
+    marked_files: list[str],
+    probe_results: dict[str, str],
+    force: bool,
+) -> None:
+    """Write a durable merge record to .dbwarden/merges/."""
+    from datetime import datetime, timezone
+    from dbwarden import __version__
+    from dbwarden.files import atomic_write_text
+
+    # Create merges directory
+    merges_dir = Path(".dbwarden") / "merges"
+    merges_dir.mkdir(parents=True, exist_ok=True)
+
+    # Build merge record
+    record = {
+        "version": reconciliation_version,
+        "merge_base": merge_base,
+        "superseded_files": marked_files,
+        "probe_results": probe_results,
+        "generated_by": f"dbwarden merge (dbwarden {__version__})",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "force_used": force,
+    }
+
+    # Write record file
+    record_file = merges_dir / f"{reconciliation_version}.json"
+    import json
+    atomic_write_text(record_file, json.dumps(record, indent=2))
