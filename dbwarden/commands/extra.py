@@ -204,28 +204,101 @@ def _severity_for(operation: str) -> str:
 
 
 def lock_status_cmd(database: str | None = None) -> None:
-    """Check if migration is currently locked."""
-    from dbwarden.repositories import check_lock
+    """Check if migration is currently locked with detailed holder info."""
+    from dbwarden.lock import check_lock, get_lock_status
+    from dbwarden.lock.state import LockState, compute_health
 
     is_locked = check_lock(database)
     db_name = database or "default"
+
+    status = get_lock_status(database)
+
     if json_mode():
-        emit_json({"database": db_name, "locked": is_locked})
+        payload = {"database": db_name, "locked": is_locked}
+        if status:
+            payload.update({
+                "state": status.get("state"),
+                "execution_id": status.get("execution_id"),
+                "owner_id": status.get("owner_id"),
+                "host": status.get("host"),
+                "pid": status.get("pid"),
+                "migration_version": status.get("migration_version"),
+                "acquired_at": status.get("acquired_at"),
+                "last_heartbeat_at": status.get("last_heartbeat_at"),
+            })
+        emit_json(payload)
         return
-    if is_locked:
-        warning("Migration lock: ACTIVE")
-        info("Another migration process may be running.")
-    else:
+
+    if not is_locked or status is None:
         success("Migration lock: INACTIVE")
+        return
+
+    state_str = status.get("state", "UNKNOWN")
+    try:
+        state = LockState(state_str)
+    except ValueError:
+        state = LockState.AVAILABLE
+
+    health = compute_health(state, status.get("last_heartbeat_at"))
+
+    section("Migration lock status")
+    info(f"  State:       {state_str}")
+    info(f"  Health:      {health}")
+    if status.get("execution_id"):
+        info(f"  Execution:   {status['execution_id'][:16]}")
+    if status.get("host"):
+        info(f"  Host:        {status['host']}")
+    if status.get("pid"):
+        info(f"  PID:         {status['pid']}")
+    if status.get("migration_version"):
+        info(f"  Migration:   {status['migration_version']}")
+    if status.get("acquired_at"):
+        info(f"  Acquired:    {status['acquired_at']}")
+    if status.get("last_heartbeat_at"):
+        info(f"  Heartbeat:   {status['last_heartbeat_at']}")
+
+    if health == "STUCK":
+        warning("Lock is STUCK: holder heartbeat is stale. Process may be paused or dead.")
+        info("Run 'dbwarden unlock' to force release after inspecting the holder.")
+    elif health == "DEAD":
+        warning("Lock holder appears dead. Run 'dbwarden unlock' to release.")
 
 
-def unlock_cmd(database: str | None = None) -> None:
-    """Release the migration lock."""
-    from dbwarden.repositories import check_lock, force_release_lock
+def unlock_cmd(database: str | None = None, force: bool = False) -> None:
+    """Release the migration lock.
+
+    Without --force, shows holder diagnostics and requires confirmation.
+    With --force, terminates the holder's server connection and releases.
+    """
+    from dbwarden.lock import check_lock, force_release_lock, get_lock_status
+    from dbwarden.lock.state import LockState
 
     if not check_lock(database):
         warning("Migration lock is not currently held.")
         return
+
+    status = get_lock_status(database)
+    if status is None:
+        warning("Migration lock is not currently held.")
+        return
+
+    state_str = status.get("state", "UNKNOWN")
+    host = status.get("host", "unknown")
+    pid = status.get("pid", "unknown")
+    execution_id = status.get("execution_id", "unknown")[:16]
+    migration_version = status.get("migration_version", "unknown")
+
+    if not force:
+        section("Lock holder information")
+        info(f"  State:       {state_str}")
+        info(f"  Host:        {host}")
+        info(f"  PID:         {pid}")
+        info(f"  Execution:   {execution_id}")
+        info(f"  Migration:   {migration_version}")
+        info(f"  Acquired:    {status.get('acquired_at', 'unknown')}")
+        info(f"  Heartbeat:   {status.get('last_heartbeat_at', 'unknown')}")
+        warning("This will force-release the lock without terminating the holder's connection.")
+        info("Use 'dbwarden unlock --force' to skip this prompt in automation.")
 
     if force_release_lock(database):
         success("Migration lock released successfully.")

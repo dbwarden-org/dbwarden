@@ -702,10 +702,13 @@ def unlock(
     database: str | None = typer.Option(
         None, "--database", "-d", help="Target database name"
     ),
+    force: bool = typer.Option(
+        False, "--force", "-f", help="Skip confirmation and force-release the lock"
+    ),
 ):
     """Release the migration lock."""
     validate_directory()
-    handle_unlock(database=database)
+    handle_unlock(database=database, force=force)
 
 
 @seed_app.command("create")

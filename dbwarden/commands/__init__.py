@@ -206,9 +206,9 @@ def handle_lock_status(database: str | None = None) -> None:
     lock_status_cmd(database=database)
 
 
-def handle_unlock(database: str | None = None) -> None:
+def handle_unlock(database: str | None = None, force: bool = False) -> None:
     """Handle unlock command."""
-    unlock_cmd(database=database)
+    unlock_cmd(database=database, force=force)
 
 
 def handle_settings_show_command(
