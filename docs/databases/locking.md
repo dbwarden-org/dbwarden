@@ -86,17 +86,23 @@ The INSPECTING state compares the recorded migration checksum with the candidate
 
 ## Distributed locking (Redis)
 
-For multi-instance deployments where multiple application replicas could trigger migrations concurrently, dbwarden provides a Redis-backed distributed lock through `dbwarden_fastapi.lock`:
+For multi-instance deployments where multiple application replicas could trigger migrations concurrently, the `dbwarden-redis` plugin provides a Redis-backed distributed lock:
 
-```python
-from dbwarden_fastapi import migration_lock
-
-async with migration_lock() as locked:
-    if locked:
-        await run_migration()
+```bash
+dbwarden plugin add dbwarden-redis
 ```
 
-The Redis lock uses `SETNX` + `EXPIRE` with a default TTL of 60 seconds. The database lock and Redis lock guard different entry points (CLI vs FastAPI) and can be used independently or together.
+```python
+from redis.asyncio import Redis
+from dbwarden_redis import migration_lock
+
+redis = Redis.from_url("redis://localhost:6379")
+
+async with migration_lock(redis):
+    await run_migration()
+```
+
+The Redis lock uses `SET NX EX` with a configurable TTL (default 60 seconds). The database lock and Redis lock guard different entry points (CLI vs any wrapped code path) and can be used independently or together. See [dbwarden-redis](https://github.com/dbwarden-org/dbwarden-redis) for full documentation.
 
 ## Per-backend details
 

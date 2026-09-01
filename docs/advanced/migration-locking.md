@@ -137,7 +137,7 @@ Releasing a lock held by a live migration process will allow a second migration 
 
 ## ClickHouse coordination profiles
 
-ClickHouse has no session-scoped user locks, so dbwarden uses a lease-based approach with coordination profiles:
+ClickHouse has no session-scoped user locks, so dbwarden uses a lease-based approach with coordination profiles. For the full explanation of why each profile exists and how to set up your deployment, see [ClickHouse Locking](clickhouse-locking.md).
 
 | Profile | Description | Grade |
 |---------|-------------|-------|
@@ -197,19 +197,24 @@ concurrency:
 ## Distributed locking with Redis
 
 For multi-instance deployments where multiple application replicas could
-trigger migrations concurrently, dbwarden provides a Redis-backed
-distributed lock through `dbwarden_fastapi.lock`:
+trigger migrations concurrently, the `dbwarden-redis` plugin provides
+a Redis-backed distributed lock:
 
-```python
-from dbwarden_fastapi import migration_lock
-
-# Within a FastAPI route or lifespan:
-async with migration_lock() as locked:
-    if locked:
-        await run_migration()
+```bash
+dbwarden plugin add dbwarden-redis
 ```
 
-The Redis lock uses `SETNX` + `EXPIRE` with a default TTL of 60 seconds.
+```python
+from redis.asyncio import Redis
+from dbwarden_redis import migration_lock
+
+redis = Redis.from_url("redis://localhost:6379")
+
+async with migration_lock(redis):
+    await run_migration()
+```
+
+The Redis lock uses `SET NX EX` with a configurable TTL (default 60 seconds).
 If the application crashes while holding the lock, Redis releases it
 automatically after the TTL expires.
 
@@ -217,15 +222,17 @@ automatically after the TTL expires.
 
 | Aspect | Database lock | Redis lock |
 |--------|---------------|------------|
-| Scope | CLI commands (`migrate`, `rollback`, `downgrade`) | FastAPI `POST /migrate` endpoint |
+| Scope | CLI commands (`migrate`, `rollback`, `downgrade`) | Any code path you wrap |
 | Storage | `dbwarden_lock` table in the target database | Redis key |
-| TTL | Heartbeat-based stale detection (default 45s); native locks auto-release on connection close | 60-second default TTL |
+| TTL | Heartbeat-based stale detection (default 45s); native locks auto-release on connection close | Configurable TTL (default 60s) |
 | Failure mode | Detects stale locks via heartbeat; recovery state machine guides recovery | Auto-released after TTL |
 | External dependency | None (uses the database itself) | Redis required |
 
 Both locks can be used independently or together; they guard different
 entry points. The database lock protects the CLI; the Redis lock
-protects the FastAPI endpoint.
+protects any entry point you wrap.
+
+See the [dbwarden-redis](https://github.com/dbwarden-org/dbwarden-redis) plugin for full documentation.
 
 ## Lifespan integration
 
@@ -237,15 +244,18 @@ migration context:
 ```python
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from dbwarden_fastapi import dbwarden_lifespan, migration_lock
+from dbwarden_fastapi import dbwarden_lifespan
+from dbwarden_redis import migration_lock
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with migration_lock():
+    redis = Redis.from_url("redis://localhost:6379")
+    async with migration_lock(redis):
         async with dbwarden_lifespan(mode="migrate", allow_in_production=True):
             yield
 ```
 
 See also: [Safe Deployment](safe-deployment.md) | [CI/CD Patterns](ci-cd-patterns.md) | [`lock` commands](../commands/lock.md)
 
-The FastAPI lifespan helper lives in the `dbwarden-fastapi` plugin rather than core: [dbwarden-fastapi](https://github.com/dbwarden-org/dbwarden-fastapi).
+The FastAPI lifespan helper lives in the `dbwarden-fastapi` plugin: [dbwarden-fastapi](https://github.com/dbwarden-org/dbwarden-fastapi).
+The Redis lock lives in the `dbwarden-redis` plugin: [dbwarden-redis](https://github.com/dbwarden-org/dbwarden-redis).
