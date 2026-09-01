@@ -177,6 +177,7 @@ At least one of `database_url_sync` or `database_url_async` must be provided.
 A unique identifier for this database within your project.
 
 **Requirements:**
+
 - Must be unique across all entries in your config source
 - Used in CLI `--database` / `-d` flags to select this database
 - Becomes part of migration filename prefix (for versioned migrations)
@@ -262,6 +263,7 @@ Path where this database's migration files are stored.
 A list of Python import paths where dbwarden should discover SQLAlchemy model definitions.
 
 **When required:**
+
 - **Single database:** Optional (dbwarden scans entire codebase)
 - **Multiple databases:** Required for each database
 
@@ -290,6 +292,7 @@ name appears in this list are owned by this database. All other discovered
 tables are ignored.
 
 **When to use:**
+
 - **Multi-database shared `model_paths`:** Two databases share the same
   import path but own different subsets of tables.
 - **Selective deployment:** A microservice owns only a few tables from a
@@ -407,15 +410,17 @@ Use this when:
 These define an alternate connection for local development workflows.
 
 When `--dev` is passed to any dbwarden command:
+
 - `database_type` is swapped to `dev_database_type`
 - `database_url_sync` / `database_url_async` are swapped to `dev_database_url`
 
 **Benefits:**
--  Use SQLite locally for speed (if production is PostgreSQL)
--  Target a separate development database instance
--  Test migrations safely before running against production
--  Each developer has isolated database
--  Easy to reset (just delete the file)
+
+- Use SQLite locally for speed (if production is PostgreSQL)
+- Target a separate development database instance
+- Test migrations safely before running against production
+- Each developer has isolated database
+- Easy to reset (just delete the file)
 
 **Example:**
 ```python
@@ -453,11 +458,13 @@ Set `overlap_models=True` when:
 When enabled, CLI display commands show the original variable/expression for non-literal arguments instead of resolved values.
 
 **Use when:**
+
 - Your config uses environment variables or expressions for secrets
 - You want terminal output to avoid exposing credentials
 - Running commands in CI/CD with logged output
 
 **Example:**
+
 ```python
 import os
 
@@ -491,10 +498,12 @@ Always set `secure_values=True` in production to prevent credential exposure in 
 ClickHouse cluster name. When set, dbwarden appends `ON CLUSTER '<name>'` to every DDL statement (CREATE, ALTER, DROP, RENAME, DETACH, ATTACH) for this database.
 
 **Use when:**
+
 - You have a multi-node ClickHouse cluster and want DDL distributed automatically
 - You want explicit control over which DDL goes to which cluster
 
 **Example:**
+
 ```python
 analytics = database_config(
     database_name="analytics",
@@ -505,6 +514,7 @@ analytics = database_config(
 ```
 
 **Validation:**
+
 - Mutually exclusive with `ch_replicated_database` (setting both raises `ConfigurationError`)
 - Must be a non-empty string when set
 - Cluster name must match a cluster defined in ClickHouse's `remote_servers.xml`
@@ -516,10 +526,12 @@ See [ON Cluster](../databases/clickhouse/on-cluster.md) for full details on DDL 
 When `True`, dbwarden uses the ClickHouse `Replicated` database engine. DDL propagates automatically through ZooKeeper, so `ON CLUSTER` must be omitted.
 
 **Use when:**
+
 - You want automatic DDL replication via ZooKeeper without explicit `ON CLUSTER` clauses
 - Your tables use `Replicated*` engine variants
 
 **Example:**
+
 ```python
 analytics = database_config(
     database_name="analytics",
@@ -530,6 +542,7 @@ analytics = database_config(
 ```
 
 **Validation:**
+
 - Mutually exclusive with `ch_cluster` (setting both raises `ConfigurationError`)
 - When `True`, use `Replicated*` engine variants (e.g., `replicated_merge_tree()`) in your models
 
@@ -718,10 +731,12 @@ analytics = database_config(
 ## Related Documentation
 
 **Getting Started:**
+
 - [Quick Start](../configuration/quick-start.md) - Your first configuration
 - [Concepts](../configuration/concepts.md) - How configuration works
 
 **Guides:**
+
 - [Connection URLs](../configuration/connection-urls.md) - Database URL formats
 - [Model Discovery](../configuration/model-discovery.md) - How `model_paths` works
 - [Dev Mode](../configuration/dev-mode.md) - Local development
@@ -729,4 +744,5 @@ analytics = database_config(
 - [Production Patterns](../configuration/production-patterns.md) - Real-world examples
 
 **Help:**
+
 - [Troubleshooting](../configuration/troubleshooting.md) - Common issues

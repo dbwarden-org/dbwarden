@@ -92,6 +92,7 @@ class ClusterContext:
 ```
 
 Validation rules:
+
 - `ON_CLUSTER` mode requires a non-empty `cluster_name`. Raises `ValueError` otherwise.
 - Non-`ON_CLUSTER` modes reject any `cluster_name`. Raises `ValueError` if one is provided.
 

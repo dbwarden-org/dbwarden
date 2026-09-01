@@ -274,6 +274,7 @@ Before enabling CH-1 in production:
    ```
 
 3. **Review generated migrations**:
+
    - All CREATE statements should use `IF NOT EXISTS`
    - All DROP statements should use `IF EXISTS`
    - All ALTER ADD/DROP COLUMN should use `IF NOT EXISTS`/`IF EXISTS`
