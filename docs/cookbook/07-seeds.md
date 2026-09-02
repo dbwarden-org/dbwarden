@@ -38,7 +38,7 @@ class CountrySeed(Seed):
 
 Notice:
 
-- **No `version`**: versions are auto-assigned (`C0001`, `C0002`, ...)
+- **Version**: declare a permanent `__seed_version__` such as `C0001`; never change or reuse a released version
 - **Model instances** in `rows`: your IDE gives full autocompletion on column names
 - **Keyword arguments required**: SQLAlchemy 2.0's `DeclarativeBase` does not accept positional args; always use `Model(col=val)` syntax
 - **`__seed_database__`**: route the seed to the correct database

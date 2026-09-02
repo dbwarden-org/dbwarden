@@ -17,19 +17,19 @@
 Install with metrics support:
 
 ```bash
-uv add "dbwarden[metrics]"
+pip install prometheus-client
 dbwarden plugin add dbwarden-fastapi
 ```
 
-dbwarden exposes six Prometheus metric families:
+dbwarden exposes Prometheus metric families:
 
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
-| `dbwarden_migrations_total` | Counter | `database`, `status` | Migration count |
-| `dbwarden_migration_duration_seconds` | Histogram | `database` | Execution time |
+| `dbwarden_migrations_total` | Counter | `database`, `version`, `success` | Migration count |
+| `dbwarden_migration_duration_seconds` | Histogram | `database`, `version` | Execution time |
 | `dbwarden_schema_version` | Gauge | `database` | Current version |
-| `dbwarden_pending_migrations` | Gauge | `database` | Pending count |
-| `dbwarden_errors_total` | Counter | `database`, `error_type` | Error count |
+| `dbwarden_migrations_pending` | Gauge | `database` | Pending count |
+| `dbwarden_migration_errors_total` | Counter | `database` | Error count |
 | `dbwarden_seed_version` | Gauge | `database` | Current seed version |
 
 ## Step 2: Add Metrics to FastAPI
