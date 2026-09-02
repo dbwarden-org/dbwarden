@@ -24,6 +24,8 @@ Value hooks are registered with `registry.register(name, callable)`. Object hand
 | `seed_list` | no | `(*, database=None, all_databases=False, verbose=False, prune=False)` | `None` | `dbwarden-seeds` |
 | `seed_rollback` | no | `(*, count=None, to_version=None, database=None, all_databases=False, verbose=False)` | `None` | `dbwarden-seeds` |
 | `seed_export` | no | `(*, database=None, all_databases=False, output_dir="seeds")` | `None` | `dbwarden-seeds` |
+| `sandbox_provider_start` | no | `(db_name: str \| None = None)` | `None` | `dbwarden-sandbox` |
+| `sandbox_provider_stop` | no | `(db_name: str \| None = None)` | `None` | `dbwarden-sandbox` |
 
 **Multi** hooks (`health_routes`, `migration_routes`) may be provided by several plugins; core collects all of them. Every other value hook is **single**: two providers cause a `HookConflictError` when the hook runs.
 

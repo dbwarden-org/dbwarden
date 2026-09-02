@@ -134,7 +134,6 @@ ClickHouse table recreation uses a detect-and-refuse rollback policy. Unknown me
 | `create_ch_settings_profile` | real | Rollback drops settings profile. |
 | `drop_ch_settings_profile` | conditional | Recreates settings profile from captured settings and role assignments in `rollback_attrs`. |
 | `alter_ch_settings_profile` | conditional | Restores prior settings and role assignments from `rollback_attrs`. |
-| `ChRbacHandler` | no-op | No op types are emitted by this wrapper. |
 
 ## Manual and Irreversible Boundaries
 

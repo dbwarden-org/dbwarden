@@ -55,11 +55,11 @@ dbwarden rebase --database local
 - `--verbose`, `-v`: Enable verbose logging
 
 **Algorithm:**
-1. Read local applied migrations
-2. Identify superseded versions
-3. Rollback to merge-base (preferred) or reset (fallback)
-4. Re-apply runnable chain
-5. Verify convergence
+1. Snapshot live environment
+2. Diff against merged models
+3. Generate environment-specific reconciliation
+4. Apply with lock discipline
+5. Update merge record
 
 ### `dbwarden reconcile`
 

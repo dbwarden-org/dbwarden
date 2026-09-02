@@ -24,7 +24,7 @@ The lock mechanism varies by engine:
 If a second `migrate` invocation starts while the first holds the lock, it fails immediately with:
 
 ```
-LockError: Could not acquire migration lock. <holder diagnostics>
+Could not acquire migration lock. <holder diagnostics>
 ```
 
 dbwarden does not retry on lock failure by default. The calling process (CI job, deploy script) must decide whether to retry or abort.
@@ -47,7 +47,7 @@ Output when locked:
 Migration lock status
   State:       RUNNING
   Health:      HEALTHY
-  Execution:   abc123...
+  Execution:   abc123def456ghi7
   Host:        deploy-runner-7
   PID:         1234
   Migration:   V042
@@ -61,12 +61,16 @@ Health verdicts:
 - **STUCK**: Lock held, heartbeat is stale (process may be paused or dead)
 - **DEAD**: Lock free, status row shows dead worker
 - **AVAILABLE**: No lock held
+- **COMPLETE**: Migration completed successfully
+- **FAILED**: Migration failed
+- **INSPECTING**: Recovery inspection in progress
+- **NEEDS_REVIEW**: Human intervention required
 
 ## Heartbeat
 
 dbwarden runs a background heartbeat that updates the `last_heartbeat_at` timestamp every 15 seconds. This allows other processes to detect stale or dead workers.
 
-On native-lock engines (PostgreSQL, MySQL), heartbeat failure is an observability event only; the migration continues. On fallback engines (ClickHouse), heartbeat failure is fatal after a configurable grace period.
+On native-lock engines (PostgreSQL, MySQL), heartbeat failure is an observability event only; the migration continues. On SQLite, there is no heartbeat because the migration transaction holds the write lock. On fallback engines (ClickHouse), heartbeat failure is fatal after a configurable grace period.
 
 The heartbeat runs on a separate connection to avoid interfering with the migration connection.
 
@@ -114,13 +118,15 @@ The `--force` flag skips the confirmation prompt. Without it, `unlock` shows hol
 When a new worker acquires the lock and detects a dead predecessor, it enters the recovery state machine:
 
 ```
-AVAILABLE → RUNNING → COMPLETE
-                     → FAILED
+AVAILABLE → RUNNING → COMPLETE → AVAILABLE (loop back)
+                     → FAILED → AVAILABLE (loop back)
                      → DEAD (detected by new acquirer)
                           → INSPECTING
                                → COMPLETE (all steps applied)
-                               → resume (safely resumable)
+                               → RUNNING (resume safely)
                                → NEEDS_REVIEW (human decision)
+                                    → AVAILABLE (loop back)
+                                    → RUNNING (retry)
 ```
 
 The INSPECTING state compares the recorded migration checksum with the candidate migration. If they match, the migration can be resumed. If they don't match, the worker transitions to NEEDS_REVIEW and waits for human intervention.

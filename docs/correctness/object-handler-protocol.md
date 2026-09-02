@@ -21,6 +21,7 @@ class ObjectHandler(Protocol):
     object_type: str
     run_phase: RunPhase
     statement_order: StatementOrder
+    ordering: OrderingConstraint
 
     def extract(self, snapshot: dict[str, Any]) -> dict[str, Any]: ...
 
@@ -141,8 +142,9 @@ Handlers are registered with the `RegistryDriver` in `dbwarden/engine/core/regis
 
 ```python
 class RegistryDriver:
-    def __init__(self):
+    def __init__(self, *, include_plugins: bool = True):
         self._handlers: dict[str, ObjectHandler] = {}
+        self._plugin_claims: dict[str, ObjectHandlerRegistration] = {}
 
     def register(self, handler: ObjectHandler) -> None:
         self._handlers[handler.object_type] = handler
