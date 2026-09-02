@@ -25,9 +25,9 @@ site/            # Built documentation output (gitignored)
 | `repositories/` | Migration and lock metadata persistence |
 | `config*.py` | Configuration loading and resolution |
 | `constants.py` | Shared constants |
-| `exceptions.py` | Exception hierarchy |
+| `exceptions/` | Exception hierarchy |
 | `seed.py` | Seed data infrastructure |
-| `sandbox.py` | Module loading sandbox for user model files |
+| `engine/sandbox.py` | Module loading sandbox for user model files |
 
 ## The `schema/` vs `databases/` Boundary
 

@@ -317,6 +317,26 @@ $ dbwarden lock-status --database primary
 $ dbwarden unlock --database primary
 ```
 
+## Merge handling
+
+### `merge`
+
+```bash
+$ dbwarden merge --database primary
+```
+
+### `rebase`
+
+```bash
+$ dbwarden rebase --database primary
+```
+
+### `reconcile`
+
+```bash
+$ dbwarden reconcile --environment staging
+```
+
 ## Plugin management
 
 See the [Plugins guide](plugins/index.md) for the trust model and development docs.

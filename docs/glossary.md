@@ -27,7 +27,7 @@ description: Key terms and concepts used throughout the dbwarden documentation, 
 : Analyzes schema differences between SQLAlchemy models and a live database, classifying every operation by danger level.
 
 **Code Seed**
-: A seed defined as a Python class extending `Seed`, with `run()` and optional `rollback()` methods. The recommended way to manage seed data.
+: A seed defined as a Python class extending `Seed`, with `forward(connection, session)` and `reverse(connection, session)` methods. The recommended way to manage seed data.
 
 **Configuration (dbwarden.py)**
 : dbwarden uses a Python file (`dbwarden.py`) with concrete `DbwardenDatabase` classes by default. The equivalent `database_config()` function API is also supported, providing type safety, runtime flexibility, and IDE support for configuring databases.
@@ -124,7 +124,7 @@ description: Key terms and concepts used throughout the dbwarden documentation, 
 ## S
 
 **Safety Check**
-: A feature that classifies every migration operation into danger levels (safe, caution, danger, manual) so teams can review high-risk changes before production.
+: A feature that classifies every migration operation into danger levels (SAFE, INFO, WARN, CRITICAL) so teams can review high-risk changes before production.
 
 **Sandbox**
 : An isolated test environment using Testcontainers to validate migrations against a real database before applying them to production or staging.

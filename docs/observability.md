@@ -28,11 +28,11 @@ When enabled, dbwarden instruments the `migrate` and `seed apply` commands with 
 
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
-| `dbwarden_migrations_total` | Counter | `database`, `version` | Total migrations applied |
-| `dbwarden_migration_duration_seconds` | Histogram | `database` | Duration of migration operations |
+| `dbwarden_migrations_total` | Counter | `database`, `version`, `success` | Total migrations applied |
+| `dbwarden_migration_duration_seconds` | Histogram | `database`, `version` | Duration of migration operations |
 | `dbwarden_schema_version` | Gauge | `database` | Current schema version |
 | `dbwarden_seed_version` | Gauge | `database` | Current seed version |
-| `dbwarden_pending_migrations` | Gauge | `database` | Number of pending migrations |
+| `dbwarden_migrations_pending` | Gauge | `database` | Number of pending migrations |
 | `dbwarden_migration_errors_total` | Counter | `database` | Total migration errors |
 
 ### FastAPI metrics endpoint

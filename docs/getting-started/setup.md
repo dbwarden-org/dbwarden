@@ -9,7 +9,7 @@ This guide shows the initial project setup for dbwarden. By the end, you will ha
 
 ## Requirements
 
-- Python 3.12 or higher
+- Python 3.12.7 or higher
 - A project that uses SQLAlchemy models, or plans to
 - A supported backend: PostgreSQL, MySQL, MariaDB, SQLite, or ClickHouse
 
@@ -190,14 +190,12 @@ Run:
 
 ```text
 $ dbwarden settings show --all
-Database: primary
-Type: postgresql
-Default: true
-Sync URL: postgresql://user:password@localhost:5432/main
-Model paths: ['app.models']
-Model tables: ['users', 'posts', 'comments']
-Dev database type: sqlite
-Dev database URL: sqlite:///./development.db
+Database: PRIMARY (default)
+  Default: True
+  Type: PostgreSQL
+  URL: postgresql://user:password@localhost:5432/main
+  Migrations Directory: migrations/primary
+  Model Paths: ['app.models']
 ```
 
 If this command works, dbwarden can resolve and validate your config.
