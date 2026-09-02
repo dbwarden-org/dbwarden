@@ -160,6 +160,8 @@ def run_migration(
     db_name: str | None = None,
     perf: bool = False,
     connection: Any | None = None,
+    namespace: str = "default",
+    fencing_token: int = 0,
 ) -> None:
     """Execute SQL statements and record the migration.
 
@@ -178,6 +180,8 @@ def run_migration(
         connection: Optional long-lived migration connection. When provided,
             statements execute on this connection instead of opening a new one.
             The caller is responsible for the connection lifecycle.
+        namespace: Lock namespace for ClickHouse fencing (default: "default").
+        fencing_token: Current fencing token for ClickHouse per-statement checks.
     """
     from dbwarden.logging import get_logger
 
@@ -201,59 +205,124 @@ def run_migration(
                 connections where the caller manages the transaction).
         """
         is_mysql = conn.dialect.name in ("mysql", "mariadb")
+        is_clickhouse = conn.dialect.name in ("clickhouse", "clickhousedb")
         _set_lock_timeout(conn, db_name)
 
-        if is_mysql:
+        # CH-1: Per-statement fence check before DDL execution
+        if is_clickhouse and fencing_token > 0:
+            from dbwarden.lock.clickhouse import ClickHouseStrategy
+            strategy = ClickHouseStrategy()
+            if not strategy.fence_check(conn, namespace, fencing_token):
+                from dbwarden.exceptions import LockError
+                raise LockError(
+                    "ClickHouse fencing token mismatch or lease expired. "
+                    "Another worker may have acquired the lease."
+                )
+
+        # Connection loss handling (Sec 8.3.2): Map connection-loss errors
+        # to immediate abort. A reconnected worker holds no lock and could
+        # mutate unsafely, so we must NOT reconnect.
+        try:
+            if is_mysql:
+                try:
+                    for statement in txn_statements:
+                        _exec_statement(conn, statement, logger=logger, perf=perf)
+
+                except Exception:
+                    raise
+
+                # Complete autocommit work before recording migration state.
+                for stmt in autocommit_statements:
+                    _exec_autocommit_timed(stmt, db_name, logger=logger, perf=perf)
+                if not autocommit_statements and migration_operation == "upgrade":
+                    from dbwarden.engine.checksum import calculate_checksum
+                    from dbwarden.engine.file_parser import get_description_from_filename
+
+                    conn.execute(
+                        text(get_query(QueryMethod.INSERT_VERSION, db_name)),
+                        parameters={
+                            "version": version,
+                            "description": get_description_from_filename(filename),
+                            "filename": filename,
+                            "migration_type": migration_type,
+                            "checksum": calculate_checksum(sql_statements),
+                        },
+                    )
+                elif not autocommit_statements and migration_operation == "rollback":
+                    conn.execute(
+                        text(get_query(QueryMethod.DELETE_VERSION, db_name)),
+                        parameters={"version": version},
+                    )
+                    optimize_sql = get_query(QueryMethod.OPTIMIZE_MIGRATIONS_TABLE, db_name)
+                    if optimize_sql:
+                        conn.execute(text(optimize_sql))
+
+                if autocommit_statements and migration_operation == "upgrade":
+                    _record_upgrade(
+                        version=version,
+                        filename=filename,
+                        migration_type=migration_type,
+                        sql_statements=sql_statements,
+                        db_name=db_name,
+                        connection=conn,
+                    )
+                elif autocommit_statements and migration_operation == "rollback":
+                    _record_rollback(version=version, db_name=db_name, connection=conn)
+                return
+
+            # For external connections (long-lived), don't use savepoints
+            # The caller manages the transaction lifecycle, but we commit after
+            # each migration to persist DDL changes
+            if is_external_conn:
+                try:
+                    for statement in txn_statements:
+                        _exec_statement(conn, statement, logger=logger, perf=perf)
+
+                    if not autocommit_statements and migration_operation == "upgrade":
+                        from dbwarden.engine.checksum import calculate_checksum
+                        from dbwarden.engine.file_parser import get_description_from_filename
+
+                        conn.execute(
+                            text(get_query(QueryMethod.INSERT_VERSION, db_name)),
+                            parameters={
+                                "version": version,
+                                "description": get_description_from_filename(filename),
+                                "filename": filename,
+                                "migration_type": migration_type,
+                                "checksum": calculate_checksum(sql_statements),
+                            },
+                        )
+                    elif not autocommit_statements and migration_operation == "rollback":
+                        conn.execute(
+                            text(get_query(QueryMethod.DELETE_VERSION, db_name)),
+                            parameters={"version": version},
+                        )
+                        optimize_sql = get_query(QueryMethod.OPTIMIZE_MIGRATIONS_TABLE, db_name)
+                        if optimize_sql:
+                            conn.execute(text(optimize_sql))
+
+                    # Commit to persist DDL changes (especially important for SQLite)
+                    conn.commit()
+                except Exception:
+                    # Rollback on error
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+                    raise
+                return
+
+            # For per-operation connections, use savepoints for rollback safety
             try:
-                for statement in txn_statements:
-                    _exec_statement(conn, statement, logger=logger, perf=perf)
-
+                savepoint = conn.begin_nested()
+                has_savepoint = True
             except Exception:
-                raise
-
-            # Complete autocommit work before recording migration state.
-            for stmt in autocommit_statements:
-                _exec_autocommit_timed(stmt, db_name, logger=logger, perf=perf)
-            if not autocommit_statements and migration_operation == "upgrade":
-                from dbwarden.engine.checksum import calculate_checksum
-                from dbwarden.engine.file_parser import get_description_from_filename
-
-                conn.execute(
-                    text(get_query(QueryMethod.INSERT_VERSION, db_name)),
-                    parameters={
-                        "version": version,
-                        "description": get_description_from_filename(filename),
-                        "filename": filename,
-                        "migration_type": migration_type,
-                        "checksum": calculate_checksum(sql_statements),
-                    },
-                )
-            elif not autocommit_statements and migration_operation == "rollback":
-                conn.execute(
-                    text(get_query(QueryMethod.DELETE_VERSION, db_name)),
-                    parameters={"version": version},
-                )
-                optimize_sql = get_query(QueryMethod.OPTIMIZE_MIGRATIONS_TABLE, db_name)
-                if optimize_sql:
-                    conn.execute(text(optimize_sql))
-
-            if autocommit_statements and migration_operation == "upgrade":
-                _record_upgrade(
-                    version=version,
-                    filename=filename,
-                    migration_type=migration_type,
-                    sql_statements=sql_statements,
-                    db_name=db_name,
-                    connection=conn,
-                )
-            elif autocommit_statements and migration_operation == "rollback":
-                _record_rollback(version=version, db_name=db_name, connection=conn)
-            return
-
-        # For external connections (long-lived), don't use savepoints
-        # The caller manages the transaction lifecycle, but we commit after
-        # each migration to persist DDL changes
-        if is_external_conn:
+                has_savepoint = False
+                if txn_statements and len(txn_statements) > 1:
+                    get_logger(db_name=db_name).warning(
+                        "Database does not support savepoints. "
+                        "Multi-statement migrations may leave partial changes on failure."
+                    )
             try:
                 for statement in txn_statements:
                     _exec_statement(conn, statement, logger=logger, perf=perf)
@@ -281,60 +350,24 @@ def run_migration(
                     if optimize_sql:
                         conn.execute(text(optimize_sql))
 
-                # Commit to persist DDL changes (especially important for SQLite)
-                conn.commit()
+                if has_savepoint:
+                    savepoint.commit()
             except Exception:
-                # Rollback on error
-                try:
-                    conn.rollback()
-                except Exception:
-                    pass
+                if has_savepoint:
+                    savepoint.rollback()
                 raise
-            return
 
-        # For per-operation connections, use savepoints for rollback safety
-        try:
-            savepoint = conn.begin_nested()
-            has_savepoint = True
-        except Exception:
-            has_savepoint = False
-            if txn_statements and len(txn_statements) > 1:
-                get_logger(db_name=db_name).warning(
-                    "Database does not support savepoints. "
-                    "Multi-statement migrations may leave partial changes on failure."
-                )
-        try:
-            for statement in txn_statements:
-                _exec_statement(conn, statement, logger=logger, perf=perf)
-
-            if not autocommit_statements and migration_operation == "upgrade":
-                from dbwarden.engine.checksum import calculate_checksum
-                from dbwarden.engine.file_parser import get_description_from_filename
-
-                conn.execute(
-                    text(get_query(QueryMethod.INSERT_VERSION, db_name)),
-                    parameters={
-                        "version": version,
-                        "description": get_description_from_filename(filename),
-                        "filename": filename,
-                        "migration_type": migration_type,
-                        "checksum": calculate_checksum(sql_statements),
-                    },
-                )
-            elif not autocommit_statements and migration_operation == "rollback":
-                conn.execute(
-                    text(get_query(QueryMethod.DELETE_VERSION, db_name)),
-                    parameters={"version": version},
-                )
-                optimize_sql = get_query(QueryMethod.OPTIMIZE_MIGRATIONS_TABLE, db_name)
-                if optimize_sql:
-                    conn.execute(text(optimize_sql))
-
-            if has_savepoint:
-                savepoint.commit()
-        except Exception:
-            if has_savepoint:
-                savepoint.rollback()
+        except Exception as exc:
+            # Connection loss handling (Sec 8.3.2): Map connection-loss errors
+            # to immediate abort. A reconnected worker holds no lock and could
+            # mutate unsafely, so we must NOT reconnect.
+            import sqlalchemy.exc as sa_exc
+            if isinstance(exc, (sa_exc.DBAPIError, sa_exc.OperationalError, sa_exc.InterfaceError)):
+                from dbwarden.exceptions import LockError
+                raise LockError(
+                    f"Connection lost during migration: {exc}. "
+                    "Aborting for safety. A reconnected worker would hold no lock."
+                ) from exc
             raise
 
     if connection is not None:

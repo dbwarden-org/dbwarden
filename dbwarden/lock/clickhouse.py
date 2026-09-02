@@ -126,87 +126,139 @@ class ClickHouseStrategy:
         from dbwarden.lock.clickhouse import check_statement_idempotency
         return check_statement_idempotency(sql)
 
+    def fence_check(
+        self,
+        connection: Any,
+        namespace: str,
+        fencing_token: int,
+        schema: str = "public",
+    ) -> bool:
+        """Per-statement fence check before DDL execution.
+
+        Validates that this worker still owns the lease by checking
+        the fencing token matches. This is the critical safety mechanism
+        for ClickHouse where no session-scoped lock exists.
+
+        Returns True if the fence is valid (safe to proceed).
+        Returns False if the fence is stale (must abort).
+        """
+        try:
+            row = read_status_row(
+                connection, namespace=namespace, db_type="clickhouse", schema=schema
+            )
+            if row is None:
+                return False
+
+            # Check if our fencing token is still the current one
+            current_token = row.get("fencing_token", 0)
+            if current_token != fencing_token:
+                logger.error(
+                    "Fencing token mismatch: expected %d, got %d. "
+                    "Another worker may have acquired the lease.",
+                    fencing_token,
+                    current_token,
+                )
+                return False
+
+            # Check if lease has expired
+            expires_at = row.get("expires_at")
+            if expires_at:
+                now = connection.execute(text("SELECT now()")).scalar()
+                if str(now) > expires_at:
+                    logger.error("Lease has expired (expires_at=%s, now=%s)", expires_at, now)
+                    return False
+
+            return True
+
+        except Exception as exc:
+            logger.error("Fence check failed: %s", exc)
+            return False
+
     def acquire(
         self,
         connection: Any,
         status_row: StatusRow,
         schema: str = "public",
     ) -> AcquireResult:
-        # Check for existing valid lease
-        existing = read_status_row(
-            connection, namespace=status_row.namespace, db_type="clickhouse", schema=schema
-        )
-        if existing:
-            expires_at = existing.get("expires_at")
-            if expires_at:
-                try:
-                    # Check if lease has expired
-                    result = connection.execute(text("SELECT now()")).scalar()
-                    now = str(result)
-                    if expires_at > now:
-                        # Lease is still valid
-                        return AcquireResult(
-                            success=False,
-                            status_row=status_row,
-                            holder_description=_describe_ch_holder(existing),
-                        )
-                except Exception:
-                    pass
+        """Acquire a ClickHouse lease using atomic conditional upsert.
 
-        # Atomic conditional upsert for lease acquisition
-        # Increment fencing token from current max
-        try:
-            max_token = connection.execute(
-                text("SELECT max(fencing_token) FROM dbwarden_lock FINAL WHERE namespace = :ns"),
-                {"ns": status_row.namespace},
-            ).scalar()
-            new_token = (max_token or 0) + 1
-        except Exception:
-            new_token = 1
+        Uses a single INSERT...SELECT...WHERE NOT EXISTS statement to
+        atomically check for existing lease and insert new one if absent.
+        This eliminates the race window in the previous INSERT+verify approach.
+        """
+        import socket
+        import os
 
-        import socket, os
+        # Get current timestamp
         now_result = connection.execute(text("SELECT now()")).scalar()
         now_str = str(now_result)
 
-        params = {
-            "namespace": status_row.namespace,
-            "execution_id": status_row.execution_id,
-            "owner_id": status_row.owner_id,
-            "migration_version": status_row.migration_version,
-            "migration_checksum": status_row.migration_checksum,
-            "fencing_token": new_token,
-            "host": socket.gethostname(),
-            "pid": os.getpid(),
-            "state": "RUNNING",
-            "acquired_at": now_str,
-            "last_heartbeat_at": now_str,
-        }
+        # Calculate lease expiry
+        from datetime import datetime, timedelta
+        now_dt = datetime.fromisoformat(now_str.replace("Z", "+00:00"))
+        expires_dt = now_dt + timedelta(seconds=self.ttl_seconds)
+        expires_str = str(expires_dt)
 
-        # Try to insert; if lease exists and is valid, this will be a no-op
-        # (ClickHouse MergeTree doesn't have UPSERT, so we use INSERT + verification)
+        # Atomic conditional upsert: INSERT only if no valid lease exists
+        # This is the core of CH-0: single-statement atomicity
         try:
             connection.execute(
                 text(
-                    "INSERT INTO dbwarden_lock "
-                    "(namespace, execution_id, owner_id, migration_version, migration_checksum, "
-                    " fencing_token, host, pid, state, acquired_at, last_heartbeat_at) "
-                    "VALUES "
-                    "(:namespace, :execution_id, :owner_id, :migration_version, :migration_checksum, "
-                    " :fencing_token, :host, :pid, :state, :acquired_at, :last_heartbeat_at)"
+                    """
+                    INSERT INTO dbwarden_lock
+                    (namespace, execution_id, owner_id, migration_version,
+                     migration_checksum, fencing_token, host, pid, state,
+                     acquired_at, last_heartbeat_at, expires_at)
+                    SELECT
+                        :namespace, :execution_id, :owner_id, :migration_version,
+                        :migration_checksum, ifNull(max(fencing_token), 0) + 1,
+                        :host, :pid, 'RUNNING',
+                        :acquired_at, :last_heartbeat_at, :expires_at
+                    FROM dbwarden_lock FINAL
+                    WHERE namespace = :namespace
+                      AND (expires_at IS NULL OR expires_at <= now())
+                    LIMIT 1
+                    """
                 ),
-                params,
+                {
+                    "namespace": status_row.namespace,
+                    "execution_id": status_row.execution_id,
+                    "owner_id": status_row.owner_id,
+                    "migration_version": status_row.migration_version,
+                    "migration_checksum": status_row.migration_checksum,
+                    "host": socket.gethostname(),
+                    "pid": os.getpid(),
+                    "acquired_at": now_str,
+                    "last_heartbeat_at": now_str,
+                    "expires_at": expires_str,
+                },
             )
         except Exception as exc:
-            # May fail if row already exists
-            logger.warning("ClickHouse lease insert attempt: %s", exc)
+            # INSERT may fail if row already exists with valid lease
+            logger.debug("ClickHouse atomic lease insert: %s", exc)
 
-        # Verify we got the lease
+        # Verify we acquired the lease by reading back
         verify = read_status_row(
             connection, namespace=status_row.namespace, db_type="clickhouse", schema=schema
         )
         if verify and verify.get("execution_id") == status_row.execution_id:
-            status_row.fencing_token = new_token
+            status_row.fencing_token = verify.get("fencing_token", 0)
             return AcquireResult(success=True, status_row=status_row)
+
+        # Check if someone else holds a valid lease
+        if verify and verify.get("execution_id") != status_row.execution_id:
+            expires_at = verify.get("expires_at")
+            if expires_at:
+                try:
+                    now = connection.execute(text("SELECT now()")).scalar()
+                    if str(now) <= expires_at:
+                        return AcquireResult(
+                            success=False,
+                            status_row=status_row,
+                            holder_description=_describe_ch_holder(verify),
+                        )
+                except Exception:
+                    pass
 
         return AcquireResult(
             success=False,

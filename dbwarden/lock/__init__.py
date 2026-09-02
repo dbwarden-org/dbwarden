@@ -63,6 +63,7 @@ class LockAcquisition:
     owner_id: str
     strategy: Any
     namespace: str = "default"
+    fencing_token: int = 0
     holder_description: str = ""
     error: str | None = None
 
@@ -155,6 +156,7 @@ def acquire_lock(
         owner_id=owner_id,
         strategy=strategy,
         namespace=effective_namespace,
+        fencing_token=status_row.fencing_token,
         holder_description=result.holder_description,
         error=result.error,
     )
@@ -325,6 +327,96 @@ def force_release_lock(db_name: str | None = None, *, namespace: str = "default"
         return True
     except Exception as exc:
         logger.warning("Failed to force release lock: %s", exc)
+        return False
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def terminate_holder(db_name: str | None = None, *, namespace: str = "default") -> bool:
+    """Terminate the holder's server connection and release the lock.
+
+    This is the v2 unlock mechanism per spec Sec 8.5:
+    - PostgreSQL: SELECT pg_terminate_backend(pid)
+    - MySQL: KILL connection_id
+    - SQLite: Refuse (file locks are OS-held)
+    - ClickHouse: Advance fencing token
+
+    Returns True if the holder was terminated successfully.
+    """
+    from dbwarden.config import get_database
+    from dbwarden.connection.connection import _get_engine, _sandbox_url_var, _sandbox_db_type_var, _probe_connection
+
+    config = get_database(db_name)
+    db_type = config.database_type
+    schema = getattr(config, "postgres_schema", "public") or "public"
+
+    sandbox_url = _sandbox_url_var.get()
+    sandbox_db_type = _sandbox_db_type_var.get()
+    url = sandbox_url if sandbox_url is not None else config.sqlalchemy_url
+    effective_db_type = sandbox_db_type if sandbox_db_type is not None else db_type
+
+    engine = _get_engine(url, effective_db_type)
+    from dbwarden.logging import get_logger
+    _probe_connection(engine, effective_db_type, get_logger(), url)
+    conn = engine.connect()
+
+    try:
+        # Get the holder info first
+        strategy = get_strategy(db_type)
+        holder = strategy.describe_holder(conn, namespace, schema)
+        if holder is None:
+            logger.info("No lock holder found for namespace '%s'", namespace)
+            return True
+
+        # Terminate based on engine type
+        if effective_db_type == "postgresql":
+            if holder.pid:
+                logger.info("Terminating PostgreSQL backend PID %d", holder.pid)
+                conn.execute(text("SELECT pg_terminate_backend(:pid)"), {"pid": holder.pid})
+                logger.info("PostgreSQL backend terminated")
+
+        elif effective_db_type in ("mysql", "mariadb"):
+            if holder.pid:
+                logger.info("Terminating MySQL connection ID %d", holder.pid)
+                conn.execute(text("KILL :connection_id"), {"connection_id": holder.pid})
+                logger.info("MySQL connection terminated")
+
+        elif effective_db_type == "clickhouse":
+            # ClickHouse: advance fencing token to invalidate old lease
+            logger.info("Advancing ClickHouse fencing token to invalidate lease")
+            try:
+                conn.execute(
+                    text("ALTER TABLE dbwarden_lock UPDATE fencing_token = fencing_token + 1 WHERE namespace = :ns"),
+                    {"ns": namespace},
+                )
+                logger.info("ClickHouse fencing token advanced")
+            except Exception as exc:
+                logger.warning("Failed to advance fencing token: %s", exc)
+
+        else:
+            # SQLite: cannot terminate (file locks are OS-held)
+            logger.warning(
+                "Cannot terminate SQLite holder. Kill process %d manually on host %s",
+                holder.pid or 0,
+                holder.host or "unknown",
+            )
+            return False
+
+        # Update status to AVAILABLE
+        _update_state(
+            conn,
+            namespace=namespace,
+            state="AVAILABLE",
+            db_type=db_type,
+            schema=schema,
+        )
+        return True
+
+    except Exception as exc:
+        logger.warning("Failed to terminate holder: %s", exc)
         return False
     finally:
         try:

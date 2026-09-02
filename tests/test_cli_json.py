@@ -118,11 +118,12 @@ class TestJsonFlag:
 
     def test_json_lock_status(self, project):
         (Path("migrations") / "primary").mkdir(parents=True)
-        from dbwarden import repositories
 
-        with patch.object(repositories, "check_lock", return_value=True):
-            runner = CliRunner()
-            result = runner.invoke(app, ["--json", "lock-status"])
+        # Mock at the lock module level where check_lock is defined
+        with patch("dbwarden.lock.check_lock", return_value=True):
+            with patch("dbwarden.lock.get_lock_status", return_value=None):
+                runner = CliRunner()
+                result = runner.invoke(app, ["--json", "lock-status"])
         assert result.exit_code == 0
         payload = _parse(result.output)
         assert payload["locked"] is True

@@ -270,7 +270,7 @@ def unlock_cmd(database: str | None = None, force: bool = False) -> None:
     Without --force, shows holder diagnostics and requires confirmation.
     With --force, terminates the holder's server connection and releases.
     """
-    from dbwarden.lock import check_lock, force_release_lock, get_lock_status
+    from dbwarden.lock import check_lock, terminate_holder, get_lock_status
     from dbwarden.lock.state import LockState
 
     if not check_lock(database):
@@ -297,7 +297,7 @@ def unlock_cmd(database: str | None = None, force: bool = False) -> None:
         info(f"  Migration:   {migration_version}")
         info(f"  Acquired:    {status.get('acquired_at', 'unknown')}")
         info(f"  Heartbeat:   {status.get('last_heartbeat_at', 'unknown')}")
-        warning("This will force-release the lock without terminating the holder's connection.")
+        warning("This will terminate the holder's server connection and release the lock.")
         info("Use 'dbwarden unlock --force' to skip this prompt in automation.")
 
         # Prompt for confirmation
@@ -316,7 +316,7 @@ def unlock_cmd(database: str | None = None, force: bool = False) -> None:
             error("Non-interactive mode requires --force to release lock.")
             return
 
-    if force_release_lock(database):
+    if terminate_holder(database):
         success("Migration lock released successfully.")
     else:
         error("Failed to release migration lock.")

@@ -5,6 +5,15 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def reset_output_mode():
+    """Reset output mode before and after each test to prevent cross-test contamination."""
+    from dbwarden.output import set_output_mode
+    set_output_mode("text")
+    yield
+    set_output_mode("text")
+
+
 class TestExtraCommands:
     @patch("dbwarden.lock.get_lock_status")
     @patch("dbwarden.lock.check_lock")
@@ -39,12 +48,12 @@ class TestExtraCommands:
         mock_print.assert_called()
 
     @patch("dbwarden.lock.get_lock_status")
-    @patch("dbwarden.lock.force_release_lock")
+    @patch("dbwarden.lock.terminate_holder")
     @patch("dbwarden.lock.check_lock")
     @patch("dbwarden.output.console.print")
-    def test_unlock_success(self, mock_print, mock_check, mock_release, mock_status):
+    def test_unlock_success(self, mock_print, mock_check, mock_terminate, mock_status):
         mock_check.return_value = True
-        mock_release.return_value = True
+        mock_terminate.return_value = True
         mock_status.return_value = {
             "state": "RUNNING",
             "execution_id": "abc123",
@@ -61,10 +70,10 @@ class TestExtraCommands:
         mock_print.assert_called_once()
 
     @patch("dbwarden.lock.get_lock_status")
-    @patch("dbwarden.lock.force_release_lock")
+    @patch("dbwarden.lock.terminate_holder")
     @patch("dbwarden.lock.check_lock")
     @patch("dbwarden.output.console.print")
-    def test_unlock_not_held(self, mock_print, mock_check, mock_release, mock_status):
+    def test_unlock_not_held(self, mock_print, mock_check, mock_terminate, mock_status):
         mock_check.return_value = False
 
         from dbwarden.commands.extra import unlock_cmd
@@ -73,12 +82,12 @@ class TestExtraCommands:
         mock_print.assert_called_once()
 
     @patch("dbwarden.lock.get_lock_status")
-    @patch("dbwarden.lock.force_release_lock")
+    @patch("dbwarden.lock.terminate_holder")
     @patch("dbwarden.lock.check_lock")
     @patch("dbwarden.output.console.print")
-    def test_unlock_failure(self, mock_print, mock_check, mock_release, mock_status):
+    def test_unlock_failure(self, mock_print, mock_check, mock_terminate, mock_status):
         mock_check.return_value = True
-        mock_release.return_value = False
+        mock_terminate.return_value = False
         mock_status.return_value = {
             "state": "RUNNING",
             "execution_id": "abc123",

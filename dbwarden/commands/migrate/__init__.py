@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import signal
+import sys
 import time
 import uuid
 from pathlib import Path
@@ -28,6 +30,50 @@ from dbwarden.metrics import (
     set_schema_version,
 )
 from dbwarden import __version__
+
+
+class MigrationSignalHandler:
+    """Signal handler for graceful migration shutdown.
+
+    Handles SIGTERM/SIGINT by:
+    1. Finishing the current statement
+    2. Recording progress
+    3. Releasing the lock
+    4. Exiting with code 75 (EX_TEMPFAIL)
+    """
+
+    def __init__(self):
+        self._interrupted = False
+        self._original_sigterm = None
+        self._original_sigint = None
+
+    def install(self) -> None:
+        """Install signal handlers for SIGTERM and SIGINT."""
+        self._original_sigterm = signal.getsignal(signal.SIGTERM)
+        self._original_sigint = signal.getsignal(signal.SIGINT)
+
+        signal.signal(signal.SIGTERM, self._handle_signal)
+        signal.signal(signal.SIGINT, self._handle_signal)
+
+    def uninstall(self) -> None:
+        """Restore original signal handlers."""
+        if self._original_sigterm is not None:
+            signal.signal(signal.SIGTERM, self._original_sigterm)
+        if self._original_sigint is not None:
+            signal.signal(signal.SIGINT, self._original_sigint)
+
+    def _handle_signal(self, signum: int, frame) -> None:
+        """Handle SIGTERM/SIGINT by setting interrupted flag."""
+        self._interrupted = True
+        # Log the signal but don't exit yet - let the current statement finish
+        signal_name = signal.Signals(signum).name
+        logger = get_logger()
+        logger.warning("Received signal %s, finishing current statement...", signal_name)
+
+    @property
+    def is_interrupted(self) -> bool:
+        """Check if a signal was received."""
+        return self._interrupted
 from dbwarden.output import error, info, section, sql as render_sql, success, warning
 from dbwarden.repositories import (
     create_migrations_table_if_not_exists,
@@ -161,6 +207,14 @@ def migrate_single(
     _lock_strategy = None
     _heartbeat = None
     _migration_conn = None
+    _fencing_token = 0
+    _signal_handler = None
+
+    # Install signal handlers for graceful shutdown (Sec 8.3.5)
+    # SIGTERM/SIGINT: finish current statement, record progress, release lock, exit 75
+    _signal_handler = MigrationSignalHandler()
+    _signal_handler.install()
+
     try:
         if with_backup and not sandbox:
             backup_directory = backup_dir or os.path.join(os.getcwd(), "backups")
@@ -187,6 +241,7 @@ def migrate_single(
                 lock_acquired = True
                 lock_owner = lock_result.owner_id
                 _lock_strategy = lock_result.strategy
+                _fencing_token = lock_result.fencing_token
 
                 # Start heartbeat after successful lock acquisition
                 from dbwarden.lock.heartbeat import HeartbeatTask
@@ -289,6 +344,8 @@ def migrate_single(
                 db_name=db_name,
                 perf=perf,
                 connection=_migration_conn,
+                namespace="default",
+                fencing_token=_fencing_token,
             )
 
             if not defer_snapshots:
@@ -344,6 +401,8 @@ def migrate_single(
                     db_name=db_name,
                     perf=perf,
                     connection=_migration_conn,
+                    namespace="default",
+                    fencing_token=_fencing_token,
                 )
 
             duration = time.time() - start_time
@@ -390,11 +449,28 @@ def migrate_single(
             with PhaseTimer(logger, "Model state write", perf=perf):
                 _write_model_state(config=config, db_name=db_name)
 
-    except Exception:
+    except Exception as exc:
+        # Connection loss handling (Sec 8.3.2): Map connection-loss errors
+        # to immediate abort. A reconnected worker holds no lock and could
+        # mutate unsafely, so we must NOT reconnect.
+        import sqlalchemy.exc as sa_exc
+        if isinstance(exc, (sa_exc.DBAPIError, sa_exc.OperationalError, sa_exc.InterfaceError)):
+            logger.error(
+                "Connection lost during migration. Aborting immediately. "
+                "Do NOT reconnect: a fresh connection would hold no lock."
+            )
+            raise LockError(
+                f"Connection lost during migration: {exc}. "
+                "Aborting for safety. A reconnected worker would hold no lock."
+            ) from exc
         if metrics_enabled():
             increment_migration_errors(actual_db_name)
         raise
     finally:
+        # Restore signal handlers
+        if _signal_handler is not None:
+            _signal_handler.uninstall()
+
         # Stop heartbeat before releasing the lock
         if _heartbeat is not None:
             _heartbeat.stop()
@@ -408,6 +484,11 @@ def migrate_single(
         if lock_acquired:
             if not release_lock(db_name, strategy=_lock_strategy):
                 logger.error("Migration lock was not released by owner %s", lock_owner)
+
+        # If signal was received, exit with code 75 (EX_TEMPFAIL)
+        if _signal_handler is not None and _signal_handler.is_interrupted:
+            logger.warning("Migration interrupted by signal, exiting with code 75")
+            sys.exit(75)
         if _sandbox_started:
             from dbwarden.plugin import HookRegistry
             if HookRegistry.is_registered("sandbox_provider_stop"):
