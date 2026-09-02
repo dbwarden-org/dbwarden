@@ -198,7 +198,6 @@ class Primary(DbwardenDatabase):
 When set, dbwarden redacts the connection URL in:
 
 - `dbwarden settings show` output
-- `dbwarden settings show` output
 - Log lines
 
 The URL is still used internally for connections. This prevents accidental credential exposure in terminal output shared in screenshots or logs.

@@ -103,13 +103,11 @@ they are not registered independently.
 dbwarden searches for configuration in this order:
 
 ```
-1. dbwarden.py in current directory
+1. Walk project tree for dbwarden.py files
       not found
-2. dbwarden.py in parent directories
+2. DBWARDEN_CONFIG_MODULE environment variable
       not found
-3. Full scan for files with declarative classes or database_config()
-      not found
-4. DBWARDEN_CONFIG_MODULE environment variable
+3. Full scan for files with database_config() calls
       not found
 Error: No configuration found
 ```

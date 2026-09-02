@@ -59,13 +59,18 @@ $ dbwarden settings show
 You'll see:
 
 ```
-Database Configuration
-════════════════════════════════════════
-
-primary (default)
-  Type: sqlite
+Database: PRIMARY (default)
+  Default: True
+  Type: SQLite
   URL: sqlite:///./app.db
-  Migrations: migrations/primary
+  Migrations Directory: migrations/primary
+  Migration Table: _dbwarden_migrations
+  Seed Table: _dbwarden_seeds
+  Model Paths: app
+  Dev Database Type: 
+  Dev Database URL: 
+  Overlap Models: False
+  Skip If Missing: False
 ```
 
 ## Step 4: Add Model Paths (Optional)

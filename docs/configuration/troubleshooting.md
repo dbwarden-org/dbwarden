@@ -10,7 +10,7 @@ New projects should declare fields on a `DbwardenDatabase` subclass. The
 ### Symptom
 
 ```
-DBWardenConfigError: No configuration found
+ConfigurationError: No configuration found
 ```
 
 ### Causes & Solutions
@@ -260,7 +260,7 @@ analytics = database_config(
 ### Symptom
 
 ```
-ConfigurationError: model_paths overlap detected between 'primary' and 'analytics'
+ConfigurationError: model_paths overlap detected: path 'app.models' from 'analytics' is also defined in 'primary'; set overlap_models=True to allow
 ```
 
 ### Cause
@@ -554,7 +554,7 @@ class Primary(DbwardenDatabase):
 ### Enable verbose output
 
 ```bash
-$ dbwarden --verbose migrate
+$ dbwarden migrate --verbose
 ```
 
 ### Check configuration
@@ -564,7 +564,7 @@ $ dbwarden --verbose migrate
 $ dbwarden settings show
 
 # Show specific database
-$ dbwarden settings show --database primary
+$ dbwarden settings show primary
 ```
 
 ### Test imports
