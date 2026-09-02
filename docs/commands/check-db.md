@@ -8,6 +8,7 @@ Inspect live database schema.
 $ dbwarden check-db --database primary
 $ dbwarden check-db --database primary --out json
 $ dbwarden check-db --database primary --out yaml
+$ dbwarden check-db --database primary --out sql
 ```
 
 ## Options

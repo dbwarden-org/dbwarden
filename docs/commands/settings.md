@@ -16,22 +16,23 @@ $ dbwarden settings show --all
 
 ### Options
 
-- `--all`, `-a`: show all configured databases
+- `--all`: show all configured databases
 
 ### Example output
 
 ```
 Database: PRIMARY (default)
-  • Default: True
-  • Type: SQLite
-  • URL: sqlite:///./app.db
-  • Migrations Directory: migrations/primary
-  • Migration Table: _dbwarden_migrations
-  • Seed Table: _dbwarden_seeds
-  • Model Paths: ['app']
-  • Dev Database Type: None
-  • Dev Database URL: None
-  • Overlap Models: False
+  Default: True
+  Type: SQLite
+  URL: sqlite:///./app.db
+  Migrations Directory: migrations/primary
+  Migration Table: _dbwarden_migrations
+  Seed Table: _dbwarden_seeds
+  Model Paths: app
+  Dev Database Type: 
+  Dev Database URL: 
+  Overlap Models: False
+  Skip If Missing: False
 ```
 
 ## See also

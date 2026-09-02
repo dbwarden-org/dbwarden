@@ -25,6 +25,8 @@ $ dbwarden migrate --database primary --baseline --to-version 0005
 - `--dry-run`: preview changes without applying
 - `--sandbox`: apply in a temporary sandbox database
 - `--apply-seeds`: apply pending seeds after migrations
+- `--defer-snapshots`: write one final schema snapshot instead of one after every migration
+- `--perf`: log per-SQL-statement timing breakdowns
 - `--verbose`, `-v`
 
 ## Notes

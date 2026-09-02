@@ -28,7 +28,7 @@ When locked:
 Migration lock status
   State:       RUNNING
   Health:      HEALTHY
-  Execution:   abc123...
+  Execution:   abc123def456ghi7
   Host:        deploy-runner-7
   PID:         1234
   Migration:   V042
@@ -42,11 +42,15 @@ Migration lock status
 - **STUCK**: Lock held, heartbeat is stale (process may be paused or dead)
 - **DEAD**: Lock free, status row shows dead worker
 - **AVAILABLE**: No lock held
+- **COMPLETE**: Migration completed successfully
+- **FAILED**: Migration failed
+- **INSPECTING**: Recovery inspection in progress
+- **NEEDS_REVIEW**: Human intervention required
 
 ### JSON output
 
 ```bash
-$ DBWARDEN_OUTPUT=json dbwarden lock-status --database primary
+$ dbwarden --json lock-status --database primary
 ```
 
 ```json
@@ -54,11 +58,13 @@ $ DBWARDEN_OUTPUT=json dbwarden lock-status --database primary
   "database": "primary",
   "locked": true,
   "state": "RUNNING",
-  "health": "HEALTHY",
-  "execution_id": "abc123...",
+  "execution_id": "abc123def456ghi7",
+  "owner_id": "f47ac10b-58cc",
   "host": "deploy-runner-7",
   "pid": 1234,
-  "migration_version": "V042"
+  "migration_version": "V042",
+  "acquired_at": "2026-08-22T12:03:14Z",
+  "last_heartbeat_at": "2026-08-22T12:04:01Z"
 }
 ```
 
@@ -80,11 +86,11 @@ Lock holder information
   State:       RUNNING
   Host:        deploy-runner-7
   PID:         1234
-  Execution:   abc123...
+  Execution:   abc123def456ghi7
   Migration:   V042
   Acquired:    2026-08-22 12:03:14Z
   Heartbeat:   2026-08-22 12:04:01Z
-This will force-release the lock without terminating the holder's connection.
+This will terminate the holder's server connection and release the lock.
 Use 'dbwarden unlock --force' to skip this prompt in automation.
 ```
 

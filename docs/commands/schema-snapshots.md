@@ -129,7 +129,7 @@ The snapshot is written **after** all pending migrations have been applied. If t
 
 ### Snapshots are NOT created for
 
-- `--dry-run` or `--sandbox` runs (no real schema change)
+- `--dry-run` runs (no real schema change)
 - Rollback operations (snapshot remains as-is for audit)
 - Repeatable migrations (`RA__`, `ROC__`)
 

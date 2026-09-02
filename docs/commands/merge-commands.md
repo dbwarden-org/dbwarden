@@ -21,6 +21,7 @@ $ dbwarden merge --database primary --rename-column users.username=users.handle
 - `--rename-table`: Table rename to confirm (format: `old=new`)
 - `--force`, `-f`: Force marking hand-edited migrations
 - `--commit`: Create a git commit with the changes
+- `--json`: Output results as JSON
 - `--verbose`, `-v`: Enable verbose logging
 
 ### What it does
@@ -38,12 +39,13 @@ $ dbwarden merge --database primary --rename-column users.username=users.handle
 
 ```bash
 $ dbwarden merge --database primary
-Merge reconciliation complete (database: primary)
+Merge reconciliation summary
   Merge base:        0004 (state checksum 9f2c...)
   Superseded:        0005_add_profile.sql, 0005_extend_billing.sql
   Reconciliation:    0006_merge_feature_a_feature_b.sql
   Environments:      staging: clean, production: clean
   Next steps:        commit; developers on feature branches: dbwarden rebase
+Merge reconciliation complete.
 ```
 
 ## `rebase`

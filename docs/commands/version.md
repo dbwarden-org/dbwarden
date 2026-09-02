@@ -1,6 +1,6 @@
 # `version`
 
-Show dbwarden version.
+Display dbwarden version and compatibility information.
 
 ## Usage
 

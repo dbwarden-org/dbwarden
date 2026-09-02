@@ -12,6 +12,7 @@ $ dbwarden downgrade --to 0005 --database primary
 
 - `--to`, `-t` (required) - Target version to downgrade to
 - `--database`, `-d`
+- `--perf`: log per-SQL-statement timing breakdowns
 - `--verbose`, `-v`
 
 ## Notes

@@ -13,6 +13,7 @@ $ dbwarden status --all
 
 - `--database`, `-d`
 - `--all`, `-a`
+- `--all-environments`: show status for all registered environments
 
 ## Notes
 

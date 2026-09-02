@@ -15,6 +15,7 @@ $ dbwarden rollback --database primary --to-version 0007
 - `--database`, `-d`
 - `--count`, `-c`
 - `--to-version`, `-t`
+- `--perf`: log per-SQL-statement timing breakdowns
 - `--verbose`, `-v`
 
 ## Notes

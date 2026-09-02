@@ -32,6 +32,8 @@ $ dbwarden make-migrations --database primary --safe-type-change
 - `description` (optional): Custom migration name. If not provided, automatically generated from schema changes.
 - `--database`, `-d`: Target database.
 - `--plan`: Print the migration plan JSON without writing files.
+- `--sql`: Output raw migration SQL to stdout without writing files.
+- `--perf`: Log SQL-generation phase timing.
 - `--verbose`, `-v`: Verbose output.
 - `--rename`: Repeatable. Declare a column rename in the format `table.old_name:new_name`. See [Rename Detection](#rename-detection) below.
 - `--rename-table`: Repeatable. Declare a table rename in the format `old_table:new_table`. See [Table Rename Detection](#table-rename-detection) below.

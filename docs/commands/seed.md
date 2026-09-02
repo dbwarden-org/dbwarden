@@ -91,7 +91,7 @@ $ dbwarden seed rollback --database primary --to-version 0003
 
 - `--database`, `-d`
 - `--all`, `-a`: rollback on all databases
-- `--count`, `-c`: number of seeds to roll back (default: 1)
+- `--count`, `-c`: number of seeds to roll back
 - `--to-version`, `-t`: roll back to this seed version
 - `--verbose`, `-v`
 
