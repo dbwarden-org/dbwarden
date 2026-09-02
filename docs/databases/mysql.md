@@ -451,11 +451,11 @@ assert Safety.CRITICAL == "CRITICAL"
 | Change Type | Severity | Flag Required |
 |-------------|----------|---------------|
 | Add column | `INFO` | None |
-| Drop column | `WARNING` | `--force` |
-| Change column type | `WARNING` | `--force` |
-| Change column nullable | `WARNING` | `--force` |
+| Drop column | `WARN` | `--force` |
+| Change column type | `WARN` | `--force` |
+| Change column nullable | `WARN` | `--force` |
 | Change column comment | `INFO` | None |
-| Change MySQL column meta | `WARNING` | `--force` |
+| Change MySQL column meta | `WARN` | `--force` |
 | Change engine | `INFO` | None |
 | Change charset | `INFO` | None |
 | Change collation | `INFO` | None |

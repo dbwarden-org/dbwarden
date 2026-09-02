@@ -67,19 +67,25 @@ Health verdicts:
 | STUCK | Lock held, heartbeat is stale (process may be paused or dead) |
 | DEAD | Lock free, status row shows dead worker |
 | AVAILABLE | No lock held |
+| COMPLETE | Migration completed successfully |
+| FAILED | Migration failed |
+| INSPECTING | Recovery inspection in progress |
+| NEEDS_REVIEW | Human intervention required |
 
 ## Recovery state machine
 
 When a new worker acquires the lock and detects a dead predecessor, it enters the recovery state machine:
 
 ```
-AVAILABLE -> RUNNING -> COMPLETE
-                    -> FAILED
+AVAILABLE -> RUNNING -> COMPLETE -> AVAILABLE (loop back)
+                    -> FAILED -> AVAILABLE (loop back)
                     -> DEAD (detected by new acquirer)
                          -> INSPECTING
                               -> COMPLETE (all steps applied)
-                              -> resume (safely resumable)
+                              -> RUNNING (resume safely)
                               -> NEEDS_REVIEW (human decision)
+                                   -> AVAILABLE (loop back)
+                                   -> RUNNING (retry)
 ```
 
 The INSPECTING state compares the recorded migration checksum with the candidate migration. If they match, the migration can be resumed. If they do not match, the worker transitions to NEEDS_REVIEW and waits for human intervention.

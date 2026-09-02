@@ -18,16 +18,16 @@ assert Safety.CRITICAL == "CRITICAL"
 | Change Type | Severity | Flag Required |
 |-------------|----------|---------------|
 | Add column | `INFO` | None |
-| Drop column | `WARNING` | `--force` |
+| Drop column | `WARN` | `--force` |
 | Change column type (safe) | `INFO` | None |
-| Change column type (warn) | `WARNING` | `--force` |
-| Change column type (critical) | `WARNING` | `--force` |
+| Change column type (warn) | `WARN` | `--force` |
+| Change column type (critical) | `WARN` | `--force` |
 | Change column comment | `INFO` | None |
 | Change nullable (SET/DROP NOT NULL) | `INFO` | None |
 | Change default (SET/DROP DEFAULT) | `INFO` | None |
 | Add autoincrement | `INFO` | None |
-| Remove autoincrement | `WARNING` | `--force` |
-| Change PG column meta (storage, compression, collation) | `WARNING` | `--force` |
+| Remove autoincrement | `WARN` | `--force` |
+| Change PG column meta (storage, compression, collation) | `WARN` | `--force` |
 | Rename column | `WARNING` | `--force` |
 
 ### Table Properties

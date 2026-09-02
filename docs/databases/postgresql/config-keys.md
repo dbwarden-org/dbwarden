@@ -395,14 +395,14 @@ CREATE EVENT TRIGGER trg_ddl_audit ON ddl_command_start WHEN TAG IN ('CREATE TAB
 
 ## `pg_migration_lock_timeout`
 
-Timeout (seconds) for `LOCK TABLE` statements during migration DDL to prevent indefinite blocking.
+Timeout (milliseconds) for `LOCK TABLE` statements during migration DDL to prevent indefinite blocking.
 
 | Type | Default |
 |------|---------|
 | `int \| None` | `None` |
 
 ```python
-pg_migration_lock_timeout=30
+pg_migration_lock_timeout=5000
 ```
 
-When set, emits `SET lock_timeout = '30s'` before each migration statement.
+When set, emits `SET lock_timeout = '5000ms'` before each migration statement.

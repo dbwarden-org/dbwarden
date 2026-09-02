@@ -177,7 +177,6 @@ Materialized views support indexes. Create indexes directly on the materialized 
 class Meta(PGViewMeta):
     pg_view_query = "..."
     pg_view_materialized = True
-    bg_view_materialized = True  # Note: use model's Meta if needed
 ```
 
 Indexes on materialized views are created via `pg_indexes` on `PGTableMeta` (not `PGViewMeta`). For materialized views with `pg_view_auto_refresh`, indexes persist across refreshes.

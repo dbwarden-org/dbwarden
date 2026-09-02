@@ -16,7 +16,7 @@ A **round-trip** backend is one where dbwarden can both read schema (via `genera
 | MySQL | `mysql` | Yes |
 | ClickHouse | `clickhouse` | Yes |
 | SQLite | `sqlite` | Yes |
-| MariaDB | `mariadb` | No |
+| MariaDB | `mariadb` | Partial |
 
 ## How Round-Trip Verification Works
 
