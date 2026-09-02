@@ -205,6 +205,6 @@ For MariaDB projects, consider:
 
 ## See Also
 
-- [Migration Locking](advanced/migration-locking.md): How migrations are locked
-- [Offline Integrity](correctness/offline-integrity.md): Model state file management
-- [CLI Reference](cli-reference.md): All commands
+- [Migration Locking](migration-locking.md): How migrations are locked
+- [Offline Integrity](../correctness/offline-integrity.md): Model state file management
+- [CLI Reference](../cli-reference.md): All commands

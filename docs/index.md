@@ -102,7 +102,7 @@ Optional dependency groups:
 | `[postgres]` |         | `psycopg2-binary`                    |
 | `[mysql]`    |         | `pymysql`                            |
 | `[clickhouse]` |       | `clickhouse-connect`, `aiohttp`      |
-| `[dev]`      |         | `pytest`, `zensical`, `seoslug`, `httpx2` |
+| `[dev]`      |         | `pytest`, `pytest-asyncio`, `pytest-cov`, `zensical`, `seoslug`, `httpx2`, `prometheus-client` |
 
 ## Quick start
 

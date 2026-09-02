@@ -21,7 +21,7 @@ Each database engine provides different native locking primitives. dbwarden uses
 | **PostgreSQL** | Advisory lock | A | Yes (connection teardown) | `pg_advisory_lock()` on a fixed key; session-scoped, released when the connection closes |
 | **MySQL/MariaDB** | Named user lock | A | Yes (connection teardown) | `GET_LOCK('dbwarden')`; released when the connection closes or `RELEASE_LOCK()` is called |
 | **SQLite** | BEGIN IMMEDIATE | B | Yes (journal cleanup) | `BEGIN IMMEDIATE` acquires a write lock on the database file; held for the entire migration run |
-| **ClickHouse** | Lease row + fencing token | C | After TTL expiry | Atomic conditional upsert to `dbwarden_lock`; no native lock primitive, so dbwarden emulates one |
+| **ClickHouse** | Lease row + fencing token | C | After TTL expiry | INSERT + verification to `dbwarden_lock`; no native lock primitive, so dbwarden emulates one |
 
 ### Why the grades differ
 

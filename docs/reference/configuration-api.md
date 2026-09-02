@@ -112,6 +112,7 @@ At least one of `database_url_sync` or `database_url_async` must be provided.
 | `database_url_sync` | `str | None` | `None` | synchronous connection URL (used by migrations, CLI, and sync sessions) |
 | `database_url_async` | `str | None` | `None` | async connection URL (used by async sessions; falls back to `database_url_sync` if omitted) |
 | `default` | `bool` | `False` | if `True`, this database is used when `--database` is omitted |
+| `skip_if_missing` | `bool` | `False` | if `True`, skip this database when its connection URL is not available (e.g., optional databases in multi-DB setups) |
 | `migrations_dir` | `str | None` | `None` | custom migration directory path (defaults to `migrations/<database_name>`) |
 | `migration_table` | `str | None` | `None` | custom migration tracking table name (defaults to `_dbwarden_migrations`) |
 | `seed_table` | `str | None` | `None` | custom seed tracking table name (defaults to `_dbwarden_seeds`) |

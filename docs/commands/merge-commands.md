@@ -131,6 +131,6 @@ Reconciliation for environment 'staging' complete.
 
 ## See also
 
-- [Merge Handling](advanced/merge-handling.md): Complete merge handling guide
-- [Migration Locking](advanced/migration-locking.md): How migrations are locked
-- [Status](commands/status.md): Check migration status
+- [Merge Handling](../advanced/merge-handling.md): Complete merge handling guide
+- [Migration Locking](../advanced/migration-locking.md): How migrations are locked
+- [Status](status.md): Check migration status

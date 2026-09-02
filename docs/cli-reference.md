@@ -77,6 +77,7 @@ Options:
 - `--rename`: Repeatable. Declare a column rename in format `table.old_name:new_name`.
 - `--rename-table`: Repeatable. Declare a table rename in format `old_table:new_table`.
 - `--safe-type-change`: Multi-step safe type change strategy.
+- `--concurrent`/`--no-concurrent`: Use concurrent index creation (default: on).
 - `--clickhouse-engine-recreate`: Allow automatic ClickHouse table rebuild on engine change.
 - `--drop-preserved-clickhouse-table` / `--keep-preserved-clickhouse-table`: Drop or keep the preserved old ClickHouse table after engine-recreate swap.
 - `--postgres-auto-using`: Emit active `USING` clause on PostgreSQL `ALTER COLUMN TYPE` (default: commented out).
@@ -274,6 +275,7 @@ Options: `--database`/`-d`, `--all`/`-a`, `--output-dir`/`-o` (default `seeds/`)
 ```bash
 $ dbwarden status --database primary
 $ dbwarden status --all
+$ dbwarden status --all-environments
 ```
 
 ### `history`

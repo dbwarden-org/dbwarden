@@ -74,7 +74,7 @@ $ dbwarden version
 You should see output:
 
 ```
-0.17.2
+0.18.0
 ```
 
 ## Initialize in your project
