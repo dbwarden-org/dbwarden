@@ -243,21 +243,28 @@ def migrate_single(
                 _lock_strategy = lock_result.strategy
                 _fencing_token = lock_result.fencing_token
 
-                # Start heartbeat after successful lock acquisition
-                from dbwarden.lock.heartbeat import HeartbeatTask
-                _heartbeat = HeartbeatTask(
-                    db_name=db_name,
-                    execution_id=lock_result.execution_id,
-                    owner_id=lock_result.owner_id,
-                    fencing_token=lock_result.fencing_token,
-                )
-                _heartbeat.start()
+                # Start heartbeat after successful lock acquisition.
+                # SQLite uses BEGIN IMMEDIATE for the entire migration, so
+                # a separate heartbeat connection cannot write the status row.
+                # Staleness on SQLite is inferred from acquired_at + process liveness.
+                if config.database_type != "sqlite":
+                    from dbwarden.lock.heartbeat import HeartbeatTask
+                    _heartbeat = HeartbeatTask(
+                        db_name=db_name,
+                        execution_id=lock_result.execution_id,
+                        owner_id=lock_result.owner_id,
+                        fencing_token=lock_result.fencing_token,
+                    )
+                    _heartbeat.start()
 
-                # Open long-lived migration connection for DDL execution
-                # This connection is held for the entire migration run to
-                # support session-scoped native locks (PG advisory, MySQL GET_LOCK)
-                from dbwarden.connection.connection import hold_migration_connection
-                _migration_conn = hold_migration_connection(db_name)
+                # Open long-lived migration connection for DDL execution.
+                # For SQLite, reuse the lock connection which already holds
+                # BEGIN IMMEDIATE; a new connection would block on the write lock.
+                if config.database_type == "sqlite" and lock_result.connection is not None:
+                    _migration_conn = lock_result.connection
+                else:
+                    from dbwarden.connection.connection import hold_migration_connection
+                    _migration_conn = hold_migration_connection(db_name)
 
         # R8.2: Check for dirty unreconciled environments
         if not dry_run:

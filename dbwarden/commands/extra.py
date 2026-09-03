@@ -356,6 +356,8 @@ def unlock_cmd(database: str | None = None, force: bool = False) -> None:
             error("Non-interactive mode requires --force to release lock.")
             return
 
+    logger = get_logger()
+
     if terminate_holder(database):
         # Sec 12.3: Audit log for unlock operations
         import os

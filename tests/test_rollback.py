@@ -4,6 +4,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from dbwarden.lock import LockAcquisition
+
 
 class TestRollback:
     def test_rollback_count_and_version_mutual_exclusion(self):
@@ -26,13 +28,24 @@ class TestRollback:
     def test_rollback_nothing_to_rollback(self):
         from dbwarden.commands.rollback import rollback_cmd
 
+        mock_conn = MagicMock()
         with (
             patch("dbwarden.commands.rollback.get_database") as mock_get_db,
             patch("dbwarden.commands.rollback.get_migrations_directory"),
             patch("dbwarden.commands.rollback.create_migrations_table_if_not_exists"),
             patch("dbwarden.commands.rollback.create_lock_table_if_not_exists"),
             patch("dbwarden.commands.rollback.check_lock", return_value=False),
-            patch("dbwarden.commands.rollback.acquire_lock", return_value=True),
+            patch(
+                "dbwarden.commands.rollback.acquire_lock",
+                return_value=LockAcquisition(
+                    acquired=True,
+                    execution_id="test-exec",
+                    owner_id="test-owner",
+                    strategy=MagicMock(),
+                    connection=mock_conn,
+                ),
+            ),
+            patch("dbwarden.commands.rollback.release_lock", return_value=True),
             patch("dbwarden.commands.rollback.get_latest_versions", return_value=[]),
             patch("dbwarden.output.console.print") as mock_print,
         ):
@@ -46,13 +59,24 @@ class TestRollback:
     def test_rollback_default_count_is_one(self):
         from dbwarden.commands.rollback import rollback_cmd
 
+        mock_conn = MagicMock()
         with (
             patch("dbwarden.commands.rollback.get_database") as mock_get_db,
             patch("dbwarden.commands.rollback.get_migrations_directory", return_value="/tmp/migrations"),
             patch("dbwarden.commands.rollback.create_migrations_table_if_not_exists"),
             patch("dbwarden.commands.rollback.create_lock_table_if_not_exists"),
             patch("dbwarden.commands.rollback.check_lock", return_value=False),
-            patch("dbwarden.commands.rollback.acquire_lock", return_value=True),
+            patch(
+                "dbwarden.commands.rollback.acquire_lock",
+                return_value=LockAcquisition(
+                    acquired=True,
+                    execution_id="test-exec",
+                    owner_id="test-owner",
+                    strategy=MagicMock(),
+                    connection=mock_conn,
+                ),
+            ),
+            patch("dbwarden.commands.rollback.release_lock", return_value=True),
             patch("dbwarden.commands.rollback.get_latest_versions", return_value=["0002"]),
             patch("dbwarden.commands.rollback._get_versions_to_rollback", return_value={"0002": "/tmp/migrations/test__0002_roll.sql"}),
             patch("dbwarden.commands.rollback.parse_rollback_statements", return_value=["DROP TABLE users"]),

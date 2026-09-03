@@ -412,8 +412,7 @@ def update_heartbeat(
         db_type = _get_db_type(connection)
 
     from datetime import datetime, timedelta
-    now_result = connection.execute(text("SELECT now()")).scalar()
-    now_str = str(now_result)
+    now_str = _server_now(connection, db_type)
     now_dt = datetime.fromisoformat(now_str.replace("Z", "+00:00"))
     expires_dt = now_dt + timedelta(seconds=ttl_seconds)
     expires_str = str(expires_dt)

@@ -66,6 +66,7 @@ class LockAcquisition:
     fencing_token: int = 0
     holder_description: str = ""
     error: str | None = None
+    connection: Any = None
 
 
 def acquire_lock(
@@ -159,6 +160,7 @@ def acquire_lock(
         fencing_token=status_row.fencing_token,
         holder_description=result.holder_description,
         error=result.error,
+        connection=conn if effective_db_type == "sqlite" and result.success else None,
     )
 
 

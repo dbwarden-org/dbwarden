@@ -59,27 +59,29 @@ def _run_migrate(db_name="primary", **kwargs):
 
 
 class TestMigratePerf:
-    def test_perf_flag_logs_phase_timings_and_statement_breakdown(self, sqlite_project, tmp_path):
-        output = _run_migrate(db_name="primary", perf=True)
+    def test_perf_flag_logs_phase_timings_and_statement_breakdown(self, sqlite_project, tmp_path, caplog):
+        with caplog.at_level("INFO", logger="dbwarden"):
+            output = _run_migrate(db_name="primary", perf=True)
 
         assert "completed successfully" in output.lower()
-        assert "Lock acquisition completed in" in output
-        assert "Snapshot write completed in" in output
-        assert "Model state write completed in" in output
-        assert "SQL (" in output
-        assert "CREATE TABLE test" in output
+        assert "Lock acquisition completed in" in caplog.text
+        assert "Snapshot write completed in" in caplog.text
+        assert "Model state write completed in" in caplog.text
+        assert "SQL (" in caplog.text
+        assert "CREATE TABLE test" in caplog.text
         assert tmp_path.joinpath("app.db").exists()
 
     def test_default_run_logs_phase_timings_without_statement_breakdown(
-        self, sqlite_project
+        self, sqlite_project, caplog
     ):
-        output = _run_migrate(db_name="primary", perf=False)
+        with caplog.at_level("INFO", logger="dbwarden"):
+            output = _run_migrate(db_name="primary", perf=False)
 
         assert "completed successfully" in output.lower()
-        assert "Lock acquisition completed in" in output
-        assert "Snapshot write completed in" in output
-        assert "Model state write completed in" in output
-        assert "SQL (" not in output
+        assert "Lock acquisition completed in" in caplog.text
+        assert "Snapshot write completed in" in caplog.text
+        assert "Model state write completed in" in caplog.text
+        assert "SQL (" not in caplog.text
 
     def test_deferred_snapshots_write_only_the_final_snapshot(self, sqlite_project):
         migrations_dir = Path("migrations/primary")

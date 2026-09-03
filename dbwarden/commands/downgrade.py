@@ -53,9 +53,14 @@ def downgrade_cmd(
             lock_owner = lock_result.owner_id
             _lock_strategy = lock_result.strategy
 
-            # Open long-lived migration connection for DDL execution
-            from dbwarden.connection.connection import hold_migration_connection
-            _migration_conn = hold_migration_connection(database)
+            # Open long-lived migration connection for DDL execution.
+            # For SQLite, reuse the lock connection which already holds
+            # BEGIN IMMEDIATE; a new connection would block on the write lock.
+            if config.database_type == "sqlite" and lock_result.connection is not None:
+                _migration_conn = lock_result.connection
+            else:
+                from dbwarden.connection.connection import hold_migration_connection
+                _migration_conn = hold_migration_connection(database)
 
         with PhaseTimer(logger, "Rollback preparation", perf=perf):
             applied_versions = get_migrated_versions(database)
