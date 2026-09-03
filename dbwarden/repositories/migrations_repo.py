@@ -208,17 +208,6 @@ def run_migration(
         is_clickhouse = conn.dialect.name in ("clickhouse", "clickhousedb")
         _set_lock_timeout(conn, db_name)
 
-        # CH-1: Per-statement fence check before DDL execution
-        if is_clickhouse and fencing_token > 0:
-            from dbwarden.lock.clickhouse import ClickHouseStrategy
-            strategy = ClickHouseStrategy()
-            if not strategy.fence_check(conn, namespace, fencing_token):
-                from dbwarden.exceptions import LockError
-                raise LockError(
-                    "ClickHouse fencing token mismatch or lease expired. "
-                    "Another worker may have acquired the lease."
-                )
-
         # Connection loss handling (Sec 8.3.2): Map connection-loss errors
         # to immediate abort. A reconnected worker holds no lock and could
         # mutate unsafely, so we must NOT reconnect.
@@ -226,6 +215,17 @@ def run_migration(
             if is_mysql:
                 try:
                     for statement in txn_statements:
+                        # CH-1: Per-statement fence check before DDL execution (Sec 7.4)
+                        if is_clickhouse and fencing_token > 0:
+                            from dbwarden.lock.clickhouse import ClickHouseStrategy
+                            strategy = ClickHouseStrategy()
+                            if not strategy.fence_check(conn, namespace, fencing_token):
+                                from dbwarden.exceptions import LockError
+                                raise LockError(
+                                    "ClickHouse fencing token mismatch or lease expired. "
+                                    "Another worker may have acquired the lease."
+                                )
+
                         _exec_statement(conn, statement, logger=logger, perf=perf)
 
                 except Exception:

@@ -74,9 +74,11 @@ def rebase_cmd(
         info("To recover, run: dbwarden rebase --database <name>")
         return
 
-    # Step 3: Check if target is persistent
-    if is_persistent("local", database) and not force:
-        error("Target is a registered persistent environment. Use --force to override.")
+    # Step 3: Check if target is persistent (R7.4)
+    # Use the actual target environment name, not hardcoded "local"
+    target_env = database or "default"
+    if is_persistent(target_env, database) and not force:
+        error(f"Target '{target_env}' is a registered persistent environment. Use --force to override.")
         return
 
     # Step 4: Preferred path - rollback to merge-base
@@ -106,6 +108,7 @@ def rebase_cmd(
                 to_version=merge_base_version,
                 database=database,
                 verbose=verbose,
+                include_superseded=True,
             )
             info(f"Rolled back to version {merge_base_version}")
         except Exception as e:
@@ -127,7 +130,7 @@ def rebase_cmd(
         error(f"Failed to re-apply migrations: {e}")
         return
 
-    # Step 6: Verify convergence
+    # Step 6: Verify convergence (R7.6)
     info("Verifying convergence...")
     from dbwarden.commands.diff import diff_cmd
 
@@ -136,6 +139,9 @@ def rebase_cmd(
         info("Convergence verified.")
     except Exception as e:
         warning(f"Convergence check failed: {e}")
+        # Non-zero exit on convergence failure (R7.6)
+        import sys
+        sys.exit(1)
 
     success("Rebase complete.")
 

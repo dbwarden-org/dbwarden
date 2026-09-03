@@ -43,6 +43,9 @@ class PostgreSQLStrategy:
     The lock is released automatically when the connection closes.
     """
 
+    # Class-level tracking of acquired advisory locks for re-entrancy protection
+    _acquired_locks: dict[str, int] = {}  # namespace -> lock_key
+
     def __init__(
         self,
         acquire_wait_timeout: float = 0.0,
@@ -72,13 +75,41 @@ class PostgreSQLStrategy:
             )
 
         # Step 2: Pooler detection
-        if self._detect_transaction_pooling(connection):
+        from dbwarden.config import get_database
+        try:
+            config = get_database()
+            assume_session_pooling = getattr(config, "assume_session_pooling", False)
+        except Exception:
+            assume_session_pooling = False
+
+        if self._detect_transaction_pooling(connection, assume_session_pooling):
             return AcquireResult(
                 success=False,
                 status_row=status_row,
                 holder_description="Transaction-pooling proxy detected (PgBouncer in transaction mode)",
                 error="Session-level advisory locks are meaningless under transaction pooling",
             )
+
+        # Step 2.1: Prepared transactions prohibition (Sec 7.1.8)
+        if self._detect_prepared_transactions(connection):
+            return AcquireResult(
+                success=False,
+                status_row=status_row,
+                holder_description="Prepared transactions (2PC) detected on migration connection",
+                error="Advisory locks interact badly with prepared transactions; refusing to acquire",
+            )
+
+        # Step 2.5: Re-entrancy protection (Sec 7.1.7)
+        # Refuse nested run against the same namespace on the same connection
+        lock_key = _derive_lock_key(status_row.namespace, "primary")
+        if status_row.namespace in self._acquired_locks:
+            if self._acquired_locks[status_row.namespace] == lock_key:
+                return AcquireResult(
+                    success=False,
+                    status_row=status_row,
+                    holder_description="Re-entrant acquisition detected for same namespace",
+                    error="Advisory lock already held on this connection for namespace; refusing nested acquisition",
+                )
 
         # Step 3: Acquire advisory lock with bounded retry
         lock_key = _derive_lock_key(status_row.namespace, "primary")
@@ -132,10 +163,14 @@ class PostgreSQLStrategy:
             migration_version=status_row.migration_version,
             migration_checksum=status_row.migration_checksum,
             fencing_token=status_row.fencing_token,
+            db_connection_id=status_row.db_connection_id,
             state="RUNNING",
             db_type="postgresql",
             schema=schema,
         )
+
+        # Track acquired lock for re-entrancy protection
+        self._acquired_locks[status_row.namespace] = lock_key
 
         return AcquireResult(success=True, status_row=status_row)
 
@@ -153,6 +188,9 @@ class PostgreSQLStrategy:
             )
         except Exception as exc:
             logger.warning("Failed to release advisory lock: %s", exc)
+
+        # Remove lock tracking
+        self._acquired_locks.pop(namespace, None)
 
         # Update status to COMPLETE
         try:
@@ -246,12 +284,18 @@ class PostgreSQLStrategy:
             # If the function doesn't exist, assume primary
             return True
 
-    def _detect_transaction_pooling(self, connection: Any) -> bool:
+    def _detect_transaction_pooling(self, connection: Any, assume_session_pooling: bool = False) -> bool:
         """Detect transaction-pooling proxies like PgBouncer.
 
         Calls pg_backend_pid() twice across a statement boundary.
         If the backend PIDs differ, we're under transaction pooling.
+
+        Args:
+            assume_session_pooling: If True, skip detection (escape hatch).
         """
+        if assume_session_pooling:
+            return False
+
         try:
             pid1 = connection.execute(text("SELECT pg_backend_pid()")).scalar()
             # Execute a trivial statement to potentially get a new backend
@@ -259,6 +303,22 @@ class PostgreSQLStrategy:
             pid2 = connection.execute(text("SELECT pg_backend_pid()")).scalar()
             return pid1 != pid2
         except Exception:
+            return False
+
+    def _detect_prepared_transactions(self, connection: Any) -> bool:
+        """Detect prepared transactions (2PC) on the connection.
+
+        Advisory locks interact badly with prepared transactions,
+        which can lead to lock leaks or corruption.
+        """
+        try:
+            result = connection.execute(
+                text("SELECT count(*) FROM pg_prepared_statements WHERE statement LIKE '%PREPARE TRANSACTION%'")
+            )
+            count = result.scalar()
+            return count > 0
+        except Exception:
+            # pg_prepared_statements may not be accessible
             return False
 
     def _describe_advisory_holder(self, connection: Any, lock_key: int) -> str | None:

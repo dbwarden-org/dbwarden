@@ -242,24 +242,64 @@ def lock_status_cmd(database: str | None = None) -> None:
     health = compute_health(state, status.get("last_heartbeat_at"))
 
     section("Migration lock status")
+    info(f"  Namespace:   {status.get('namespace', 'default')}")
     info(f"  State:       {state_str}")
     info(f"  Health:      {health}")
     if status.get("execution_id"):
         info(f"  Execution:   {status['execution_id'][:16]}")
+    if status.get("owner_id"):
+        info(f"  Owner:       {status['owner_id'][:12]}")
     if status.get("host"):
         info(f"  Host:        {status['host']}")
     if status.get("pid"):
         info(f"  PID:         {status['pid']}")
+    if status.get("db_connection_id"):
+        info(f"  DB Conn ID:  {status['db_connection_id']}")
     if status.get("migration_version"):
         info(f"  Migration:   {status['migration_version']}")
+    if status.get("migration_checksum"):
+        info(f"  Checksum:    {status['migration_checksum'][:16]}")
     if status.get("acquired_at"):
         info(f"  Acquired:    {status['acquired_at']}")
     if status.get("last_heartbeat_at"):
         info(f"  Heartbeat:   {status['last_heartbeat_at']}")
+    if status.get("fencing_token"):
+        info(f"  Fencing:     {status['fencing_token']}")
+
+    # Sec 12.2: Cross-check status row against server truth
+    try:
+        from dbwarden.lock import check_lock
+        namespace = status.get('namespace', 'default')
+        server_holds_lock = check_lock(database, namespace=namespace)
+        if is_locked and not server_holds_lock:
+            warning("Discrepancy: Status row shows lock held, but server shows no active lock.")
+            warning("The lock may have been released by connection teardown.")
+        elif not is_locked and server_holds_lock:
+            warning("Discrepancy: Status row shows no lock, but server shows active lock.")
+            warning("A new worker may have acquired the lock.")
+    except Exception:
+        pass
 
     if health == "STUCK":
-        warning("Lock is STUCK: holder heartbeat is stale. Process may be paused or dead.")
-        info("Run 'dbwarden unlock' to force release after inspecting the holder.")
+        # Spec Sec 8.6: STUCK message with diagnostic guidance
+        host = status.get("host", "unknown")
+        pid = status.get("pid", "unknown")
+        execution_id = status.get("execution_id", "unknown")[:12]
+        heartbeat_time = status.get("last_heartbeat_at", "unknown")
+
+        warning(
+            f"STUCK: holder {host}/pid={pid}/execution={execution_id} "
+            f"holds the lock but has not heartbeated since {heartbeat_time}."
+        )
+        info("")
+        info("The process may be paused (GC, SIGSTOP, overloaded host) or its heartbeat")
+        info("connection may have failed while the migration continues.")
+        info("")
+        info("Killing it mid-statement on a non-transactional engine can leave partial")
+        info("schema changes. Inspect the host first:")
+        info(f"  - is pid {pid} alive on {host}?  (ps / container runtime)")
+        info("  - is it making progress?         (dbwarden status --watch, history table)")
+        info("If you confirm it is dead or wedged:  dbwarden unlock")
     elif health == "DEAD":
         warning("Lock holder appears dead. Run 'dbwarden unlock' to release.")
 
@@ -317,6 +357,19 @@ def unlock_cmd(database: str | None = None, force: bool = False) -> None:
             return
 
     if terminate_holder(database):
+        # Sec 12.3: Audit log for unlock operations
+        import os
+        import socket
+        logger.info(
+            "AUDIT: unlock executed by user=%s host=%s pid=%d "
+            "target_host=%s target_pid=%s target_execution=%s outcome=success",
+            os.environ.get("USER", "unknown"),
+            socket.gethostname(),
+            os.getpid(),
+            host,
+            pid,
+            execution_id,
+        )
         success("Migration lock released successfully.")
     else:
         error("Failed to release migration lock.")

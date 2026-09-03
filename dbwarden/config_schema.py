@@ -125,6 +125,18 @@ class DatabaseEntry:
     # ClickHouse lock tuning
     clickhouse_lock_ttl: int | None = field(default=None, validator=_validate_lock_timeout)
     lock_namespace: str | None = field(default=None, validator=_validate_migration_table)
+    # Recovery policy (Sec 9): halt, resume_idempotent, force
+    recovery_policy: str = "halt"
+    # Pooling escape hatch (Sec 7.1.4): assume session pooling is safe
+    assume_session_pooling: bool = False
+    # Connection tuning (Sec 10.7, 10.19)
+    tcp_keepalive: bool = True
+    # SQLite busy_timeout (Sec 7.3.2)
+    sqlite_busy_timeout: int | None = None
+    # Per-statement history recording for non-TX engines (Sec 8.3.4)
+    per_statement_history: bool = False
+    # Rename policy for merge: strict, prompt, auto-high-confidence (Sec 9 R9.1.7)
+    rename_policy: str = "prompt"
     # Backend object keys contributed by plugins (pg_roles, ch_grants, and so on).
     # Kept as a dict so core does not have to know each plugin's key list.
     plugin_config: dict[str, Any] = field(factory=dict)

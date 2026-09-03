@@ -62,6 +62,16 @@ class MySQLStrategy:
         status_row: StatusRow,
         schema: str = "public",
     ) -> AcquireResult:
+        # Step 0: Detect MariaDB version (Sec 7.2.7)
+        try:
+            version_result = connection.execute(text("SELECT VERSION()"))
+            version_str = version_result.scalar()
+            if version_str and "mariadb" in version_str.lower():
+                logger.info("MariaDB detected: %s", version_str)
+                # MariaDB has different lock name case-sensitivity behavior
+        except Exception:
+            pass
+
         # Step 1: Primary check
         if not self._check_writable(connection):
             return AcquireResult(
@@ -138,6 +148,7 @@ class MySQLStrategy:
             migration_version=status_row.migration_version,
             migration_checksum=status_row.migration_checksum,
             fencing_token=status_row.fencing_token,
+            db_connection_id=status_row.db_connection_id,
             state="RUNNING",
             db_type="mysql",
             schema=schema,

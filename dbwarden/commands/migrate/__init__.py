@@ -248,6 +248,8 @@ def migrate_single(
                 _heartbeat = HeartbeatTask(
                     db_name=db_name,
                     execution_id=lock_result.execution_id,
+                    owner_id=lock_result.owner_id,
+                    fencing_token=lock_result.fencing_token,
                 )
                 _heartbeat.start()
 
@@ -256,6 +258,19 @@ def migrate_single(
                 # support session-scoped native locks (PG advisory, MySQL GET_LOCK)
                 from dbwarden.connection.connection import hold_migration_connection
                 _migration_conn = hold_migration_connection(db_name)
+
+        # R8.2: Check for dirty unreconciled environments
+        if not dry_run:
+            try:
+                from dbwarden.merge.detection import check_dirty_environment
+                if check_dirty_environment(db_name):
+                    error(
+                        f"Environment '{db_name or 'default'}' has unreconciled merge changes. "
+                        "Run 'dbwarden reconcile' first, or use --dry-run to preview."
+                    )
+                    return
+            except Exception as e:
+                logger.debug("Could not check for dirty environment: %s", e)
 
         applied_versions = set()
         applied_checksums = set()
@@ -333,6 +348,14 @@ def migrate_single(
                     render_sql(statement)
                 continue
 
+            # Check heartbeat fatal flag (Sec 8.2): abort on fallback engines
+            # if heartbeat indicates lease loss
+            if _heartbeat is not None and _heartbeat.is_fatal:
+                raise LockError(
+                    "Heartbeat fatal: lease may have been lost on fallback engine. "
+                    "Aborting migration to prevent concurrent mutation."
+                )
+
             start_time = time.time()
             logger.log_migration_start(version, filename)
 
@@ -362,6 +385,24 @@ def migrate_single(
             latest_version = version
             increment_migrations_total(actual_db_name, version, success=True)
             observe_migration_duration(actual_db_name, version, duration)
+
+            # CH-0: Check for POSSIBLE_CONCURRENT_EXECUTION (Sec 7.4)
+            # After completion, re-read the lease; if fencing_token advanced, another
+            # worker may have executed DDL during our run
+            if config.database_type == "clickhouse" and _fencing_token > 0:
+                try:
+                    from dbwarden.lock import get_lock_status
+                    current_status = get_lock_status(db_name)
+                    if current_status:
+                        current_token = current_status.get("fencing_token", 0)
+                        if current_token > _fencing_token:
+                            warning(
+                                f"POSSIBLE_CONCURRENT_EXECUTION: fencing token advanced from "
+                                f"{_fencing_token} to {current_token} during migration run. "
+                                f"Another worker may have executed DDL concurrently."
+                            )
+                except Exception as exc:
+                    logger.debug("Could not check fencing token after migration: %s", exc)
 
         if dry_run:
             info(

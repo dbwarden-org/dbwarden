@@ -129,6 +129,12 @@ At least one of `database_url_sync` or `database_url_async` must be provided.
 | `ch_replicated_database` | `bool` | `False` | ClickHouse replicated database engine; DDL propagates automatically via ZooKeeper, `ON CLUSTER` must be omitted. Mutually exclusive with `ch_cluster` |
 | `clickhouse_lock_ttl` | `int | None` | `None` | ClickHouse lease TTL in seconds (CH-0/CH-1). Defaults to 120 if not set. |
 | `lock_namespace` | `str | None` | `None` | Lock scope. Allows independent lock streams. Defaults to `"default"` if not set. |
+| `recovery_policy` | `str` | `"halt"` | Recovery policy for dead predecessor detection: `halt`, `resume_idempotent`, or `force` |
+| `assume_session_pooling` | `bool` | `False` | If `True`, skip PgBouncer transaction-pooling detection (escape hatch for known-good session-pool deployments) |
+| `tcp_keepalive` | `bool` | `True` | If `True`, enable TCP keepalive on migration connections (60s idle, 3 probes, 30s interval) |
+| `sqlite_busy_timeout` | `int | None` | `None` | SQLite busy timeout in milliseconds. Default is 0 (fail fast). Set to a positive value to wait for the write lock. |
+| `per_statement_history` | `bool` | `False` | If `True`, record history per-statement on non-transactional engines (MySQL, ClickHouse). Enables finer-grained recovery but may impact performance. |
+| `rename_policy` | `str` | `"prompt"` | Rename handling policy for merges: `strict` (always require flags), `prompt` (interactive), `auto-high-confidence` (auto-accept high-confidence renames outside merges) |
 
 ## Field descriptions
 
@@ -349,7 +355,7 @@ When `True`, dbwarden automatically applies pending code seeds after each succes
 
 - Defaults to `False`
 - Applies per database entry
-- Can be overridden per-run with `--apply-seeds` / `--no-apply-seeds` CLI flags on `migrate`
+- Can be overridden per-run with `--apply-seeds` CLI flag on `migrate`
 
 **Example:**
 
@@ -624,7 +630,7 @@ Config is loaded by importing your Python config source and executing `database_
 
 The resolution priority is:
 
-1. Look for `dbwarden.py` in the current directory or parent directories
+1. Walk project tree for `dbwarden.py` files
 2. If `DBWARDEN_CONFIG_MODULE` environment variable is set, use that module
 3. Full scan for any file containing `database_config(...)` calls
 

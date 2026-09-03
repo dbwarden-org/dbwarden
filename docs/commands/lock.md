@@ -26,14 +26,19 @@ When locked:
 
 ```
 Migration lock status
+  Namespace:   default
   State:       RUNNING
   Health:      HEALTHY
   Execution:   abc123def456ghi7
+  Owner:       f47ac10b58cc
   Host:        deploy-runner-7
   PID:         1234
+  DB Conn ID:  90210
   Migration:   V042
+  Checksum:    sha2569ab1c2d3e4f5
   Acquired:    2026-08-22 12:03:14Z
   Heartbeat:   2026-08-22 12:04:01Z
+  Fencing:     184
 ```
 
 ### Health verdicts
@@ -111,6 +116,24 @@ Migration lock released successfully.
 - If a migration process might still be running
 - If the lock status shows HEALTHY with a recent heartbeat
 - Without first checking `lock-status` and `history`
+
+## STUCK message format
+
+When a lock is STUCK (lock held, heartbeat stale), the output provides diagnostic guidance:
+
+```
+STUCK: holder deploy-runner-7/pid=1234/execution=abc123def456
+holds the lock but has not heartbeated since 2026-08-22 12:04:01Z.
+
+The process may be paused (GC, SIGSTOP, overloaded host) or its heartbeat
+connection may have failed while the migration continues.
+
+Killing it mid-statement on a non-transactional engine can leave partial
+schema changes. Inspect the host first:
+  - is pid 1234 alive on deploy-runner-7?  (ps / container runtime)
+  - is it making progress?         (dbwarden status --watch, history table)
+If you confirm it is dead or wedged:  dbwarden unlock
+```
 
 ## Notes
 

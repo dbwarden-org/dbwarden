@@ -97,6 +97,8 @@ Questions to answer before allowing it:
 
 Blocking changes are destructive or ambiguous enough that they must not be hidden inside an ordinary migration review.
 
+These changes are classified as `ERROR` severity in the safety check output.
+
 Examples:
 
 - Drop a table.

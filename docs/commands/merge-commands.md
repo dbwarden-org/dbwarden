@@ -29,11 +29,12 @@ $ dbwarden merge --database primary --rename-column users.username=users.handle
 1. Checks preconditions (clean working tree, no conflict markers)
 2. Resolves merge-base state from git
 3. Rebuilds current model state from merged models
-4. Computes reconciliation diff
-5. Probes persistent environments
-6. Generates reconciliation migration
+4. Computes reconciliation diff using the snapshot diff pipeline
+5. Probes persistent environments (works with all database types)
+6. Generates reconciliation migration with actual SQL
 7. Marks branch migrations as superseded
 8. Reports results
+9. Optionally creates a git commit with `--commit`
 
 ### Example
 
@@ -72,9 +73,11 @@ $ dbwarden rebase --database local --check
 
 1. Reads local applied migrations
 2. Identifies superseded versions
-3. Rolls back to merge-base (preferred) or resets (fallback)
+3. Rolls back to merge-base using superseded files (preferred) or resets (fallback)
 4. Re-applies runnable chain
 5. Verifies convergence
+
+**Note:** The rebase command can read rollback SQL from superseded files, which are normally excluded from the rollback chain.
 
 ### Example
 

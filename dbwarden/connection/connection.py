@@ -72,6 +72,15 @@ def _get_engine(url: str, db_type: str = "postgresql") -> Engine:
     connect_args = {}
     if db_type == "sqlite":
         connect_args["check_same_thread"] = False
+    elif db_type in ("mysql", "mariadb"):
+        # Sec 10.19: TCP keepalive to prevent idle-timeout kills
+        # Defaults: 60s idle, 3 probes, 30s interval
+        connect_args["connect_args"] = {
+            "keepalive": 1,
+            "keepalive_idle": 60,
+            "keepalive_count": 3,
+            "keepalive_interval": 30,
+        }
     engine = create_engine(url=final_url, connect_args=connect_args)
     _engine_cache[key] = engine
     return engine

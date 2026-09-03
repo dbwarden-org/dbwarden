@@ -68,6 +68,44 @@ if _HAS_PROMETHEUS:
         labelnames=["database"],
     )
 
+    # Lock-specific metrics (Sec 12.4)
+    _lock_acquisitions = prometheus_client.Counter(
+        "dbwarden_lock_acquisitions_total",
+        "Total number of lock acquisitions",
+        labelnames=["database", "engine"],
+    )
+
+    _lock_acquire_wait = prometheus_client.Histogram(
+        "dbwarden_lock_acquire_wait_seconds",
+        "Time spent waiting to acquire lock",
+        labelnames=["database", "engine"],
+        buckets=(0.01, 0.05, 0.1, 0.5, 1.0, 2.5, 5.0, 10.0, float("inf")),
+    )
+
+    _lock_acquire_timeouts = prometheus_client.Counter(
+        "dbwarden_lock_acquire_timeouts_total",
+        "Total number of lock acquisition timeouts",
+        labelnames=["database", "engine"],
+    )
+
+    _heartbeat_failures = prometheus_client.Counter(
+        "dbwarden_heartbeat_failures_total",
+        "Total number of heartbeat failures",
+        labelnames=["database", "engine"],
+    )
+
+    _fence_aborts = prometheus_client.Counter(
+        "dbwarden_fence_aborts_total",
+        "Total number of fence aborts (ClickHouse)",
+        labelnames=["database"],
+    )
+
+    _unlocks_total = prometheus_client.Counter(
+        "dbwarden_unlocks_total",
+        "Total number of unlock operations",
+        labelnames=["database", "engine"],
+    )
+
     def increment_migrations_total(
         database: str, version: str, success: bool = True
     ) -> None:
@@ -92,6 +130,24 @@ if _HAS_PROMETHEUS:
     def increment_migration_errors(database: str) -> None:
         _migration_errors.labels(database=database).inc()
 
+    def increment_lock_acquisitions(database: str, engine: str) -> None:
+        _lock_acquisitions.labels(database=database, engine=engine).inc()
+
+    def observe_lock_acquire_wait(database: str, engine: str, duration: float) -> None:
+        _lock_acquire_wait.labels(database=database, engine=engine).observe(duration)
+
+    def increment_lock_acquire_timeouts(database: str, engine: str) -> None:
+        _lock_acquire_timeouts.labels(database=database, engine=engine).inc()
+
+    def increment_heartbeat_failures(database: str, engine: str) -> None:
+        _heartbeat_failures.labels(database=database, engine=engine).inc()
+
+    def increment_fence_aborts(database: str) -> None:
+        _fence_aborts.labels(database=database).inc()
+
+    def increment_unlocks(database: str, engine: str) -> None:
+        _unlocks_total.labels(database=database, engine=engine).inc()
+
     def generate_metrics() -> str:
         return prometheus_client.generate_latest().decode("utf-8")
 
@@ -109,6 +165,12 @@ else:
     set_seed_version = _noop
     set_pending_migrations = _noop
     increment_migration_errors = _noop
+    increment_lock_acquisitions = _noop
+    observe_lock_acquire_wait = _noop
+    increment_lock_acquire_timeouts = _noop
+    increment_heartbeat_failures = _noop
+    increment_fence_aborts = _noop
+    increment_unlocks = _noop
 
     def generate_metrics() -> str:
         return ""

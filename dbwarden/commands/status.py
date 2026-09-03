@@ -255,10 +255,17 @@ def _render_status_payload(payload: dict) -> None:
 def _show_all_environments_status(database: str | None = None) -> None:
     """Show status for all registered environments (R4.4).
 
+    R4.4: status --all-environments MUST show, per registered environment:
+    - Applied head
+    - Whether it includes any superseded migration
+    - Divergence from the runnable chain
+
     R8.1: status --all-environments MUST surface unreconciled dirty
     environments until reconciliation completes.
     """
     from dbwarden.merge.environments import load_environments
+    from dbwarden.merge.marker import is_superseded
+    from dbwarden.engine.version import get_migrations_directory, get_migration_filepaths_by_version
 
     envs = load_environments(database)
 

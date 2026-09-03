@@ -207,17 +207,20 @@ class ClickHouseStrategy:
                     """
                     INSERT INTO dbwarden_lock
                     (namespace, execution_id, owner_id, migration_version,
-                     migration_checksum, fencing_token, host, pid, state,
-                     acquired_at, last_heartbeat_at, expires_at)
+                     migration_checksum, fencing_token, host, pid, db_connection_id,
+                     state, acquired_at, last_heartbeat_at, expires_at)
                     SELECT
                         :namespace, :execution_id, :owner_id, :migration_version,
-                        :migration_checksum, ifNull(max(fencing_token), 0) + 1,
-                        :host, :pid, 'RUNNING',
+                        :migration_checksum,
+                        ifNull((SELECT max(fencing_token) FROM dbwarden_lock FINAL
+                                WHERE namespace = :namespace), 0) + 1,
+                        :host, :pid, :db_connection_id, 'RUNNING',
                         :acquired_at, :last_heartbeat_at, :expires_at
-                    FROM dbwarden_lock FINAL
-                    WHERE namespace = :namespace
-                      AND (expires_at IS NULL OR expires_at <= now())
-                    LIMIT 1
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM dbwarden_lock FINAL
+                        WHERE namespace = :namespace
+                          AND expires_at > now()
+                    )
                     """
                 ),
                 {
@@ -228,6 +231,7 @@ class ClickHouseStrategy:
                     "migration_checksum": status_row.migration_checksum,
                     "host": socket.gethostname(),
                     "pid": os.getpid(),
+                    "db_connection_id": status_row.db_connection_id,
                     "acquired_at": now_str,
                     "last_heartbeat_at": now_str,
                     "expires_at": expires_str,

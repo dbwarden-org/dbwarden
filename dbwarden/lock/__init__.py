@@ -423,3 +423,163 @@ def terminate_holder(db_name: str | None = None, *, namespace: str = "default") 
             conn.close()
         except Exception:
             pass
+
+
+# --- INSPECTING procedure and recovery policy ---
+
+
+@dataclass
+class InspectionResult:
+    """Result of inspecting a dead predecessor's migration state."""
+    predecessor_execution_id: str
+    predecessor_migration_version: str | None
+    predecessor_checksum: str | None
+    candidate_checksum: str | None
+    checksum_match: bool
+    last_recorded_step: str | None
+    is_resumable: bool
+    needs_review: bool
+    reason: str
+
+
+def inspect_dead_predecessor(
+    db_name: str | None = None,
+    *,
+    namespace: str = "default",
+    candidate_migration_version: str | None = None,
+    candidate_checksum: str | None = None,
+) -> InspectionResult | None:
+    """Inspect a dead predecessor's migration state.
+
+    This implements the INSPECTING procedure from the migration locking spec.
+    When a new worker acquires the lock after a DEAD predecessor, it must
+    execute this procedure before resuming.
+
+    Returns InspectionResult if a dead predecessor is found, None otherwise.
+    """
+    from dbwarden.config import get_database
+    from dbwarden.connection.connection import get_db_connection, _get_engine, _sandbox_url_var, _sandbox_db_type_var, _probe_connection
+
+    config = get_database(db_name)
+    db_type = config.database_type
+    schema = getattr(config, "postgres_schema", "public") or "public"
+
+    sandbox_url = _sandbox_url_var.get()
+    sandbox_db_type = _sandbox_db_type_var.get()
+    url = sandbox_url if sandbox_url is not None else config.sqlalchemy_url
+    effective_db_type = sandbox_db_type if sandbox_db_type is not None else db_type
+
+    engine = _get_engine(url, effective_db_type)
+    from dbwarden.logging import get_logger
+    _probe_connection(engine, effective_db_type, get_logger(), url)
+    conn = engine.connect()
+
+    try:
+        # Read current status row
+        status = _read_status_row(conn, namespace=namespace, db_type=effective_db_type, schema=schema)
+        if status is None:
+            return None
+
+        state_str = status.get("state", "AVAILABLE")
+        try:
+            state = LockState(state_str)
+        except ValueError:
+            state = LockState.AVAILABLE
+
+        # Only inspect if previous state was DEAD or FAILED
+        if state not in (LockState.DEAD, LockState.FAILED):
+            return None
+
+        predecessor_execution_id = status.get("execution_id", "")
+        predecessor_migration_version = status.get("migration_version")
+        predecessor_checksum = status.get("migration_checksum")
+
+        # Compare checksums
+        checksum_match = (
+            predecessor_checksum is not None
+            and candidate_checksum is not None
+            and predecessor_checksum == candidate_checksum
+        )
+
+        # Determine if resumable
+        is_resumable = checksum_match
+        needs_review = not checksum_match
+
+        if checksum_match:
+            reason = "Checksums match; migration can be resumed"
+        elif predecessor_checksum is None:
+            reason = "No checksum recorded; requires human review"
+        elif candidate_checksum is None:
+            reason = "No candidate checksum; requires human review"
+        else:
+            reason = "Checksum mismatch; migration content changed; requires human review"
+
+        return InspectionResult(
+            predecessor_execution_id=predecessor_execution_id,
+            predecessor_migration_version=predecessor_migration_version,
+            predecessor_checksum=predecessor_checksum,
+            candidate_checksum=candidate_checksum,
+            checksum_match=checksum_match,
+            last_recorded_step=predecessor_migration_version,
+            is_resumable=is_resumable,
+            needs_review=needs_review,
+            reason=reason,
+        )
+
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def apply_recovery_policy(
+    db_name: str | None = None,
+    *,
+    namespace: str = "default",
+    inspection: InspectionResult,
+    policy: str = "halt",
+) -> LockState:
+    """Apply recovery policy after inspecting a dead predecessor.
+
+    Policies:
+    - halt (default): transition to NEEDS_REVIEW, print report, exit
+    - resume_idempotent: resume only if all remaining statements are idempotent
+    - force: re-run unconditionally (audit-logged)
+
+    Returns the target state to transition to.
+    """
+    if inspection.is_resumable and policy == "resume_idempotent":
+        logger.info(
+            "Recovery policy resume_idempotent: checksums match, resuming migration"
+        )
+        return LockState.RUNNING
+
+    if policy == "force":
+        logger.warning(
+            "Recovery policy force: re-running migration unconditionally"
+        )
+        return LockState.RUNNING
+
+    # Default: halt policy
+    logger.warning(
+        "Recovery policy halt: transitioning to NEEDS_REVIEW. "
+        "Predecessor execution=%s, migration=%s, reason=%s",
+        inspection.predecessor_execution_id,
+        inspection.predecessor_migration_version,
+        inspection.reason,
+    )
+    return LockState.NEEDS_REVIEW
+
+
+def get_recovery_policy(db_name: str | None = None) -> str:
+    """Get the configured recovery policy.
+
+    Returns one of: 'halt', 'resume_idempotent', 'force'.
+    """
+    from dbwarden.config import get_database
+    try:
+        config = get_database(db_name)
+        return getattr(config, "recovery_policy", "halt") or "halt"
+    except Exception:
+        return "halt"

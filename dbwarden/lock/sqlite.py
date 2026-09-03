@@ -80,11 +80,23 @@ class SQLiteStrategy:
             migration_version=status_row.migration_version,
             migration_checksum=status_row.migration_checksum,
             fencing_token=status_row.fencing_token,
+            db_connection_id=status_row.db_connection_id,
             state="RUNNING",
             db_type="sqlite",
             schema=schema,
         )
         connection.commit()
+
+        # Sec 7.3.2: Explicitly set busy_timeout (default 0 = fail fast)
+        from dbwarden.config import get_database
+        try:
+            config = get_database()
+            busy_timeout = getattr(config, "sqlite_busy_timeout", 0) or 0
+            connection.execute(text(f"PRAGMA busy_timeout = {busy_timeout}"))
+            logger.debug("SQLite busy_timeout set to %d ms", busy_timeout)
+        except Exception:
+            # Default to 0 (fail fast)
+            connection.execute(text("PRAGMA busy_timeout = 0"))
 
         # BEGIN IMMEDIATE acquires the write lock
         # This lock is held on THIS connection until it is closed or committed.

@@ -50,9 +50,9 @@ app.include_router(MetricsRouter(), prefix="/metrics")
 The endpoint returns:
 
 ```
-# HELP dbwarden_pending_migrations Number of pending migrations
-# TYPE dbwarden_pending_migrations gauge
-dbwarden_pending_migrations{database="primary"} 0
+# HELP dbwarden_migrations_pending Number of pending migrations
+# TYPE dbwarden_migrations_pending gauge
+dbwarden_migrations_pending{database="primary"} 0
 # HELP dbwarden_schema_version Current schema version
 # TYPE dbwarden_schema_version gauge
 dbwarden_schema_version{database="primary"} 5.0

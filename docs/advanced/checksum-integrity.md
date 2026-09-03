@@ -12,16 +12,10 @@ dbwarden stores a SHA-256 checksum of each migration file at apply time. On subs
 ## What triggers a mismatch error
 
 ```
-ChecksumMismatchError: Migration '0004_add_indexes' checksum has changed.
-  stored:   a3f8c2e1...
-  current:  7b91d40c...
-  database: primary
-
-The migration file was modified after it was applied.
-Use 'dbwarden history --database primary' to inspect applied migrations.
+Migration '0004_add_indexes' has been hand-edited (checksum mismatch)
 ```
 
-This error blocks `migrate` and `status` from running. dbwarden will not proceed while a checksum is inconsistent.
+This warning is logged when a migration file's checksum doesn't match the stored checksum. dbwarden will skip the migration if it has already been applied (based on the stored checksum).
 
 ## Repeatable migrations
 

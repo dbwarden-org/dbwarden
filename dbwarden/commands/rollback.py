@@ -23,6 +23,7 @@ def rollback_cmd(
     verbose: bool = False,
     database: str | None = None,
     perf: bool = False,
+    include_superseded: bool = False,
 ) -> None:
     """
     Rollback the last applied migration.
@@ -33,6 +34,7 @@ def rollback_cmd(
         verbose: Enable verbose logging.
         database: Target database name.
         perf: Emit per-statement timing breakdowns for executed SQL.
+        include_superseded: Include superseded files in rollback (for rebase).
     """
     from dbwarden.commands.perf import PhaseTimer
 
@@ -85,6 +87,7 @@ def rollback_cmd(
             versions_to_rollback = _get_versions_to_rollback(
                 latest_versions=latest_versions,
                 migrations_dir=migrations_dir,
+                include_superseded=include_superseded,
             )
 
         reverted = 0
@@ -137,6 +140,7 @@ def rollback_cmd(
 def _get_versions_to_rollback(
     latest_versions: list[str],
     migrations_dir: str,
+    include_superseded: bool = False,
 ) -> dict[str, str]:
     """Get migration file paths for versions to rollback."""
     from dbwarden.engine.version import get_migration_filepaths_by_version
@@ -153,8 +157,8 @@ def _get_versions_to_rollback(
     for v in latest_versions:
         if v in filepaths:
             filepath = filepaths[v]
-            # Skip superseded files (Phase 5: integration with merge handling)
-            if not is_superseded(filepath):
+            # Skip superseded files unless include_superseded is True (for rebase)
+            if include_superseded or not is_superseded(filepath):
                 result[v] = filepath
 
     return dict(reversed(list(result.items())))

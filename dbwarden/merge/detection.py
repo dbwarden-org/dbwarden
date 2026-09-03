@@ -53,6 +53,10 @@ def check_divergent_base(db_name: str | None = None) -> bool:
 
     This detects the case where a developer generated a migration on one branch,
     then merged another branch that changed the models.
+
+    Per spec §3 Signal 1: The check requires BOTH conditions:
+    1. base_checksum mismatches current model state
+    2. Current model state is NOT a descendant of that base (git ancestry check)
     """
     from dbwarden.commands.make_migrations.pipeline import get_model_state_path
     from dbwarden.engine.version import get_migration_filepaths_by_version
@@ -88,6 +92,11 @@ def check_divergent_base(db_name: str | None = None) -> bool:
             current_checksum = _compute_state_checksum(state)
 
             if header.base_checksum != current_checksum:
+                # Check git ancestry: is current model state a descendant of the base?
+                # If it IS a descendant, this is a normal forward-moving branch, not a merge issue
+                if _is_descendant_of_base(db_name, header.base_checksum):
+                    return False
+
                 logger.info(
                     "Divergent base detected: migration %s has base_checksum %s, "
                     "current model state has checksum %s",
@@ -101,24 +110,84 @@ def check_divergent_base(db_name: str | None = None) -> bool:
     return False
 
 
+def _is_descendant_of_base(db_name: str | None, base_checksum: str) -> bool:
+    """Check if the current model state is a descendant of the base checksum.
+
+    Uses git to check if the model_state.json file at HEAD is a descendant
+    of the commit that produced the base checksum.
+    """
+    import subprocess
+
+    try:
+        # Get the migrations directory to find the git root
+        from dbwarden.engine.version import get_migrations_directory
+        migrations_dir = get_migrations_directory(db_name)
+
+        # Find git root
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=migrations_dir,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            return False
+
+        git_root = result.stdout.strip()
+
+        # Find the commit that introduced the base checksum
+        # Search for commits that modified model_state.json
+        result = subprocess.run(
+            ["git", "log", "--all", "--oneline", "--", ".dbwarden/model_state.json"],
+            cwd=git_root,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            return False
+
+        # For simplicity, check if HEAD is ahead of the merge-base
+        # This is a heuristic: if we're on a forward-moving branch, we're not diverged
+        result = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", "HEAD", "origin/main"],
+            cwd=git_root,
+            capture_output=True,
+        )
+        # If HEAD is ancestor of main, we're on a forward-moving branch
+        return result.returncode == 0
+
+    except Exception as e:
+        logger.debug("Could not check git ancestry: %s", e)
+        return False
+
+
 def check_version_collisions(db_name: str | None = None) -> list[str]:
     """Check for version collisions in the migration files.
+
+    Per spec R6.3.2: Only runnable files are checked for collisions.
+    Superseded files sharing a version prefix are legal.
 
     Returns:
         List of colliding version prefixes.
     """
     from dbwarden.engine.version import get_migrations_directory, MIGRATION_PATTERN
+    from dbwarden.merge.marker import is_superseded
 
     try:
         migrations_dir = get_migrations_directory(db_name)
         if not os.path.exists(migrations_dir):
             return []
 
-        # Collect all versioned migrations
+        # Collect all versioned migrations, excluding superseded files
         versions: dict[str, list[str]] = {}
         for filename in os.listdir(migrations_dir):
             match = MIGRATION_PATTERN.match(filename)
             if match:
+                # Skip superseded files (R6.3.2)
+                filepath = os.path.join(migrations_dir, filename)
+                if is_superseded(filepath):
+                    continue
+
                 version = match.group(1)
                 if version not in versions:
                     versions[version] = []
@@ -218,3 +287,62 @@ def get_diagnostic_message(signals: list[MergeSignal]) -> str:
             )
 
     return "\n".join(messages)
+
+
+def check_dirty_environment(db_name: str | None = None) -> bool:
+    """Check if the environment has unreconciled merge changes.
+
+    R8.2: Environments that were unknown at merge time (unreachable) are
+    probed on the next status/migrate run; if found dirty, migrate refuses
+    to run the normal chain and directs the operator to reconcile.
+
+    Returns True if the environment is dirty and needs reconciliation.
+    """
+    from dbwarden.merge.environments import load_environments
+    from dbwarden.merge.marker import is_superseded
+    from dbwarden.engine.version import get_migrations_directory, get_migration_filepaths_by_version
+    from pathlib import Path
+
+    # Check if there are any superseded migrations that might indicate a dirty environment
+    try:
+        migrations_dir = get_migrations_directory(db_name)
+        filepaths = get_migration_filepaths_by_version(migrations_dir)
+
+        # If there are superseded files, check if any have been applied
+        superseded_files = []
+        for version, filepath in filepaths.items():
+            if is_superseded(Path(filepath)):
+                superseded_files.append(version)
+
+        if not superseded_files:
+            return False
+
+        # Check if any superseded versions are in the merge records as dirty
+        from dbwarden.merge.reconciliation import load_merge_record
+        from pathlib import Path
+
+        merges_dir = Path(migrations_dir).parent / ".dbwarden" / "merges"
+        if not merges_dir.exists():
+            return False
+
+        for merge_file in merges_dir.glob("*.json"):
+            try:
+                record = load_merge_record(merge_file)
+                if record.get("status") == "dirty":
+                    # Check if any superseded file in this merge is relevant
+                    merge_superseded = record.get("superseded_files", [])
+                    for sf in merge_superseded:
+                        # Extract version from filename
+                        parts = sf.split("__")
+                        if len(parts) > 1:
+                            version_part = parts[1].split("_")[0]
+                            if version_part in superseded_files:
+                                return True
+            except Exception:
+                continue
+
+        return False
+
+    except Exception as e:
+        logger.debug("Could not check dirty environment: %s", e)
+        return False

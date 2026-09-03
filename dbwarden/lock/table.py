@@ -100,10 +100,10 @@ _UPSERT_STATUS_ROW = {
     "sqlite": """
         INSERT INTO dbwarden_lock
             (namespace, execution_id, owner_id, migration_version, migration_checksum,
-             fencing_token, host, pid, state, acquired_at, last_heartbeat_at)
+             fencing_token, host, pid, db_connection_id, state, acquired_at, last_heartbeat_at)
         VALUES
             (:namespace, :execution_id, :owner_id, :migration_version, :migration_checksum,
-             :fencing_token, :host, :pid, :state, :acquired_at, :last_heartbeat_at)
+             :fencing_token, :host, :pid, :db_connection_id, :state, :acquired_at, :last_heartbeat_at)
         ON CONFLICT (namespace) DO UPDATE SET
             execution_id = excluded.execution_id,
             owner_id = excluded.owner_id,
@@ -112,6 +112,7 @@ _UPSERT_STATUS_ROW = {
             fencing_token = excluded.fencing_token,
             host = excluded.host,
             pid = excluded.pid,
+            db_connection_id = excluded.db_connection_id,
             state = excluded.state,
             acquired_at = excluded.acquired_at,
             last_heartbeat_at = excluded.last_heartbeat_at
@@ -119,10 +120,10 @@ _UPSERT_STATUS_ROW = {
     "postgresql": """
         INSERT INTO {schema}.dbwarden_lock
             (namespace, execution_id, owner_id, migration_version, migration_checksum,
-             fencing_token, host, pid, state, acquired_at, last_heartbeat_at)
+             fencing_token, host, pid, db_connection_id, state, acquired_at, last_heartbeat_at)
         VALUES
             (:namespace, :execution_id, :owner_id, :migration_version, :migration_checksum,
-             :fencing_token, :host, :pid, :state, :acquired_at, :last_heartbeat_at)
+             :fencing_token, :host, :pid, :db_connection_id, :state, :acquired_at, :last_heartbeat_at)
         ON CONFLICT (namespace) DO UPDATE SET
             execution_id = EXCLUDED.execution_id,
             owner_id = EXCLUDED.owner_id,
@@ -131,6 +132,7 @@ _UPSERT_STATUS_ROW = {
             fencing_token = EXCLUDED.fencing_token,
             host = EXCLUDED.host,
             pid = EXCLUDED.pid,
+            db_connection_id = EXCLUDED.db_connection_id,
             state = EXCLUDED.state,
             acquired_at = EXCLUDED.acquired_at,
             last_heartbeat_at = EXCLUDED.last_heartbeat_at
@@ -138,10 +140,10 @@ _UPSERT_STATUS_ROW = {
     "mysql": """
         INSERT INTO dbwarden_lock
             (namespace, execution_id, owner_id, migration_version, migration_checksum,
-             fencing_token, host, pid, state, acquired_at, last_heartbeat_at)
+             fencing_token, host, pid, db_connection_id, state, acquired_at, last_heartbeat_at)
         VALUES
             (:namespace, :execution_id, :owner_id, :migration_version, :migration_checksum,
-             :fencing_token, :host, :pid, :state, :acquired_at, :last_heartbeat_at)
+             :fencing_token, :host, :pid, :db_connection_id, :state, :acquired_at, :last_heartbeat_at)
         ON DUPLICATE KEY UPDATE
             execution_id = VALUES(execution_id),
             owner_id = VALUES(owner_id),
@@ -150,6 +152,7 @@ _UPSERT_STATUS_ROW = {
             fencing_token = VALUES(fencing_token),
             host = VALUES(host),
             pid = VALUES(pid),
+            db_connection_id = VALUES(db_connection_id),
             state = VALUES(state),
             acquired_at = VALUES(acquired_at),
             last_heartbeat_at = VALUES(last_heartbeat_at)
@@ -157,10 +160,15 @@ _UPSERT_STATUS_ROW = {
     "clickhouse": """
         INSERT INTO dbwarden_lock
             (namespace, execution_id, owner_id, migration_version, migration_checksum,
-             fencing_token, host, pid, state, acquired_at, last_heartbeat_at)
-        VALUES
-            (:namespace, :execution_id, :owner_id, :migration_version, :migration_checksum,
-             :fencing_token, :host, :pid, :state, :acquired_at, :last_heartbeat_at)
+             fencing_token, host, pid, db_connection_id, state, acquired_at, last_heartbeat_at)
+        SELECT
+            :namespace, :execution_id, :owner_id, :migration_version, :migration_checksum,
+            ifNull(max(fencing_token), 0) + 1, :host, :pid, :db_connection_id, 'RUNNING',
+            :acquired_at, :last_heartbeat_at
+        FROM dbwarden_lock FINAL
+        WHERE namespace = :namespace
+          AND (expires_at IS NULL OR expires_at <= now())
+        LIMIT 1
     """,
 }
 
@@ -182,8 +190,9 @@ _UPDATE_HEARTBEAT = {
     """,
     "clickhouse": """
         ALTER TABLE dbwarden_lock UPDATE
-        SET last_heartbeat_at = :now
+        SET last_heartbeat_at = :now, expires_at = :expires_at
         WHERE namespace = :namespace AND execution_id = :execution_id
+          AND owner_id = :owner_id AND fencing_token = :fencing_token
     """,
 }
 
@@ -265,26 +274,23 @@ def _format_query(template: str, db_type: str, schema: str = "public") -> str:
 def ensure_lock_table(connection: Any, db_type: str, schema: str = "public") -> None:
     """Create the v2 lock table if it doesn't exist.
 
-    Also handles migration from v1 schema (adds missing columns).
+    v1 lock tables are no longer supported. If a v1 table exists,
+    it will be dropped and recreated with the v2 schema.
     """
     ddl = _LOCK_TABLE_V2_DDL.get(db_type, _LOCK_TABLE_V2_DDL["sqlite"])
     formatted = _format_query(ddl, db_type, schema)
     connection.execute(text(formatted))
 
-    # v1 → v2 migration: add missing columns if table exists with old schema
-    _migrate_v1_to_v2(connection, db_type, schema)
+    # Ensure v2 schema (drops v1 table if it exists)
+    _ensure_v2_schema(connection, db_type, schema)
 
     logger.debug("Lock table ensured (db_type=%s)", db_type)
 
 
-def _migrate_v1_to_v2(connection: Any, db_type: str, schema: str = "public") -> None:
-    """Detect v1 lock table schema and migrate to v2.
+def _ensure_v2_schema(connection: Any, db_type: str, schema: str = "public") -> None:
+    """Ensure the lock table has v2 schema.
 
-    v1 schema had: id, locked, acquired_at, owner_token
-    v2 schema has: namespace (PK), execution_id, owner_id, state, etc.
-
-    Since we can't add a PRIMARY KEY via ALTER TABLE in SQLite,
-    we drop and recreate the table.
+    If a v1 table exists (with 'locked' column), drop and recreate with v2 schema.
     """
     # Check if old v1 columns exist (locked, owner_token)
     try:
@@ -315,13 +321,10 @@ def _migrate_v1_to_v2(connection: Any, db_type: str, schema: str = "public") -> 
     except Exception:
         return  # Table doesn't exist yet; create will handle it
 
-    # If old 'locked' column exists but new 'namespace' doesn't, we need migration
+    # If old 'locked' column exists but new 'namespace' doesn't, drop and recreate
     if "locked" in columns and "namespace" not in columns:
-        logger.info("Migrating lock table from v1 to v2 schema")
+        logger.info("Dropping v1 lock table and recreating with v2 schema")
         _recreate_lock_table_v2(connection, db_type, schema)
-    elif "namespace" not in columns and "locked" not in columns:
-        # Neither v1 nor v2; fresh table, DDL already created it
-        pass
 
 
 def _recreate_lock_table_v2(connection: Any, db_type: str, schema: str = "public") -> None:
@@ -363,6 +366,7 @@ def upsert_status_row(
     migration_version: str | None = None,
     migration_checksum: str | None = None,
     fencing_token: int = 0,
+    db_connection_id: str | None = None,
     state: str = "RUNNING",
     db_type: str | None = None,
     schema: str = "public",
@@ -381,6 +385,7 @@ def upsert_status_row(
         "fencing_token": fencing_token,
         "host": socket.gethostname(),
         "pid": __import__("os").getpid(),
+        "db_connection_id": db_connection_id,
         "state": state,
         "acquired_at": _server_now(connection, db_type),
         "last_heartbeat_at": _server_now(connection, db_type),
@@ -396,6 +401,9 @@ def update_heartbeat(
     *,
     namespace: str = "default",
     execution_id: str,
+    owner_id: str = "",
+    fencing_token: int = 0,
+    ttl_seconds: int = 45,
     db_type: str | None = None,
     schema: str = "public",
 ) -> None:
@@ -403,10 +411,20 @@ def update_heartbeat(
     if db_type is None:
         db_type = _get_db_type(connection)
 
+    from datetime import datetime, timedelta
+    now_result = connection.execute(text("SELECT now()")).scalar()
+    now_str = str(now_result)
+    now_dt = datetime.fromisoformat(now_str.replace("Z", "+00:00"))
+    expires_dt = now_dt + timedelta(seconds=ttl_seconds)
+    expires_str = str(expires_dt)
+
     params = {
         "namespace": namespace,
         "execution_id": execution_id,
-        "now": _server_now(connection, db_type),
+        "owner_id": owner_id,
+        "fencing_token": fencing_token,
+        "now": now_str,
+        "expires_at": expires_str,
     }
 
     template = _UPDATE_HEARTBEAT.get(db_type, _UPDATE_HEARTBEAT["sqlite"])

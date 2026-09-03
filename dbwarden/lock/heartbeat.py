@@ -30,6 +30,8 @@ class HeartbeatTask:
         db_name: Database name for connection resolution.
         namespace: Lock namespace.
         execution_id: The execution ID to heartbeat for.
+        owner_id: The owner ID for the lease.
+        fencing_token: The current fencing token.
         interval_seconds: Seconds between heartbeats (default 15).
         ttl_seconds: Seconds after which a heartbeat is stale (default 45).
         fatal_grace: Number of consecutive heartbeat failures before aborting
@@ -42,6 +44,8 @@ class HeartbeatTask:
         db_name: str | None = None,
         namespace: str = "default",
         execution_id: str = "",
+        owner_id: str = "",
+        fencing_token: int = 0,
         interval_seconds: float = 15.0,
         ttl_seconds: int = 45,
         fatal_grace: int = 1,
@@ -49,6 +53,8 @@ class HeartbeatTask:
         self.db_name = db_name
         self.namespace = namespace
         self.execution_id = execution_id
+        self.owner_id = owner_id
+        self.fencing_token = fencing_token
         self.interval_seconds = interval_seconds
         self.ttl_seconds = ttl_seconds
         self.fatal_grace = fatal_grace
@@ -140,6 +146,9 @@ class HeartbeatTask:
                 conn,
                 namespace=self.namespace,
                 execution_id=self.execution_id,
+                owner_id=self.owner_id,
+                fencing_token=self.fencing_token,
+                ttl_seconds=self.ttl_seconds,
                 db_type=db_type,
                 schema=schema,
             )

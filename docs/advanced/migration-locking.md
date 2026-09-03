@@ -131,6 +131,106 @@ AVAILABLE → RUNNING → COMPLETE → AVAILABLE (loop back)
 
 The INSPECTING state compares the recorded migration checksum with the candidate migration. If they match, the migration can be resumed. If they don't match, the worker transitions to NEEDS_REVIEW and waits for human intervention.
 
+## INSPECTING procedure
+
+When a new worker acquires the lock and detects a dead predecessor (DEAD state), it executes the INSPECTING procedure:
+
+1. **Compare checksums**: The recorded `migration_checksum` is compared with the candidate migration's checksum
+2. **Walk history**: The migration history table is checked to determine the last durably recorded step
+3. **Verify catalog state**: On transactional engines (PostgreSQL, SQLite), verify catalog state matches history
+4. **Reconcile catalog**: On non-transactional engines (MySQL, ClickHouse), reconcile catalog against step list
+5. **Apply recovery policy**: Based on the configured `recovery_policy`, transition to RUNNING (resume) or NEEDS_REVIEW (halt)
+
+## Recovery policy
+
+Configure the recovery policy in `dbwarden.py`:
+
+```python
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    recovery_policy = "halt"  # default
+```
+
+Policies:
+
+| Policy | Behavior |
+|--------|----------|
+| `halt` (default) | Transition to NEEDS_REVIEW, print inspection report, exit with code 78 |
+| `resume_idempotent` | Resume only if all remaining statements are idempotent; else NEEDS_REVIEW |
+| `force` | Re-run remaining steps unconditionally (audit-logged) |
+
+## Re-entrancy protection
+
+dbwarden prevents nested acquisition of the same advisory lock on PostgreSQL. If a worker attempts to acquire a lock it already holds, the acquisition is refused with an error. This prevents lock corruption from nested migration runs.
+
+## Heartbeat fatal on fallback engines
+
+On ClickHouse (fallback engine), if the heartbeat fails repeatedly (exceeding `fatal_grace`), the migration run is aborted immediately. This prevents a worker from executing DDL after losing its lease.
+
+## ClickHouse per-statement fence check
+
+For ClickHouse, dbwarden performs a per-statement fence check before each DDL statement. This validates that the worker still owns the lease by checking the fencing token matches. If the token has advanced (another worker acquired the lease), the migration is aborted with a `LockError`.
+
+## POSSIBLE_CONCURRENT_EXECUTION detection
+
+After a ClickHouse migration completes, dbwarden re-reads the lease and checks if the fencing token has advanced during the run. If it has, a `POSSIBLE_CONCURRENT_EXECUTION` warning is printed, indicating another worker may have executed DDL concurrently.
+
+## TCP keepalive
+
+dbwarden enables TCP keepalive on migration connections to prevent idle-timeout kills:
+
+- **MySQL/MariaDB**: 60s idle, 3 probes, 30s interval (configurable via `tcp_keepalive` config)
+- **PostgreSQL**: Uses default OS settings
+- **SQLite**: N/A (file-based)
+
+## SQLite busy_timeout
+
+For SQLite, dbwarden sets a configurable `busy_timeout` to control how long `BEGIN IMMEDIATE` waits for the write lock:
+
+```python
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    sqlite_busy_timeout = 5000  # Wait up to 5 seconds
+```
+
+Default is 0 (fail fast). Set to a positive value to wait for the write lock.
+
+## Prepared transactions prohibition
+
+dbwarden prohibits 2PC (prepared transactions) on the migration connection. Advisory locks interact badly with prepared transactions, which can lead to lock leaks or corruption.
+
+## AUDIT-level logging
+
+dbwarden logs all unlock operations at AUDIT level for compliance and forensics. The audit log includes:
+
+- Operator identity (user, host, PID)
+- Target diagnostics (host, PID, execution ID)
+- Outcome (success/failure)
+
+Example audit log entry:
+```
+AUDIT: unlock executed by user=deploy host=ci-runner-1 pid=5678
+target_host=deploy-runner-7 target_pid=1234 target_execution=abc123def456 outcome=success
+```
+
+## v1 lock phase-out
+
+dbwarden v2 uses native locking with the `dbwarden_lock` table schema. The v1 lock schema (with `locked`, `owner_token` columns) is no longer supported. If a v1 table exists, it will be automatically dropped and recreated with the v2 schema on first use.
+
+## Per-statement history recording
+
+For non-transactional engines (MySQL, ClickHouse), dbwarden can record history per-statement instead of per-migration file. This enables finer-grained recovery but may impact performance.
+
+```python
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    per_statement_history = True  # Default: False
+```
+
+When enabled, each DDL statement is recorded to the history table before the next statement begins. This is the only resumption signal on non-transactional engines.
+
+Default is 0 (fail fast). Set to a positive value to wait for the write lock.
+
 ## When NOT to use `unlock`
 
 Do not run `unlock` if:
