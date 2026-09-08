@@ -5,6 +5,7 @@ from dbwarden.output import (
     data_table,
     emit_json,
     error,
+    info,
     json_mode,
     kv_table,
     render,

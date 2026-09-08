@@ -94,7 +94,8 @@ from dbwarden.engine.offline import model_state_to_dict
 
 
 def set_baseline_migration(
-    migrations_dir: str, version: str, db_name: str | None = None
+    migrations_dir: str, version: str, db_name: str | None = None,
+    connection: Any | None = None,
 ) -> list[str] | None:
     """
     Mark all migrations up to and including the specified version as applied.
@@ -103,6 +104,8 @@ def set_baseline_migration(
         migrations_dir: Path to migrations directory.
         version: Version to set as baseline.
         db_name: Database name.
+        connection: Optional long-lived migration connection. When provided,
+            statements execute on this connection instead of opening a new one.
 
     Returns:
         list[str]: List of applied versions.
@@ -127,6 +130,7 @@ def set_baseline_migration(
                 migration_operation="upgrade",
                 filename=filename,
                 db_name=db_name,
+                connection=connection,
             )
             applied.append(v)
 
@@ -289,7 +293,7 @@ def migrate_single(
             if not to_version:
                 raise ValueError("--baseline requires --to-version to be specified.")
 
-            applied = set_baseline_migration(migrations_dir, to_version, db_name)
+            applied = set_baseline_migration(migrations_dir, to_version, db_name, connection=_migration_conn)
             logger.log_baseline_set(to_version)
             success(f"Baseline set at version: {to_version}")
             if applied:
