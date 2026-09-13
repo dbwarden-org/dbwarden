@@ -10,6 +10,8 @@ from dbwarden.config.state import (
     DEFAULT_MIGRATION_TABLE,
     DEFAULT_SEEDS_TABLE,
     MultiDbConfig,
+    ProjectConfig,
+    ProjectPolicy,
     _ResolvedSource,
 )
 from dbwarden.config.resolve import (
@@ -27,6 +29,8 @@ from dbwarden.config.resolve import (
     _is_literal_node,
     _MULTI_DB_CONFIG_CACHE,
     _MULTI_DB_CONFIG_CWD,
+    _PROJECT_CONFIG_CACHE,
+    _PROJECT_CONFIG_CWD,
     _normalized_url,
     _RESOLVED_CWD,
     _RESOLVED_SOURCE_CACHE,
@@ -47,11 +51,13 @@ from dbwarden.config.resolve import (
 from dbwarden.config.build import (
     _entry_model_paths,
     _finalize_entries,
+    _finalize_project_config,
     display_value,
     get_config,
     get_database,
     get_multi_db_config,
+    get_project_config,
     list_databases,
 )
-from dbwarden.config_registry import DbwardenDatabase
+from dbwarden.config_registry import DbwardenConfig, DbwardenDatabase
 from dbwarden.exceptions import ConfigurationError
