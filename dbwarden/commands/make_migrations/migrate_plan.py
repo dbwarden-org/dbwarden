@@ -5,6 +5,57 @@ from dbwarden.engine.checksum import calculate_checksum
 from dbwarden.engine.migration_name import Change, autogenerate_migration_name
 
 
+_OPERATION_SEVERITIES = {
+    "alter_pg_partition": "ERROR",
+    "drop_ch_agg_target": "ERROR",
+    "drop_column": "ERROR",
+    "drop_table": "ERROR",
+    "alter_ch_column": "WARNING",
+    "alter_ch_dict": "WARNING",
+    "alter_ch_options": "WARNING",
+    "alter_ch_projection": "WARNING",
+    "alter_ch_row_policy": "WARNING",
+    "alter_ch_skip_index": "WARNING",
+    "alter_column_autoincrement": "WARNING",
+    "alter_column_nullable": "WARNING",
+    "alter_column_type": "WARNING",
+    "alter_default_privileges": "WARNING",
+    "alter_my_column_meta": "WARNING",
+    "alter_pg_column_meta": "WARNING",
+    "alter_pg_rls": "WARNING",
+    "alter_pg_table": "WARNING",
+    "alter_role": "WARNING",
+    "alter_sq_column_meta": "WARNING",
+    "alter_sq_table": "WARNING",
+    "alter_view": "WARNING",
+    "detach_partition": "WARNING",
+    "drop_ch_named_collection": "WARNING",
+    "drop_ch_quota": "WARNING",
+    "drop_ch_role": "WARNING",
+    "drop_ch_row_policy": "WARNING",
+    "drop_ch_settings_profile": "WARNING",
+    "drop_ch_user": "WARNING",
+    "drop_check_constraint": "WARNING",
+    "drop_composite_type": "WARNING",
+    "drop_domain": "WARNING",
+    "drop_event_trigger": "WARNING",
+    "drop_exclude_constraint": "WARNING",
+    "drop_extended_statistics": "WARNING",
+    "drop_foreign_key": "WARNING",
+    "drop_function": "WARNING",
+    "drop_index": "WARNING",
+    "drop_role": "WARNING",
+    "drop_schema": "WARNING",
+    "drop_sequence": "WARNING",
+    "drop_type": "WARNING",
+    "drop_unique_constraint": "WARNING",
+    "modify_mv_query": "WARNING",
+    "recreate_ch_table": "WARNING",
+    "recreate_sq_table": "WARNING",
+    "revoke_grant": "WARNING",
+}
+
+
 def _resolve_migration_description(
     description: str | None,
     changes: list[Change],
@@ -51,7 +102,7 @@ def _build_plan_operation(change: Change) -> dict[str, str]:
     operation: dict[str, str] = {
         "type": change.operation,
         "table": change.table,
-        "severity": "INFO",
+        "severity": _OPERATION_SEVERITIES.get(change.operation, "INFO"),
     }
     if change.resolved_from:
         operation["resolved_from"] = change.resolved_from
