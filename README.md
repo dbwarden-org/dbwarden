@@ -9,7 +9,7 @@
 </p>
 <p align="center">
   <a href="https://www.python.org/downloads/">
-    <img src="https://img.shields.io/badge/Python-3.12.7%2B-3776AB?logo=python&logoColor=white&style=for-the-badge" alt="Python">
+    <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white&style=for-the-badge" alt="Python">
   </a>
   <a href="https://pypi.org/project/dbwarden/">
     <img src="https://img.shields.io/pypi/v/dbwarden?logo=pypi&logoColor=white&style=for-the-badge" alt="PyPI">
@@ -36,6 +36,8 @@
 dbwarden is a declarative schema compiler for SQLAlchemy. You declare the schema you want in your SQLAlchemy models, and dbwarden compiles everything else: migration SQL, rollbacks, snapshots, and safety checks.
 
 There are no migration scripts to write or maintain. There is no migration runtime. Your models are the contract. The database is kept in sync with them.
+
+> **Status: Stable Alpha.** dbwarden is pre-1.0 but production-ready. No breaking changes will ship without a 3-month deprecation window.
 
 ## At a glance
 
