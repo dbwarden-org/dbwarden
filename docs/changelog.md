@@ -11,12 +11,46 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 
 ### Added
 
-- **SQLite is a first-class backend.** Changes SQLite's `ALTER TABLE` cannot express - column type, nullability, default, table constraints, `WITHOUT ROWID`, `STRICT`, generated expressions and collation - are emitted as a table rebuild (create, copy, drop, rename, recreate indexes) with the reverse rebuild as the rollback, instead of a comment. All changes to one table collapse into a single rebuild.
-- **SQLite table and column metadata.** `SqTableMeta` supports `sq_without_rowid`, `sq_strict` and `sq_indexes`; the new `SqColumnMeta` plus `sq.field(generated=..., generated_mode=..., collate=...)` cover generated columns and per-column collation. Both are emitted in `CREATE TABLE`, captured by schema snapshots, and written back by `generate-models`.
-- **SQLite impact analysis.** `check-impact` reports table-option, generated-column and collation changes as warnings, because each rebuilds the table.
+- **`DbwardenConfig` for project-wide migration policy.** A singleton class (`pre_migrate_safety`, `pre_migrate_impact`, `missing_plan`, `impact_paths`) that controls built-in safety and impact gates. Defaults preserve current behavior.
+- **Six lifecycle hooks.** `pre_migration_run`, `pre_migration`, `migration_progress`, `post_migration`, `on_migration_failure`, `post_migration_run` — all multi-value, all command-aware (`migrate`, `rollback`, `downgrade`).
+- **`register_migration_hooks()` API.** Register project-wide app hooks with signature validation and deduplication.
+- **`validate_migration_hooks()` API.** Pre-command validation of all registered hooks (global, plugin, per-database).
+- **Per-database `migration_hooks`.** `database_config()` accepts `migration_hooks` dict; per-database hooks run after global hooks.
+- **Structured preflight runner.** `run_preflight()` validates files, plans, dependencies, and impact before lock acquisition.
+- **`validate_dependencies()` for migration deps.** Checks missing targets, circular deps, unmet applied deps, and superseded deps. Always blocks (correctness, not policy).
+- **`DependencyError` dataclass.** Structured error type for dependency validation results.
+- **`--force` acknowledgement for safety warnings.** When `pre_migrate_safety="block"`, WARNING safety ops block unless `--force` is used.
+- **`progress_callback` in `run_migration()`.** Per-statement progress hooks fire via callback parameter.
+- **Operation severity mapping.** `migrate_plan.py` maps `drop_table`/`drop_column` → ERROR, alterations → WARNING.
+- **DB-scoped settings in resolved state.** `recovery_policy`, `tcp_keepalive`, `rename_policy`, etc. now flow through `DatabaseConfig`.
+- **Python 3.10+ support.** Lowered from 3.12.7+ with `tomli` and `typing-extensions` fallbacks.
+
+### Changed
+
+- **Python version requirement lowered from 3.12.7+ to 3.10+.**
+- **`impact_paths` default changed from `[]` to `["."]`.**
+- **`ProjectConfigEntry` enforces** `pre_migrate_impact="block"` requires `missing_plan="block"`.
+- **`impact_paths` validates** absolute paths, traversal, and symlink escapes.
+- **Merge dirty-environment check fails closed** on parsing failures.
+- **`resolve_migration_order()` error messages** include per-migration dependency details.
+- **Backup runs after lock acquisition** (Section 7.1 ordering).
+- **Preflight checks run before lock acquisition** (Section 7.1 ordering).
+- **Dry-run mode** runs preflight, merge checks, and pre-hooks for all migration types (including RA/ROC).
+- **`post_migration_run` does not fire** in dry-run mode.
+- **`migration_progress` fires per-statement** via `progress_callback`.
 
 ### Fixed
 
+- **`_parse_plan_safety` no longer crashes** on `operations: null` in plan files.
+- **`ProjectConfig.impact_paths` default** now matches spec (`["."]`).
+- **Plugin-registered lifecycle hooks** are now collected and executed (previously silently ignored).
+- **Per-database hooks receive signature validation** at pre-command time.
+- **Two-class error message** now names both conflicting classes.
+- **`_collect_hooks()` ordering**: plugins first, then app hooks, then per-database hooks.
+- **`check_dirty_environment()` fails closed** on merge-record parsing failures.
+- **SQLite is a first-class backend.** Changes SQLite's `ALTER TABLE` cannot express - column type, nullability, default, table constraints, `WITHOUT ROWID`, `STRICT`, generated expressions and collation - are emitted as a table rebuild (create, copy, drop, rename, recreate indexes) with the reverse rebuild as the rollback, instead of a comment. All changes to one table collapse into a single rebuild.
+- **SQLite table and column metadata.** `SqTableMeta` supports `sq_without_rowid`, `sq_strict` and `sq_indexes`; the new `SqColumnMeta` plus `sq.field(generated=..., generated_mode=..., collate=...)` cover generated columns and per-column collation. Both are emitted in `CREATE TABLE`, captured by schema snapshots, and written back by `generate-models`.
+- **SQLite impact analysis.** `check-impact` reports table-option, generated-column and collation changes as warnings, because each rebuilds the table.
 - **PostgreSQL reverse-engineering now works with mixed-case and quoted identifiers.** `generate-models` and snapshot queries use quoted `regclass` references, so tables and columns such as `"MyTable"` and `"weird-col"` no longer silently fail metadata extraction.
 - **`generate-models` no longer crashes against PostgreSQL.** The command now opens a raw SQLAlchemy connection instead of a transactional one, avoiding the closed-transaction error during SQLAlchemy reflection.
 - **Generated model imports are complete.** Models that only have column-level metadata now correctly import the required table-meta class (`PGTableMeta`, `MyTableMeta`, `SqTableMeta`).
@@ -39,7 +73,6 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 - **PostgreSQL migration parsing no longer invents a `constraint` column.** `ALTER TABLE ... ADD CONSTRAINT ...` statements in pending migrations are ignored by snapshot merging; previously they were misread as `ADD COLUMN constraint`.
 - **PostgreSQL identity and storage metadata no longer drift after reverse-engineering.** `make-migrations` only emits `ALTER TABLE ... SET STORAGE ...` or identity-sequence parameter changes when the model explicitly requests them, so models produced by `generate-models` converge cleanly with the database.
 - **PostgreSQL identity values are normalized to lowercase.** `Identity(always=True)` and `pg.field(identity="ALWAYS")` both normalize to `pg_identity="always"`, eliminating spurious identity diffs.
-
 - **Official plugin provenance recognizes renamed publisher workflows.** `dbwarden plugin add` now verifies the trusted-publishing attestations for the ClickHouse RBAC, PostgreSQL extensions, PostgreSQL RBAC, and PostgreSQL types plugins against their `publishing.yml` workflows.
 - **A migration generated without a snapshot no longer drops every table constraint.** `make-migrations` falls back to generating from the models alone when there is no schema snapshot, the database is unreachable, or the snapshot diff raises. That path emitted columns, indexes and foreign keys but silently omitted `UNIQUE` and `CHECK` constraints, so the schema applied cleanly and then failed at runtime with *there is no unique or exclusion constraint matching the ON CONFLICT specification*.
 - **`EXCLUDE` constraints survive model-only generation.** They are rendered by the PostgreSQL table handler, which the fallback path does not run.
@@ -69,6 +102,50 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 - **Rebuilt tables keep their column order.** Reconstructing a table from model state preserved sorted order rather than declaration order.
 - **A SQLite rebuild preserves what reflection cannot see.** Declared types keep their length and case (`VARCHAR(255)`, not `varchar`), and `AUTOINCREMENT`, foreign key `ON DELETE` / `ON UPDATE`, unnamed `UNIQUE (...)` constraints, partial indexes, `DESC` / `COLLATE` inside an index, and expression indexes all survive the rebuild.
 - **SQLite partial indexes are recorded.** The index predicate was read only under PostgreSQL's dialect key, so `WHERE` was dropped from every SQLite index.
+
+## [0.19.0] - 2026-09-03
+
+### Added
+
+- **V2 migration locking with per-engine strategies.** PostgreSQL advisory locks, MySQL named locks, SQLite `BEGIN IMMEDIATE`, and ClickHouse lease-based locking with configurable TTL. A heartbeat background task updates `last_heartbeat_at` on native-lock engines, enabling stale (STUCK) and dead worker detection.
+- **`dbwarden lock-status` and `dbwarden unlock` commands.** Enhanced with detailed holder diagnostics including host, PID, execution ID, migration version, and health status.
+- **Lock exceptions for structured error handling.** `LockAcquireTimeout`, `LockStuck`, and `RecoveryRequired` exceptions.
+- **ClickHouse cluster configuration and CH-1 idempotency.** `clickhouse_lock_ttl` and `lock_namespace` config keys.
+- **Merge handling pipeline.** `dbwarden merge` detects schema conflicts between branches and generates merge plans. `dbwarden rebase` replays migrations onto a new base. `dbwarden reconcile` resolves dirty environments with unreconciled merge changes.
+- **Merge detection integration.** `dbwarden make-migrations` and `dbwarden status` surface pending merge conflicts during normal workflows.
+- **`--all-environments` flag** for cross-environment merge operations.
+- **MariaDB merge documentation.** Semantic conflict detection and model state reconstruction documented.
+- **Documentation overhaul.** All documentation comprehensively revised: commands, configuration, database setup, advanced topics, correctness guarantees, plugins, and getting-started guide. ClickHouse documentation receives dedicated setup guides for CH-0 through CH-4.
+
+### Fixed
+
+- **Logger bug in `dbwarden unlock`.** Audit log call referenced an undefined variable.
+- **PostgreSQL advisory lock key size and type casting.**
+- **Critical audit findings in lock implementation.** Heartbeat timestamp generation for SQLite.
+- **SQLite lock handling.** Reuses the `BEGIN IMMEDIATE` connection for migration execution.
+- **Heartbeat task correctly skipped on SQLite.** Staleness is inferred from `acquired_at` and process liveness.
+
+## [0.18.0] - 2026-09-01
+
+### Added
+
+- **Exception hierarchy.** New `dbwarden.exceptions` package organizes all exceptions under `DBWardenError`: `core.py` (13 exceptions), `plugin.py` (5 plugin exceptions), and `engine.py` (`OrderingError` and `RollbackContractError`).
+- **Typed snapshot structures.** `dbwarden.engine.snapshot.types` introduces 26 TypedDicts covering the full snapshot hierarchy: `Snapshot`, `SnapshotTable`, `SnapshotColumn`, indexes, constraints, PG/MySQL/SQLite metadata, roles, grants, policies, sequences, functions, and event triggers.
+- **Per-component CLI log filtering.** `--log-level COMPONENT:LEVEL` replaces the all-or-nothing debug flag.
+- **`-h` shorthand for `--help`** across all CLI commands.
+
+### Changed
+
+- **`extract.py` module split.** The 1,500-line `extract.py` God Function is split into focused modules: `extract_common`, `extract_pg`, `extract_mysql`, and `extract_sqlite`. `extract.py` is now a thin dispatch module.
+- **Connection layer rename.** `dbwarden.database` is renamed to `dbwarden.connection`. A backward-compatibility shim with `DeprecationWarning` preserves existing imports.
+- **142 parametrised CLI option combination tests** covering every flag permutation.
+
+### Fixed
+
+- **ClickHouse immutable option detection.**
+- **PostgreSQL enum, identity, and foreign key reverse-engineering gaps.**
+- **PostgreSQL column statistics, storage, and compression metadata** now captured during snapshot extraction.
+- **SQLite foreign key action fixups** handle edge cases that previously produced incorrect DDL.
 
 ## [0.17.1] - 2026-08-15
 
