@@ -4,7 +4,11 @@ import base64
 import json
 import subprocess
 import sys
-import tomllib
+
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -83,11 +87,23 @@ KNOWN_VALUE_HOOKS: frozenset[str] = frozenset({
     "seed_rollback",
     "sandbox_provider_start",
     "sandbox_provider_stop",
+    "pre_migration_run",
+    "pre_migration",
+    "migration_progress",
+    "post_migration",
+    "on_migration_failure",
+    "post_migration_run",
 })
 
 MULTI_VALUE_HOOKS: frozenset[str] = frozenset({
     "health_routes",
     "migration_routes",
+    "pre_migration_run",
+    "pre_migration",
+    "migration_progress",
+    "post_migration",
+    "on_migration_failure",
+    "post_migration_run",
 })
 
 # Representative (args, kwargs) core uses to invoke each value hook. A registered
@@ -112,6 +128,12 @@ HOOK_CALL_SPECS: dict[str, tuple[tuple[Any, ...], dict[str, Any]]] = {
     "seed_export": ((), {"database": None, "all_databases": False, "output_dir": "seeds"}),
     "sandbox_provider_start": (("sqlite",), {}),
     "sandbox_provider_stop": ((), {}),
+    "pre_migration_run": (("ctx",), {}),
+    "pre_migration": (("ctx",), {}),
+    "migration_progress": (("ctx",), {}),
+    "post_migration": (("ctx",), {}),
+    "on_migration_failure": (("ctx",), {}),
+    "post_migration_run": (("ctx",), {}),
 }
 
 
@@ -229,6 +251,11 @@ class HookRegistry:
             raise ValueError(
                 f"Unknown hook '{hook_name}'. Known: {', '.join(sorted(KNOWN_VALUE_HOOKS))}"
             )
+        # Deduplicate: same callable in same scope/hook is ignored (Section 10.4)
+        existing_fns = cls._hooks.get(hook_name, [])
+        for _existing_plugin, existing_fn in existing_fns:
+            if existing_fn is fn and _existing_plugin == plugin:
+                return
         cls._hooks.setdefault(hook_name, []).append((plugin, fn))
 
     @classmethod
@@ -319,6 +346,135 @@ class PluginRegistrar:
         """Declare ``database_config(...)`` keyword arguments this plugin consumes."""
         for key in keys:
             ConfigKeyRegistry.register(key, plugin=self._plugin_name)
+
+
+_APP_HOOKS_SOURCE = "app"
+
+LIFECYCLE_HOOK_NAMES = frozenset({
+    "pre_migration_run",
+    "pre_migration",
+    "migration_progress",
+    "post_migration",
+    "on_migration_failure",
+    "post_migration_run",
+})
+
+
+def register_migration_hooks(
+    *,
+    pre_migration_run: list[Callable[..., Any]] | None = None,
+    pre_migration: list[Callable[..., Any]] | None = None,
+    migration_progress: list[Callable[..., Any]] | None = None,
+    post_migration: list[Callable[..., Any]] | None = None,
+    on_migration_failure: list[Callable[..., Any]] | None = None,
+    post_migration_run: list[Callable[..., Any]] | None = None,
+) -> None:
+    """Register project-wide migration lifecycle hooks.
+
+    Call this from your dbwarden config source or a module imported by it.
+    Each argument accepts a list of callables. The same callable may be
+    registered once globally and once for a database; it runs once at each
+    explicit scope.
+    """
+    import inspect
+
+    from dbwarden.exceptions import HookValidationError
+
+    hooks_by_name: dict[str, list[Callable[..., Any]] | None] = {
+        "pre_migration_run": pre_migration_run,
+        "pre_migration": pre_migration,
+        "migration_progress": migration_progress,
+        "post_migration": post_migration,
+        "on_migration_failure": on_migration_failure,
+        "post_migration_run": post_migration_run,
+    }
+
+    for hook_name, fns in hooks_by_name.items():
+        if fns is None:
+            continue
+        for fn in fns:
+            if not callable(fn):
+                raise HookValidationError(
+                    f"Hook '{hook_name}' value must be callable, got {type(fn).__name__}"
+                )
+            if hook_name not in KNOWN_VALUE_HOOKS:
+                raise HookValidationError(f"Unknown lifecycle hook: {hook_name}")
+            # Validate signature accepts a context parameter (Section 10.4)
+            try:
+                sig = inspect.signature(fn)
+                # Representative context for validation
+                class _MockCtx:
+                    pass
+                sig.bind(_MockCtx())
+            except TypeError as exc:
+                raise HookValidationError(
+                    f"Hook '{hook_name}' callable {getattr(fn, '__name__', repr(fn))} "
+                    f"must accept a single context parameter: {exc}"
+                ) from exc
+            HookRegistry.register(hook_name, fn, plugin=_APP_HOOKS_SOURCE)
+
+
+def validate_migration_hooks(db_name: str | None = None) -> None:
+    """Validate the merged lifecycle hook registry before a command runs.
+
+    Checks that:
+    - All registered hook names are known lifecycle hook names.
+    - All registered hooks are callable.
+    - Per-database hooks use only known lifecycle hook names.
+    """
+    import inspect
+
+    from dbwarden.exceptions import HookValidationError
+
+    for hook_name, entries in HookRegistry.hooks().items():
+        if hook_name not in LIFECYCLE_HOOK_NAMES:
+            continue
+        for plugin, fn in entries:
+            if not callable(fn):
+                raise HookValidationError(
+                    f"Hook '{hook_name}' from plugin '{plugin}' is not callable"
+                )
+            try:
+                sig = inspect.signature(fn)
+                class _MockCtx:
+                    pass
+                sig.bind(_MockCtx())
+            except TypeError as exc:
+                raise HookValidationError(
+                    f"Hook '{hook_name}' from plugin '{plugin}' "
+                    f"must accept a single context parameter: {exc}"
+                ) from exc
+
+    if db_name:
+        from dbwarden.config import get_database
+        try:
+            config = get_database(db_name)
+            db_hooks = getattr(config, "migration_hooks", None) or {}
+            for hook_name, fns in db_hooks.items():
+                if hook_name not in LIFECYCLE_HOOK_NAMES:
+                    raise HookValidationError(
+                        f"Unknown lifecycle hook in per-database hooks: '{hook_name}'"
+                    )
+                for fn in fns:
+                    if not callable(fn):
+                        raise HookValidationError(
+                            f"Per-database hook '{hook_name}' is not callable"
+                        )
+                    # Section 10.4: Validate signature accepts a context parameter
+                    try:
+                        sig = inspect.signature(fn)
+                        class _MockCtx:
+                            pass
+                        sig.bind(_MockCtx())
+                    except TypeError as exc:
+                        raise HookValidationError(
+                            f"Per-database hook '{hook_name}' "
+                            f"must accept a single context parameter: {exc}"
+                        ) from exc
+        except HookValidationError:
+            raise
+        except Exception:
+            pass
 
 
 def _dist_name(ep: EntryPoint) -> str:
