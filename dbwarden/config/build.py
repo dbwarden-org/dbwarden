@@ -19,9 +19,14 @@ from dbwarden.config.state import (
     DEFAULT_MIGRATION_TABLE,
     DEFAULT_SEEDS_TABLE,
     MultiDbConfig,
+    ProjectConfig,
 )
-from dbwarden.config_registry import registered_entries, reset_registry
-from dbwarden.config_schema import DatabaseEntry
+from dbwarden.config_registry import (
+    registered_entries,
+    registered_project_config,
+    reset_registry,
+)
+from dbwarden.config_schema import DatabaseEntry, ProjectConfigEntry
 from dbwarden.exceptions import ConfigurationError
 
 
@@ -159,6 +164,13 @@ def _finalize_entries(
             dev_database_type=entry.dev_database_type,
             overlap_models=entry.overlap_models,
             pg_migration_lock_timeout=entry.pg_migration_lock_timeout,
+            migration_hooks=dict(entry.migration_hooks) if entry.migration_hooks else None,
+            recovery_policy=entry.recovery_policy,
+            assume_session_pooling=entry.assume_session_pooling,
+            tcp_keepalive=entry.tcp_keepalive,
+            sqlite_busy_timeout=entry.sqlite_busy_timeout,
+            per_statement_history=entry.per_statement_history,
+            rename_policy=entry.rename_policy,
             plugin_config=dict(entry.plugin_config or {}),
         )
 
@@ -226,6 +238,41 @@ def get_multi_db_config() -> MultiDbConfig:
     entries = registered_entries()
     result = _finalize_entries(entries, base_dir, variable_value_expressions)
     _resolve._MULTI_DB_CONFIG_CACHE = result
+    return result
+
+
+def _finalize_project_config(entry: ProjectConfigEntry | None) -> ProjectConfig:
+    if entry is None:
+        return ProjectConfig()
+    return ProjectConfig(
+        pre_migrate_safety=entry.pre_migrate_safety,
+        pre_migrate_impact=entry.pre_migrate_impact,
+        missing_plan=entry.missing_plan,
+        impact_paths=list(entry.impact_paths),
+    )
+
+
+def get_project_config() -> ProjectConfig:
+    import dbwarden.config.resolve as _resolve
+
+    current_cwd = str(Path.cwd().resolve())
+    if (
+        _resolve._PROJECT_CONFIG_CACHE is not None
+        and _resolve._PROJECT_CONFIG_CWD == current_cwd
+    ):
+        return _resolve._PROJECT_CONFIG_CACHE
+
+    if (
+        _resolve._MULTI_DB_CONFIG_CACHE is None
+        or _resolve._MULTI_DB_CONFIG_CWD != current_cwd
+    ):
+        reset_registry()
+        source = _resolve_source()
+        _import_source(source)
+
+    result = _finalize_project_config(registered_project_config())
+    _resolve._PROJECT_CONFIG_CACHE = result
+    _resolve._PROJECT_CONFIG_CWD = current_cwd
     return result
 
 
