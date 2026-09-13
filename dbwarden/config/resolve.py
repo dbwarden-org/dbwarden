@@ -25,6 +25,8 @@ _RESOLVED_SOURCE_CACHE: _ResolvedSource | None = None
 _RESOLVED_CWD: str | None = None
 _MULTI_DB_CONFIG_CACHE: "MultiDbConfig | None" = None
 _MULTI_DB_CONFIG_CWD: str | None = None
+_PROJECT_CONFIG_CACHE: "ProjectConfig | None" = None
+_PROJECT_CONFIG_CWD: str | None = None
 
 
 def set_dev_mode(enabled: bool) -> None:
@@ -56,10 +58,13 @@ def is_strict_translation() -> bool:
 
 def _clear_source_cache() -> None:
     global _RESOLVED_SOURCE_CACHE, _RESOLVED_CWD, _MULTI_DB_CONFIG_CACHE, _MULTI_DB_CONFIG_CWD
+    global _PROJECT_CONFIG_CACHE, _PROJECT_CONFIG_CWD
     _RESOLVED_SOURCE_CACHE = None
     _RESOLVED_CWD = None
     _MULTI_DB_CONFIG_CACHE = None
     _MULTI_DB_CONFIG_CWD = None
+    _PROJECT_CONFIG_CACHE = None
+    _PROJECT_CONFIG_CWD = None
 
 
 register_reset_hook(_clear_source_cache)
@@ -164,16 +169,22 @@ def _file_has_database_config_call(path: Path) -> bool:
             func = node.func
             if isinstance(func, ast.Name) and func.id == "database_config":
                 return True
-    declarative_names = {"DbwardenDatabase"}
+    declarative_names = {"DbwardenDatabase", "DbwardenConfig"}
     for node in tree.body:
         if isinstance(node, ast.ImportFrom) and node.module == "dbwarden":
             for alias in node.names:
-                if alias.name == "DbwardenDatabase":
+                if alias.name in declarative_names:
                     declarative_names.add(alias.asname or alias.name)
         elif isinstance(node, ast.Import):
             for alias in node.names:
                 if alias.name == "dbwarden":
-                    declarative_names.add(f"{alias.asname or 'dbwarden'}.DbwardenDatabase")
+                    module_name = alias.asname or "dbwarden"
+                    declarative_names.update(
+                        {
+                            f"{module_name}.DbwardenDatabase",
+                            f"{module_name}.DbwardenConfig",
+                        }
+                    )
 
     class_names: set[str] = set()
     class_bases: dict[str, list[str]] = {}
