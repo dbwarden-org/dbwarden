@@ -11,9 +11,11 @@ from dbwarden.exceptions import ConfigurationError
 from dbwarden.plugin import PLUGIN_CONFIG_KEY_OWNERS
 
 DatabaseType = Literal["sqlite", "postgresql", "mysql", "mariadb", "clickhouse"]
+ProjectPolicy = Literal["off", "warn", "block"]
 VALID_DATABASE_TYPES = frozenset(
     {"sqlite", "postgresql", "mysql", "mariadb", "clickhouse"}
 )
+VALID_PROJECT_POLICIES = frozenset({"off", "warn", "block"})
 
 DATABASE_NAME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_]*$")
 MODEL_PATH_RE = re.compile(r"^[a-zA-Z_./][a-zA-Z0-9_./-]*$")
@@ -93,6 +95,33 @@ def _validate_lock_timeout(_self, _attribute, value: int | None) -> None:
         raise ValueError("pg_migration_lock_timeout must be a non-negative integer")
 
 
+def _validate_project_policy_value(field_name: str, value: str) -> None:
+    if value not in VALID_PROJECT_POLICIES:
+        raise ValueError(f"{field_name} must be one of: off, warn, block")
+
+
+def _validate_project_policy(_self, attribute, value: str) -> None:
+    _validate_project_policy_value(attribute.name, value)
+
+
+def _validate_impact_paths(_self, _attribute, value: list[str]) -> None:
+    if not isinstance(value, list) or not all(isinstance(path, str) for path in value):
+        raise ValueError("impact_paths must be a list of strings")
+    for path in value:
+        if path.startswith("/"):
+            raise ValueError(f"impact_paths must not contain absolute paths: {path}")
+        if ".." in path:
+            raise ValueError(f"impact_paths must not contain traversal: {path}")
+        # Check for symlink escapes (Section 6.1)
+        from pathlib import Path
+        resolved = Path(path).resolve()
+        cwd_resolved = Path.cwd().resolve()
+        if not str(resolved).startswith(str(cwd_resolved)):
+            raise ValueError(
+                f"impact_paths must not escape the project root via symlinks: {path}"
+            )
+
+
 @define(slots=False)
 class DatabaseEntry:
     database_name: str = field(validator=_validate_database_name)
@@ -137,6 +166,8 @@ class DatabaseEntry:
     per_statement_history: bool = False
     # Rename policy for merge: strict, prompt, auto-high-confidence (Sec 9 R9.1.7)
     rename_policy: str = "prompt"
+    # Per-database migration lifecycle hooks
+    migration_hooks: dict[str, list] | None = None
     # Backend object keys contributed by plugins (pg_roles, ch_grants, and so on).
     # Kept as a dict so core does not have to know each plugin's key list.
     plugin_config: dict[str, Any] = field(factory=dict)
@@ -148,6 +179,26 @@ class DatabaseEntry:
         if name in PLUGIN_CONFIG_KEY_OWNERS:
             return self.plugin_config.get(name, [])
         raise AttributeError(name)
+
+
+@define(slots=False)
+class ProjectConfigEntry:
+    pre_migrate_safety: ProjectPolicy = field(
+        default="off", validator=_validate_project_policy
+    )
+    pre_migrate_impact: ProjectPolicy = field(
+        default="off", validator=_validate_project_policy
+    )
+    missing_plan: ProjectPolicy = field(
+        default="off", validator=_validate_project_policy
+    )
+    impact_paths: list[str] = field(factory=list, validator=_validate_impact_paths)
+
+    def __attrs_post_init__(self) -> None:
+        if self.pre_migrate_impact == "block" and self.missing_plan != "block":
+            raise ValueError(
+                "missing_plan must be 'block' when pre_migrate_impact is 'block'"
+            )
 
 
 @define(slots=False)
@@ -197,6 +248,37 @@ def structure_database_entry(kwargs: dict) -> DatabaseEntry:
                 )
     try:
         return _CONVERTER.structure(kwargs, DatabaseEntry)
+    except Exception as exc:
+        messages = transform_error(exc)
+        joined = "; ".join(messages) if messages else str(exc)
+        raise ConfigurationError(joined) from exc
+
+
+def structure_project_config(kwargs: dict[str, Any]) -> ProjectConfigEntry:
+    for field_name in (
+        "pre_migrate_safety",
+        "pre_migrate_impact",
+        "missing_plan",
+    ):
+        if field_name in kwargs:
+            try:
+                _validate_project_policy_value(field_name, kwargs[field_name])
+            except ValueError as exc:
+                raise ConfigurationError(str(exc)) from exc
+    if "impact_paths" in kwargs:
+        try:
+            _validate_impact_paths(None, None, kwargs["impact_paths"])
+        except ValueError as exc:
+            raise ConfigurationError(str(exc)) from exc
+    if (
+        kwargs.get("pre_migrate_impact", "off") == "block"
+        and kwargs.get("missing_plan", "off") != "block"
+    ):
+        raise ConfigurationError(
+            "missing_plan must be 'block' when pre_migrate_impact is 'block'"
+        )
+    try:
+        return _CONVERTER.structure(kwargs, ProjectConfigEntry)
     except Exception as exc:
         messages = transform_error(exc)
         joined = "; ".join(messages) if messages else str(exc)
