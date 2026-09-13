@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import time
-from typing import Self
+
+try:
+    from typing import Self
+except ImportError:
+    from typing_extensions import Self
 
 from dbwarden.logging import DBWardenLogger
 
