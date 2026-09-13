@@ -298,18 +298,16 @@ def check_dirty_environment(db_name: str | None = None) -> bool:
 
     Returns True if the environment is dirty and needs reconciliation.
     """
-    from dbwarden.merge.environments import load_environments
     from dbwarden.merge.marker import is_superseded
     from dbwarden.engine.version import get_migrations_directory, get_migration_filepaths_by_version
-    from pathlib import Path
 
+    superseded_files: list[str] = []
     # Check if there are any superseded migrations that might indicate a dirty environment
     try:
         migrations_dir = get_migrations_directory(db_name)
         filepaths = get_migration_filepaths_by_version(migrations_dir)
 
         # If there are superseded files, check if any have been applied
-        superseded_files = []
         for version, filepath in filepaths.items():
             if is_superseded(Path(filepath)):
                 superseded_files.append(version)
@@ -319,30 +317,32 @@ def check_dirty_environment(db_name: str | None = None) -> bool:
 
         # Check if any superseded versions are in the merge records as dirty
         from dbwarden.merge.reconciliation import load_merge_record
-        from pathlib import Path
 
         merges_dir = Path(migrations_dir).parent / ".dbwarden" / "merges"
         if not merges_dir.exists():
             return False
 
         for merge_file in merges_dir.glob("*.json"):
-            try:
-                record = load_merge_record(merge_file)
-                if record.get("status") == "dirty":
-                    # Check if any superseded file in this merge is relevant
-                    merge_superseded = record.get("superseded_files", [])
-                    for sf in merge_superseded:
-                        # Extract version from filename
-                        parts = sf.split("__")
-                        if len(parts) > 1:
-                            version_part = parts[1].split("_")[0]
-                            if version_part in superseded_files:
-                                return True
-            except Exception:
-                continue
+            record = load_merge_record(merge_file)
+            if record.get("status") == "dirty":
+                # Check if any superseded file in this merge is relevant
+                merge_superseded = record.get("superseded_files", [])
+                for sf in merge_superseded:
+                    # Extract version from filename
+                    parts = sf.split("__")
+                    if len(parts) > 1:
+                        version_part = parts[1].split("_")[0]
+                        if version_part in superseded_files:
+                            return True
 
         return False
 
     except Exception as e:
         logger.debug("Could not check dirty environment: %s", e)
-        return False
+        # Section 7.2: Fail-closed on merge-record parsing failures.
+        # Once superseded migrations are present, an unreadable record is unsafe.
+        if superseded_files:
+            return True
+        # If no superseded files found but we hit an error during discovery,
+        # fail closed to prevent silent passage of a dirty environment.
+        raise

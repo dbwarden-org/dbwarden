@@ -6,6 +6,7 @@ Implements the reconciliation migration header format from the merge spec (§6.2
 """
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -38,6 +39,14 @@ class ReconciliationHeader:
     probe_results: dict[str, str]
     generated_by: str
     renames: list[dict] | None = None
+
+
+def load_merge_record(file_path: str | Path) -> dict:
+    """Load a merge record."""
+    record = json.loads(Path(file_path).read_text())
+    if not isinstance(record, dict):
+        raise ValueError(f"Invalid merge record in {file_path}: expected a JSON object")
+    return record
 
 
 def parse_reconciliation_header(file_path: str | Path) -> Optional[ReconciliationHeader]:
