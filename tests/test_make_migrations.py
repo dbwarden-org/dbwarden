@@ -218,6 +218,28 @@ def test_build_migration_plan_includes_operations_and_checksum():
     assert plan["checksum"]
 
 
+def test_build_migration_plan_assigns_operation_severities():
+    plan = build_migration_plan(
+        migration_id="primary__0001_test",
+        changes=[
+            Change(operation="create_table", table="users"),
+            Change(operation="alter_column_type", table="users", target="age"),
+            Change(operation="drop_index", table="users"),
+            Change(operation="drop_column", table="users", target="legacy"),
+            Change(operation="drop_table", table="audit_log"),
+        ],
+        upgrade_sql="-- test",
+    )
+
+    assert [operation["severity"] for operation in plan["operations"]] == [
+        "INFO",
+        "WARNING",
+        "WARNING",
+        "ERROR",
+        "ERROR",
+    ]
+
+
 def test_make_migrations_writes_plan_file_next_to_sql():
     set_dev_mode(False)
     with tempfile.TemporaryDirectory() as tmpdir:

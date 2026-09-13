@@ -32,12 +32,14 @@ def test_affected_operations_filters_info():
         {"type": "create_table", "table": "x", "severity": "INFO"},
         {"type": "add_column", "table": "x", "target": "y", "severity": "INFO"},
         {"type": "drop_column", "table": "x", "target": "y", "severity": "WARNING"},
-        {"type": "drop_table", "table": "x", "severity": "CRITICAL"},
+        {"type": "drop_table", "table": "x", "severity": "ERROR"},
+        {"type": "drop_table", "table": "y", "severity": "CRITICAL"},
     ]
     result = _affected_operations({"operations": ops})
-    assert len(result) == 2
+    assert len(result) == 3
     assert result[0]["type"] == "drop_column"
-    assert result[1]["type"] == "drop_table"
+    assert result[1]["severity"] == "ERROR"
+    assert result[2]["severity"] == "CRITICAL"
 
 
 def test_affected_operations_verbose():

@@ -18,6 +18,7 @@ from dbwarden.merge.marker import (
 )
 from dbwarden.merge.reconciliation import (
     ReconciliationHeader,
+    load_merge_record,
     parse_reconciliation_header,
     write_reconciliation_header,
     is_reconciliation,
@@ -25,6 +26,7 @@ from dbwarden.merge.reconciliation import (
 from dbwarden.merge.detection import (
     MergeSignal,
     detect_merge_signals,
+    check_dirty_environment,
     check_version_collisions,
     get_diagnostic_message,
 )
@@ -232,9 +234,51 @@ ALTER TABLE users DROP COLUMN profile;
         write_reconciliation_header(migration_file, header)
         assert is_reconciliation(migration_file)
 
+    def test_load_merge_record(self, tmp_path):
+        """Test loading a merge record."""
+        record_file = tmp_path / "0003.json"
+        record = {"status": "dirty", "superseded_files": ["primary__0001_initial.sql"]}
+        record_file.write_text(json.dumps(record))
+
+        assert load_merge_record(record_file) == record
+
 
 class TestMergeDetection:
     """Tests for merge signal detection."""
+
+    def test_dirty_environment_without_superseded_migrations(self, tmp_path, monkeypatch):
+        """No superseded migrations leave the environment clean."""
+        migrations_dir = tmp_path / "migrations"
+        migrations_dir.mkdir()
+        (migrations_dir / "primary__0001_initial.sql").write_text("-- upgrade\nSELECT 1;")
+        monkeypatch.setattr(
+            "dbwarden.engine.version.get_migrations_directory",
+            lambda _: str(migrations_dir),
+        )
+
+        assert check_dirty_environment() is False
+
+    def test_dirty_environment_fails_closed_for_invalid_merge_record(self, tmp_path, monkeypatch):
+        """An unreadable merge record cannot make superseded migrations look clean."""
+        migrations_dir = tmp_path / "migrations"
+        migrations_dir.mkdir()
+        migration_file = migrations_dir / "primary__0001_initial.sql"
+        migration_file.write_text("-- upgrade\nSELECT 1;")
+        mark_file_superseded(
+            migration_file,
+            merged_into="0002",
+            merge_base="0000",
+            branch="feature/test",
+        )
+        merges_dir = tmp_path / ".dbwarden" / "merges"
+        merges_dir.mkdir(parents=True)
+        (merges_dir / "0002.json").write_text("{")
+        monkeypatch.setattr(
+            "dbwarden.engine.version.get_migrations_directory",
+            lambda _: str(migrations_dir),
+        )
+
+        assert check_dirty_environment() is True
 
     def test_version_collisions_in_directory(self, tmp_path):
         """Test version collision detection in a directory."""
