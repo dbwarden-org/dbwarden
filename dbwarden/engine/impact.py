@@ -16,7 +16,7 @@ def _affected_operations(plan: dict, verbose: bool = False) -> list[dict]:
     ops = plan.get("operations", [])
     if verbose:
         return ops
-    return [op for op in ops if op.get("severity", "INFO") in ("WARNING", "CRITICAL")]
+    return [op for op in ops if op.get("severity", "INFO") in ("WARNING", "ERROR", "CRITICAL")]
 
 
 def _extract_targets(ops: list[dict]) -> list[str]:
