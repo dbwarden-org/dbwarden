@@ -12,6 +12,19 @@ from dbwarden.commands.migrate.state import (
     _write_migration_snapshot,
     _write_model_state,
 )
+from dbwarden.commands.migrate.hooks import (
+    MigrationPlanEntry,
+    PreMigrationRunContext,
+    PreMigrationContext,
+    MigrationProgressContext,
+    PostMigrationContext,
+    MigrationFailureContext,
+    PostMigrationRunContext,
+    execute_veto_hook,
+    execute_observer_hook,
+    execute_failure_hook,
+)
+from dbwarden.engine.preflight import run_preflight
 from dbwarden.constants import RUNS_ALWAYS_FILE_PREFIX
 from dbwarden.engine.file_parser import parse_upgrade_statements
 from dbwarden.exceptions import DBDisconnectedError, LockError
@@ -30,6 +43,44 @@ from dbwarden.metrics import (
     set_schema_version,
 )
 from dbwarden import __version__
+
+
+def _collect_hooks(
+    hook_name: str, db_name: str | None = None
+) -> list:
+    """Collect hooks from plugin registry, global app registry, and per-database config.
+
+    Order: trusted plugins first (plugin discovery order), then project-wide
+    app hooks (configuration import order), then per-database app hooks
+    (declaration order). Section 8.
+    """
+    from dbwarden.plugin import HookRegistry, _APP_HOOKS_SOURCE
+
+    hooks = []
+    # 1. Plugin hooks (registered via PluginRegistrar.register)
+    if HookRegistry.is_registered(hook_name):
+        for source, fn in HookRegistry._hooks.get(hook_name, []):
+            if source != _APP_HOOKS_SOURCE:
+                hooks.append(fn)
+
+    # 2. Project-wide app hooks (registered via register_migration_hooks)
+    if HookRegistry.is_registered(hook_name):
+        for source, fn in HookRegistry._hooks.get(hook_name, []):
+            if source == _APP_HOOKS_SOURCE:
+                hooks.append(fn)
+
+    # 3. Per-database app hooks
+    if db_name:
+        from dbwarden.config import get_database
+        try:
+            config = get_database(db_name)
+            db_hooks = getattr(config, "migration_hooks", None) or {}
+            if hook_name in db_hooks:
+                hooks.extend(db_hooks[hook_name])
+        except Exception:
+            pass
+
+    return hooks
 
 
 class MigrationSignalHandler:
@@ -150,6 +201,7 @@ def migrate_single(
     apply_seeds: bool = False,
     perf: bool = False,
     defer_snapshots: bool = False,
+    force: bool = False,
 ) -> None:
     """
     Apply pending migrations to a single database.
@@ -170,10 +222,14 @@ def migrate_single(
     """
     from dbwarden.commands.perf import PhaseTimer
     from dbwarden.config import get_database
+    from dbwarden.plugin import validate_migration_hooks
 
     config = get_database(db_name)
     sqlalchemy_url = config.sqlalchemy_url
     actual_db_name = db_name or config.sqlalchemy_url.split("/")[-1].split("?")[0]
+
+    # Section 11, step 6: Validate merged lifecycle hook registry before command runs
+    validate_migration_hooks(db_name)
 
     logger = get_logger(
         verbose=verbose, db_name=actual_db_name, db_type=config.database_type
@@ -220,14 +276,29 @@ def migrate_single(
     _signal_handler.install()
 
     try:
-        if with_backup and not sandbox:
-            backup_directory = backup_dir or os.path.join(os.getcwd(), "backups")
-            backup_path = create_backup(sqlalchemy_url, backup_directory)
-            logger.log_backup_created(backup_path)
-
+        _migration_start_time = time.time()
         migrations_dir = get_migrations_directory(db_name)
 
+        # Section 7.1: Steps 1-2 run BEFORE lock acquisition (static checks)
+        # Step 1: Validate migration files, checksums, headers, parseability
+        # Step 2: Detect merge conflicts, collisions, superseded, MERGE_PENDING
+        # Section 13.3: Dry-run runs core static artifact and merge checks.
+        from dbwarden.merge.detection import check_dirty_environment
+        if check_dirty_environment(db_name):
+            if dry_run:
+                warning(
+                    f"Environment '{db_name or 'default'}' has unreconciled merge changes. "
+                    "Run 'dbwarden reconcile' first."
+                )
+            else:
+                error(
+                    f"Environment '{db_name or 'default'}' has unreconciled merge changes. "
+                    "Run 'dbwarden reconcile' first, or use --dry-run to preview."
+                )
+                return
+
         if not dry_run:
+            # Step 3: Acquire the target database lock
             with PhaseTimer(logger, "Lock acquisition", perf=perf):
                 create_migrations_table_if_not_exists(db_name)
                 create_lock_table_if_not_exists(db_name)
@@ -270,18 +341,11 @@ def migrate_single(
                     from dbwarden.connection.connection import hold_migration_connection
                     _migration_conn = hold_migration_connection(db_name)
 
-        # R8.2: Check for dirty unreconciled environments
-        if not dry_run:
-            try:
-                from dbwarden.merge.detection import check_dirty_environment
-                if check_dirty_environment(db_name):
-                    error(
-                        f"Environment '{db_name or 'default'}' has unreconciled merge changes. "
-                        "Run 'dbwarden reconcile' first, or use --dry-run to preview."
-                    )
-                    return
-            except Exception as e:
-                logger.debug("Could not check for dirty environment: %s", e)
+            # Section 7.1: Backup after lock acquisition, before DDL
+            if with_backup and not sandbox:
+                backup_directory = backup_dir or os.path.join(os.getcwd(), "backups")
+                backup_path = create_backup(sqlalchemy_url, backup_directory)
+                logger.log_backup_created(backup_path)
 
         applied_versions = set()
         applied_checksums = set()
@@ -335,6 +399,99 @@ def migrate_single(
         if dry_run:
             warning("DRY RUN - No changes applied")
 
+        # Phase 8.1: Preflight checks on exact pending batch (Section 13.3)
+        # Non-mutating policy checks run in dry-run mode; blocking only prevents DDL.
+        # Section 7.1 Step 1: File validation always runs; policy gates are optional.
+        if filepaths_by_version:
+            from dbwarden.config import get_project_config
+
+            project_config = get_project_config()
+
+            # Step 1: Always run file validation (existence, readability, parseability)
+            # Step 5: Policy gates only run when project_config exists
+            if project_config:
+                preflight = run_preflight(
+                    filepaths_by_version,
+                    missing_plan=project_config.get("missing_plan", "warn"),
+                    impact_paths=project_config.get("impact_paths"),
+                    migrations_dir=migrations_dir,
+                    applied_versions=applied_versions,
+                )
+            else:
+                preflight = run_preflight(
+                    filepaths_by_version,
+                    missing_plan="off",
+                    impact_paths=None,
+                    migrations_dir=migrations_dir,
+                    applied_versions=applied_versions,
+                )
+
+            for w in preflight.warnings:
+                warning(w)
+            if preflight.errors:
+                for e in preflight.errors:
+                    error(e)
+            if preflight.abort:
+                if dry_run:
+                    warning("Preflight checks would abort this migration.")
+                else:
+                    error("Migration aborted by preflight checks.")
+                    return
+
+            # Section 7.3: --force acknowledgement for safety warnings
+            # WARNING blocks when pre_migrate_safety="block" unless --force
+            if (
+                project_config
+                and not force
+                and project_config.get("pre_migrate_safety") == "block"
+                and preflight.warnings
+            ):
+                if dry_run:
+                    warning(
+                        "Safety warnings detected (would abort without --force)."
+                    )
+                else:
+                    error(
+                        "Migration aborted: safety warnings detected. "
+                        "Use --force to acknowledge and proceed."
+                    )
+                    return
+
+            if project_config and preflight.impact:
+                for imp in preflight.impact:
+                    refs = imp.get("references", [])
+                    if refs:
+                        warning(
+                            f"{imp['table']}: {len(refs)} references found"
+                        )
+
+        # Build pending migrations list for hooks
+        pending_entries: list[MigrationPlanEntry] = []
+        for version, filepath in filepaths_by_version.items():
+            sql_stmts = parse_upgrade_statements(filepath)
+            pending_entries.append(
+                MigrationPlanEntry(
+                    version=version,
+                    description=Path(filepath).stem,
+                    file_path=Path(filepath),
+                    checksum=calculate_checksum(sql_stmts),
+                    kind="versioned",
+                    statement_count=len(sql_stmts),
+                )
+            )
+
+        # Execute pre_migration_run hooks
+        _run_hooks = _collect_hooks("pre_migration_run", db_name)
+        if _run_hooks:
+            pre_run_ctx = PreMigrationRunContext(
+                database=actual_db_name,
+                command="migrate",
+                dry_run=dry_run,
+                dev=False,
+                pending_migrations=tuple(pending_entries),
+            )
+            execute_veto_hook("pre_migration_run", _run_hooks, pre_run_ctx, command="migrate")
+
         versioned_count = 0
         latest_version = "0"
 
@@ -348,6 +505,26 @@ def migrate_single(
             if checksum in applied_checksums:
                 logger.log_migration_skipped(version, filename, checksum)
                 continue
+
+            # Execute pre_migration hooks
+            _pre_hooks = _collect_hooks("pre_migration", db_name)
+            if _pre_hooks:
+                plan_entry = MigrationPlanEntry(
+                    version=version,
+                    description=Path(filepath).stem,
+                    file_path=Path(filepath),
+                    checksum=checksum,
+                    kind="versioned",
+                    statement_count=len(sql_statements),
+                )
+                pre_ctx = PreMigrationContext(
+                    database=actual_db_name,
+                    command="migrate",
+                    dry_run=dry_run,
+                    dev=False,
+                    migration=plan_entry,
+                )
+                execute_veto_hook("pre_migration", _pre_hooks, pre_ctx, command="migrate")
 
             for sql in sql_statements:
                 logger.log_sql_statement(sql)
@@ -370,6 +547,25 @@ def migrate_single(
             start_time = time.time()
             logger.log_migration_start(version, filename)
 
+            # Section 8: Per-statement progress callback
+            _progress_hooks = _collect_hooks("migration_progress", db_name)
+            _stmt_start_time = start_time
+
+            def _on_progress(stmt_idx: int, total: int) -> None:
+                if _progress_hooks:
+                    progress_ctx = MigrationProgressContext(
+                        database=actual_db_name,
+                        command="migrate",
+                        dry_run=dry_run,
+                        dev=False,
+                        migration=plan_entry,
+                        statement_index=stmt_idx,
+                        total_statements=total,
+                        progress_pct=(stmt_idx / total * 100) if total else 100.0,
+                        elapsed_ms=(time.time() - _stmt_start_time) * 1000,
+                    )
+                    execute_observer_hook("migration_progress", _progress_hooks, progress_ctx)
+
             run_migration(
                 sql_statements=sql_statements,
                 version=version,
@@ -380,6 +576,7 @@ def migrate_single(
                 connection=_migration_conn,
                 namespace="default",
                 fencing_token=_fencing_token,
+                progress_callback=_on_progress,
             )
 
             if not defer_snapshots:
@@ -396,6 +593,20 @@ def migrate_single(
             latest_version = version
             increment_migrations_total(actual_db_name, version, success=True)
             observe_migration_duration(actual_db_name, version, duration)
+
+            # Execute post_migration hooks
+            _post_hooks = _collect_hooks("post_migration", db_name)
+            if _post_hooks:
+                post_ctx = PostMigrationContext(
+                    database=actual_db_name,
+                    command="migrate",
+                    dry_run=dry_run,
+                    dev=False,
+                    migration=plan_entry,
+                    duration_ms=duration * 1000,
+                    statements_executed=len(sql_statements),
+                )
+                execute_observer_hook("post_migration", _post_hooks, post_ctx)
 
             # CH-0: Check for POSSIBLE_CONCURRENT_EXECUTION (Sec 7.4)
             # After completion, re-read the lease; if fencing_token advanced, another
@@ -423,6 +634,51 @@ def migrate_single(
                 f"{len(runs_on_change_filepaths)} runs-on-change "
                 "migrations would be applied."
             )
+            # Section 13.3: Dry-run fires pre_migration_run and pre_migration
+            # for all migration types (versioned, runs_always, runs_on_change).
+            # The hooks already fired for versioned above (490-508).
+            # Fire pre_migration for runs_always in dry-run.
+            for filepath in runs_always_filepaths:
+                sql_statements = parse_upgrade_statements(filepath)
+                plan_entry = MigrationPlanEntry(
+                    version=None,
+                    description=Path(filepath).stem,
+                    file_path=Path(filepath),
+                    checksum="",
+                    kind="runs_always",
+                    statement_count=len(sql_statements),
+                )
+                _pre_hooks = _collect_hooks("pre_migration", db_name)
+                if _pre_hooks:
+                    pre_ctx = PreMigrationContext(
+                        database=actual_db_name,
+                        command="migrate",
+                        dry_run=True,
+                        dev=False,
+                        migration=plan_entry,
+                    )
+                    execute_veto_hook("pre_migration", _pre_hooks, pre_ctx, command="migrate")
+            # Fire pre_migration for runs_on_change in dry-run.
+            for filepath in runs_on_change_filepaths:
+                sql_statements = parse_upgrade_statements(filepath)
+                plan_entry = MigrationPlanEntry(
+                    version=None,
+                    description=Path(filepath).stem,
+                    file_path=Path(filepath),
+                    checksum="",
+                    kind="runs_on_change",
+                    statement_count=len(sql_statements),
+                )
+                _pre_hooks = _collect_hooks("pre_migration", db_name)
+                if _pre_hooks:
+                    pre_ctx = PreMigrationContext(
+                        database=actual_db_name,
+                        command="migrate",
+                        dry_run=True,
+                        dev=False,
+                        migration=plan_entry,
+                    )
+                    execute_veto_hook("pre_migration", _pre_hooks, pre_ctx, command="migrate")
             return
 
         existing_runs_always = get_existing_runs_always_filenames(db_name)
@@ -430,6 +686,26 @@ def migrate_single(
         for filepath in runs_always_filepaths:
             filename = filepath.split("/")[-1]
             sql_statements = parse_upgrade_statements(filepath)
+
+            # Execute pre_migration hooks for runs_always
+            _pre_hooks = _collect_hooks("pre_migration", db_name)
+            if _pre_hooks:
+                plan_entry = MigrationPlanEntry(
+                    version=None,
+                    description=Path(filepath).stem,
+                    file_path=Path(filepath),
+                    checksum="",
+                    kind="runs_always",
+                    statement_count=len(sql_statements),
+                )
+                pre_ctx = PreMigrationContext(
+                    database=actual_db_name,
+                    command="migrate",
+                    dry_run=dry_run,
+                    dev=False,
+                    migration=plan_entry,
+                )
+                execute_veto_hook("pre_migration", _pre_hooks, pre_ctx, command="migrate")
 
             start_time = time.time()
             logger.log_migration_start("RA", filename)
@@ -460,9 +736,43 @@ def migrate_single(
             duration = time.time() - start_time
             logger.log_migration_end("RA", filename, duration)
 
+            # Execute post_migration hooks for runs_always
+            _post_hooks = _collect_hooks("post_migration", db_name)
+            if _post_hooks:
+                post_ctx = PostMigrationContext(
+                    database=actual_db_name,
+                    command="migrate",
+                    dry_run=dry_run,
+                    dev=False,
+                    migration=plan_entry,
+                    duration_ms=duration * 1000,
+                    statements_executed=len(sql_statements),
+                )
+                execute_observer_hook("post_migration", _post_hooks, post_ctx)
+
         for filepath in runs_on_change_filepaths:
             filename = filepath.split("/")[-1]
             sql_statements = parse_upgrade_statements(filepath)
+
+            # Execute pre_migration hooks for runs_on_change
+            _pre_hooks = _collect_hooks("pre_migration", db_name)
+            if _pre_hooks:
+                plan_entry = MigrationPlanEntry(
+                    version=None,
+                    description=Path(filepath).stem,
+                    file_path=Path(filepath),
+                    checksum="",
+                    kind="runs_on_change",
+                    statement_count=len(sql_statements),
+                )
+                pre_ctx = PreMigrationContext(
+                    database=actual_db_name,
+                    command="migrate",
+                    dry_run=dry_run,
+                    dev=False,
+                    migration=plan_entry,
+                )
+                execute_veto_hook("pre_migration", _pre_hooks, pre_ctx, command="migrate")
 
             start_time = time.time()
             logger.log_migration_start("ROC", filename)
@@ -478,6 +788,20 @@ def migrate_single(
 
             duration = time.time() - start_time
             logger.log_migration_end("ROC", filename, duration)
+
+            # Execute post_migration hooks for runs_on_change
+            _post_hooks = _collect_hooks("post_migration", db_name)
+            if _post_hooks:
+                post_ctx = PostMigrationContext(
+                    database=actual_db_name,
+                    command="migrate",
+                    dry_run=dry_run,
+                    dev=False,
+                    migration=plan_entry,
+                    duration_ms=duration * 1000,
+                    statements_executed=len(sql_statements),
+                )
+                execute_observer_hook("post_migration", _post_hooks, post_ctx)
 
         # After migrations complete, auto-apply pending seeds if configured or --apply-seeds
         if config.auto_apply_seeds or apply_seeds:
@@ -501,7 +825,35 @@ def migrate_single(
             with PhaseTimer(logger, "Model state write", perf=perf):
                 _write_model_state(config=config, db_name=db_name)
 
+        # Execute post_migration_run hooks (Section 13.3: not in dry-run)
+        if not dry_run:
+            _post_run_hooks = _collect_hooks("post_migration_run", db_name)
+            if _post_run_hooks:
+                post_run_ctx = PostMigrationRunContext(
+                    database=actual_db_name,
+                    command="migrate",
+                    dry_run=dry_run,
+                    dev=False,
+                    applied_migrations=tuple(versioned_count > 0 and [latest_version] or []),
+                    total_duration_ms=(time.time() - _migration_start_time) * 1000 if '_migration_start_time' in dir() else 0,
+                )
+                execute_observer_hook("post_migration_run", _post_run_hooks, post_run_ctx)
+
     except Exception as exc:
+        # Execute on_migration_failure hooks
+        _failure_hooks = _collect_hooks("on_migration_failure", db_name)
+        if _failure_hooks:
+            failure_ctx = MigrationFailureContext(
+                database=actual_db_name,
+                command="migrate",
+                dry_run=dry_run,
+                dev=False,
+                migration=None,
+                error=exc,
+                statements_executed_before_failure=0,
+            )
+            exc = execute_failure_hook("on_migration_failure", _failure_hooks, failure_ctx, exc)
+
         # Connection loss handling (Sec 8.3.2): Map connection-loss errors
         # to immediate abort. A reconnected worker holds no lock and could
         # mutate unsafely, so we must NOT reconnect.
@@ -577,6 +929,7 @@ def migrate_cmd(
     apply_seeds: bool = False,
     perf: bool = False,
     defer_snapshots: bool = False,
+    force: bool = False,
 ) -> None:
     """
     Apply pending migrations to the database.
@@ -594,6 +947,7 @@ def migrate_cmd(
         sandbox: Apply migrations in a temporary sandbox database instead.
         apply_seeds: Apply pending seeds after migrations (overrides config).
         perf: Emit per-statement timing breakdowns for executed SQL.
+        force: Acknowledge warning-level safety issues (Section 7.3).
     """
     if count is not None and to_version is not None:
         raise ValueError("Cannot specify both 'count' and 'to-version'.")
@@ -644,6 +998,7 @@ def migrate_cmd(
                     apply_seeds=apply_seeds,
                     perf=perf,
                     defer_snapshots=defer_snapshots,
+                    force=force,
                 )
                 result.succeeded.append(db_name)
             except Exception as e:
@@ -690,6 +1045,7 @@ def migrate_cmd(
             apply_seeds=apply_seeds,
             perf=perf,
             defer_snapshots=defer_snapshots,
+            force=force,
         )
 
 
