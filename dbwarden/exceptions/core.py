@@ -102,3 +102,15 @@ class ImmutableChangeError(DBWardenError):
     """
 
     pass
+
+
+class HookValidationError(DBWardenConfigError):
+    """A migration hook has an invalid name, value, or signature."""
+
+    pass
+
+
+class HookVetoError(DBWardenError):
+    """A pre-run or pre-migration lifecycle hook prevented execution."""
+
+    pass
