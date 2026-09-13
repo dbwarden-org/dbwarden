@@ -7,6 +7,7 @@ from typing import Any, Literal
 from dbwarden.plugin import PLUGIN_CONFIG_KEY_OWNERS
 
 DatabaseType = Literal["sqlite", "postgresql", "mysql", "mariadb", "clickhouse"]
+ProjectPolicy = Literal["off", "warn", "block"]
 DEFAULT_MIGRATION_TABLE = "_dbwarden_migrations"
 DEFAULT_SEEDS_TABLE = "_dbwarden_seeds"
 
@@ -45,6 +46,15 @@ class DatabaseConfig:
     dev_database_type: DatabaseType | None = None
     overlap_models: bool = False
     pg_migration_lock_timeout: int | None = None
+    # Per-database migration lifecycle hooks
+    migration_hooks: dict[str, list] | None = None
+    # Section 5: Database-scoped settings (recovery, pooling, connection tuning)
+    recovery_policy: str = "halt"
+    assume_session_pooling: bool = False
+    tcp_keepalive: bool = True
+    sqlite_busy_timeout: int | None = None
+    per_statement_history: bool = False
+    rename_policy: str = "prompt"
     # Backend object keys contributed by plugins (pg_roles, ch_grants, and so on).
     plugin_config: dict[str, Any] = field(default_factory=dict)
 
@@ -62,6 +72,14 @@ class DatabaseConfig:
         if self.sqlalchemy_url_async:
             return self.sqlalchemy_url_async
         return ""
+
+
+@dataclass
+class ProjectConfig:
+    pre_migrate_safety: ProjectPolicy = "off"
+    pre_migrate_impact: ProjectPolicy = "off"
+    missing_plan: ProjectPolicy = "off"
+    impact_paths: list[str] = field(default_factory=lambda: ["."])
 
 
 @dataclass
