@@ -162,6 +162,7 @@ def run_migration(
     connection: Any | None = None,
     namespace: str = "default",
     fencing_token: int = 0,
+    progress_callback: Any | None = None,
 ) -> None:
     """Execute SQL statements and record the migration.
 
@@ -182,6 +183,8 @@ def run_migration(
             The caller is responsible for the connection lifecycle.
         namespace: Lock namespace for ClickHouse fencing (default: "default").
         fencing_token: Current fencing token for ClickHouse per-statement checks.
+        progress_callback: Optional callable called after each statement with
+            (statement_index, total_statements). Section 8.
     """
     from dbwarden.logging import get_logger
 
@@ -196,6 +199,8 @@ def run_migration(
         else:
             txn_statements.append(stmt)
 
+    total_statements = len(sql_statements)
+
     def _run_on_connection(conn, is_external_conn=False):
         """Run migration statements on the given connection.
 
@@ -207,6 +212,8 @@ def run_migration(
         is_mysql = conn.dialect.name in ("mysql", "mariadb")
         is_clickhouse = conn.dialect.name in ("clickhouse", "clickhousedb")
         _set_lock_timeout(conn, db_name)
+
+        stmt_index = 0
 
         # Connection loss handling (Sec 8.3.2): Map connection-loss errors
         # to immediate abort. A reconnected worker holds no lock and could
@@ -227,6 +234,9 @@ def run_migration(
                                 )
 
                         _exec_statement(conn, statement, logger=logger, perf=perf)
+                        stmt_index += 1
+                        if progress_callback is not None:
+                            progress_callback(stmt_index, total_statements)
 
                 except Exception:
                     raise
@@ -234,6 +244,9 @@ def run_migration(
                 # Complete autocommit work before recording migration state.
                 for stmt in autocommit_statements:
                     _exec_autocommit_timed(stmt, db_name, logger=logger, perf=perf)
+                    stmt_index += 1
+                    if progress_callback is not None:
+                        progress_callback(stmt_index, total_statements)
                 if not autocommit_statements and migration_operation == "upgrade":
                     from dbwarden.engine.checksum import calculate_checksum
                     from dbwarden.engine.file_parser import get_description_from_filename
@@ -326,6 +339,9 @@ def run_migration(
             try:
                 for statement in txn_statements:
                     _exec_statement(conn, statement, logger=logger, perf=perf)
+                    stmt_index += 1
+                    if progress_callback is not None:
+                        progress_callback(stmt_index, total_statements)
 
                 if not autocommit_statements and migration_operation == "upgrade":
                     from dbwarden.engine.checksum import calculate_checksum
