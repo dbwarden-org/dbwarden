@@ -6,6 +6,7 @@ from dbwarden.exceptions import DirectoryNotFoundError
 from pathlib import Path
 import re
 import os
+from dataclasses import dataclass, field
 from typing import Optional
 
 
@@ -274,6 +275,125 @@ def get_all_migrations_with_metadata(
     return migrations
 
 
+@dataclass
+class DependencyError:
+    """A dependency validation error."""
+
+    version: str
+    error_type: str  # "missing_target", "circular", "unmet_applied_dep", "superseded_dep"
+    message: str
+    missing: list[str] = field(default_factory=list)
+
+
+def validate_dependencies(
+    directory: str,
+    applied_versions: set[str],
+) -> list[DependencyError]:
+    """Validate migration dependency integrity.
+
+    Checks that:
+    1. Every depends_on target exists as a migration file
+    2. No circular dependencies exist
+    3. Applied migrations have their deps also applied
+    4. Dependencies on superseded migrations are flagged
+
+    Args:
+        directory: Path to migrations directory.
+        applied_versions: Set of already applied migration versions.
+
+    Returns:
+        List of DependencyError if any issues found, empty list if valid.
+    """
+    from dbwarden.engine.file_parser import parse_migration_header
+    from dbwarden.merge.marker import is_superseded
+
+    errors: list[DependencyError] = []
+    all_migrations = get_all_migrations_with_metadata(directory)
+    all_versions = {m[0] for m in all_migrations}
+    filepath_by_version = {m[0]: m[1] for m in all_migrations}
+
+    # Check 1: Every depends_on target exists as a migration file
+    for version, filepath, deps, seed in all_migrations:
+        for dep in deps:
+            if dep not in all_versions:
+                errors.append(
+                    DependencyError(
+                        version=version,
+                        error_type="missing_target",
+                        message=f"Migration {version} depends on {dep}, but no migration file exists for version {dep}",
+                        missing=[dep],
+                    )
+                )
+
+    # Check 2: Dependencies on superseded migrations
+    for version, filepath, deps, seed in all_migrations:
+        for dep in deps:
+            if dep in all_versions:
+                dep_filepath = filepath_by_version.get(dep)
+                if dep_filepath and is_superseded(Path(dep_filepath)):
+                    errors.append(
+                        DependencyError(
+                            version=version,
+                            error_type="superseded_dep",
+                            message=f"Migration {version} depends on {dep}, which is superseded",
+                            missing=[dep],
+                        )
+                    )
+
+    # Check 3: Applied migrations have their deps also applied
+    for version, filepath, deps, seed in all_migrations:
+        if version in applied_versions:
+            for dep in deps:
+                if dep not in applied_versions:
+                    errors.append(
+                        DependencyError(
+                            version=version,
+                            error_type="unmet_applied_dep",
+                            message=(
+                                f"Migration {version} is applied but its dependency {dep} "
+                                f"is not applied. This indicates an inconsistent migration history."
+                            ),
+                            missing=[dep],
+                        )
+                    )
+
+    # Check 4: Circular dependencies (quick cycle detection)
+    # Build adjacency list for pending migrations only
+    pending = {m[0]: m[2] for m in all_migrations if m[0] not in applied_versions}
+
+    def _detect_cycle(start: str, visited: set[str], stack: set[str]) -> list[str] | None:
+        """DFS cycle detection. Returns cycle path if found."""
+        visited.add(start)
+        stack.add(start)
+        for dep in pending.get(start, []):
+            if dep not in pending:
+                continue  # dep is applied or doesn't exist (already caught above)
+            if dep not in visited:
+                cycle = _detect_cycle(dep, visited, stack)
+                if cycle:
+                    return cycle
+            elif dep in stack:
+                return [dep, start]
+        stack.discard(start)
+        return None
+
+    visited: set[str] = set()
+    for version in pending:
+        if version not in visited:
+            cycle = _detect_cycle(version, visited, set())
+            if cycle:
+                errors.append(
+                    DependencyError(
+                        version=cycle[-1],
+                        error_type="circular",
+                        message=f"Circular dependency detected: {' -> '.join(cycle)}",
+                        missing=cycle,
+                    )
+                )
+
+    return errors
+
+
 def resolve_migration_order(
     directory: str, applied_versions: set[str]
 ) -> list[tuple[str, str, list[str], bool]]:
@@ -312,10 +432,30 @@ def resolve_migration_order(
                 remaining.remove(migration)
 
     if remaining:
+        # Build detailed error info
+        all_versions = {m[0] for m in all_migrations}
         unresolved_versions = [m[0] for m in remaining]
+        details = []
+        for m in remaining:
+            version, filepath, deps, seed = m
+            unmet = [
+                d
+                for d in deps
+                if d not in applied_versions
+                and d not in [mm[0] for mm in resolved]
+            ]
+            missing_targets = [d for d in unmet if d not in all_versions]
+            applied_deps = [d for d in deps if d in applied_versions and d not in unmet]
+            details.append(
+                f"  {version}: unmet={unmet}"
+                + (f", missing_files={missing_targets}" if missing_targets else "")
+                + (f", already_applied={applied_deps}" if applied_deps else "")
+            )
+
         raise ValueError(
-            f"Cannot resolve migration dependencies. Unresolved migrations: {unresolved_versions}. "
-            f"Missing dependencies for: {[m[0] for m in remaining if not all(d in applied_versions or d in [mm[0] for mm in resolved] for d in m[2])]}"
+            f"Cannot resolve migration dependencies.\n"
+            f"Unresolved migrations: {unresolved_versions}\n"
+            + "\n".join(details)
         )
 
     return resolved
