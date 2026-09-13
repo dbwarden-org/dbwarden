@@ -14,7 +14,11 @@ import importlib
 import importlib.metadata
 import importlib.util
 import inspect
-import tomllib
+
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
 from pathlib import Path
 from typing import Any, Callable
 
