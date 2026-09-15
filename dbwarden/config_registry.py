@@ -12,6 +12,7 @@ from dbwarden.config_schema import (
     structure_project_config,
 )
 from dbwarden.exceptions import ConfigurationError
+from dbwarden.merge.environments import EnvironmentConfig
 
 if TYPE_CHECKING:
     from dbwarden.db_handle import DatabaseHandle
@@ -98,6 +99,7 @@ def database_config(
     clickhouse_lock_ttl: int | None = None,
     lock_namespace: str | None = None,
     migration_hooks: dict[str, list[Callable[..., Any]]] | None = None,
+    environments: list[Any] | None = None,
     **plugin_config: Any,
 ) -> DatabaseHandle:
     """Declare a database.
@@ -131,6 +133,7 @@ def database_config(
         clickhouse_lock_ttl=clickhouse_lock_ttl,
         lock_namespace=lock_namespace,
         migration_hooks=migration_hooks,
+        environments=environments,
     )
     return _register_config_values(values, plugin_config)
 
@@ -206,6 +209,7 @@ _DECLARATIVE_FIELDS = {
     "auto_apply_seeds", "seed_table", "pg_schema", "pg_migration_lock_timeout",
     "ch_cluster", "ch_replicated_database",
     "clickhouse_lock_ttl", "lock_namespace", "migration_hooks",
+    "environments",
 }
 _DECLARATIVE_DEFAULTS = {
     "database_type": "sqlite",
@@ -230,8 +234,9 @@ _DECLARATIVE_DEFAULTS = {
     "clickhouse_lock_ttl": None,
     "lock_namespace": None,
     "migration_hooks": None,
+    "environments": None,
 }
-_MUTABLE_FIELDS = {"model_paths", "model_tables", "migration_hooks"}
+_MUTABLE_FIELDS = {"model_paths", "model_tables", "migration_hooks", "environments"}
 
 
 def _plugin_config_keys() -> set[str]:

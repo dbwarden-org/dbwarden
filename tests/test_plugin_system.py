@@ -5,8 +5,9 @@ import json
 import sys
 import urllib.error
 from contextlib import contextmanager
-from types import SimpleNamespace
 from pathlib import Path
+from types import SimpleNamespace
+from typing import ClassVar
 
 import pytest
 from typer.testing import CliRunner
@@ -33,20 +34,20 @@ from dbwarden.plugin import (
     PluginLockEntry,
     PluginRegistrar,
     ProvenanceResult,
+    _resolve_target_version,
     add_plugin,
-    verified_allows,
     consent_allows,
-    load_plugins,
     load_plugin_lock,
+    load_plugins,
     plugin_reports,
     record_consent,
     remove_plugin,
     remove_plugin_lock_entry,
     revoke_consent,
+    verified_allows,
     verify_official_provenance,
     write_plugin_lock_entry,
 )
-from dbwarden.plugin import _resolve_target_version
 
 
 class FakeDist:
@@ -346,7 +347,7 @@ def test_plugin_object_handler_participates_in_registry_run() -> None:
             ]
 
     class Config:
-        pg_extensions = ["btree_gist"]
+        pg_extensions: ClassVar[list[str]] = ["btree_gist"]
 
     PluginRegistrar("plugin-a").register_object_handler(Handler())
 
@@ -1142,7 +1143,7 @@ def test_fastapi_session_factory_hook_works() -> None:
 
 
 def test_fastapi_session_factory_raises_without_hook() -> None:
-    from dbwarden.plugin import HookRegistry, HookNotRegisteredError
+    from dbwarden.plugin import HookNotRegisteredError, HookRegistry
     HookRegistry.clear()
 
     with pytest.raises(HookNotRegisteredError):
@@ -1542,7 +1543,11 @@ def test_plugin_declaring_no_api_version_loads() -> None:
 
 
 def test_plugin_declaring_the_current_api_version_loads(monkeypatch) -> None:
-    from dbwarden.plugin import PLUGIN_API_ATTR, PLUGIN_API_VERSION, check_api_compatibility
+    from dbwarden.plugin import (
+        PLUGIN_API_ATTR,
+        PLUGIN_API_VERSION,
+        check_api_compatibility,
+    )
 
     def setup(registrar):
         pass
@@ -1577,7 +1582,11 @@ def test_plugin_declaring_a_different_api_version_is_refused(monkeypatch) -> Non
 
 def test_incompatible_plugin_is_reported_as_incompatible_not_failed(monkeypatch) -> None:
     """The state distinguishes a wrong pairing from a broken plugin."""
-    from dbwarden.plugin import PLUGIN_API_ATTR, PLUGIN_API_VERSION, _load_plugin_entry_point
+    from dbwarden.plugin import (
+        PLUGIN_API_ATTR,
+        PLUGIN_API_VERSION,
+        _load_plugin_entry_point,
+    )
 
     registered: list[str] = []
 
@@ -1680,9 +1689,8 @@ def test_override_replaces_core_handler_through_the_offline_diff() -> None:
 
 def test_plugin_handler_for_a_new_type_does_not_displace_core() -> None:
     """A type core does not own is an addition, and core keeps its own handlers."""
-    from dbwarden.engine.snapshot import diff_models_against_snapshot
-
     from dbwarden.engine.core import Op
+    from dbwarden.engine.snapshot import diff_models_against_snapshot
 
     class NewType:
         object_type = "widget"

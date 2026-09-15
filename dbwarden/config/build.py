@@ -165,6 +165,7 @@ def _finalize_entries(
             overlap_models=entry.overlap_models,
             pg_migration_lock_timeout=entry.pg_migration_lock_timeout,
             migration_hooks=dict(entry.migration_hooks) if entry.migration_hooks else None,
+            environments=entry.environments,
             recovery_policy=entry.recovery_policy,
             assume_session_pooling=entry.assume_session_pooling,
             tcp_keepalive=entry.tcp_keepalive,

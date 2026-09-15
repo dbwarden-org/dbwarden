@@ -49,7 +49,7 @@ def reconcile_cmd(
 
     # Get environment config
     envs = load_environments(database)
-    env_config = envs.get(environment)
+    env_config = next((e for e in envs if e.name == environment), None)
     if env_config is None:
         error(f"Environment '{environment}' not found in configuration.")
         return
@@ -106,7 +106,7 @@ def _snapshot_environment(environment: str, database: str | None) -> Optional[di
     import os
 
     envs = load_environments(database)
-    env_config = envs.get(environment)
+    env_config = next((e for e in envs if e.name == environment), None)
     if env_config is None or not env_config.url_env:
         return None
 

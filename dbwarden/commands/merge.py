@@ -617,7 +617,7 @@ def _probe_persistent_environments(database: str | None) -> dict[str, str]:
             # Get the environment's database URL from the registry
             from dbwarden.merge.environments import load_environments
             envs = load_environments(database)
-            env_config = envs.get(env)
+            env_config = next((e for e in envs if e.name == env), None)
 
             if env_config is None or not env_config.url_env:
                 results[env] = "unknown"

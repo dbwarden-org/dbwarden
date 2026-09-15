@@ -276,14 +276,14 @@ def _show_all_environments_status(database: str | None = None) -> None:
 
     if json_mode():
         payloads = []
-        for env_name, env_config in envs.items():
+        for env_config in envs:
             payload = {
-                "environment": env_name,
+                "environment": env_config.name,
                 "persistent": env_config.persistent,
                 "status": "registered",
             }
             # Check for merge records to determine reconciliation status
-            reconciliation_status = _check_reconciliation_status(env_name)
+            reconciliation_status = _check_reconciliation_status(env_config.name)
             if reconciliation_status:
                 payload["reconciliation_status"] = reconciliation_status
             payloads.append(payload)
@@ -291,11 +291,11 @@ def _show_all_environments_status(database: str | None = None) -> None:
         return
 
     section("Environment Status")
-    for env_name, env_config in envs.items():
+    for env_config in envs:
         persistent_str = "persistent" if env_config.persistent else "disposable"
-        reconciliation_status = _check_reconciliation_status(env_name)
+        reconciliation_status = _check_reconciliation_status(env_config.name)
         status_str = f" ({reconciliation_status})" if reconciliation_status else ""
-        info(f"  {env_name}: {persistent_str}{status_str}")
+        info(f"  {env_config.name}: {persistent_str}{status_str}")
 
     info("")
     info("To check database status for an environment, set the URL environment variable")

@@ -1,6 +1,6 @@
 from importlib.metadata import version
 
-from dbwarden.config_registry import DbwardenConfig, DbwardenDatabase, database_config
+from dbwarden.config_registry import EnvironmentConfig, DbwardenConfig, DbwardenDatabase, database_config
 from dbwarden.databases.clickhouse import ChEngineSpec, CHTableMeta
 from dbwarden.databases.mysql import MyColumnMeta, MyTableMeta
 from dbwarden.databases.pgsql import PGViewMeta
@@ -13,6 +13,7 @@ __version__ = version("dbwarden")
 __all__ = [
     "__version__",
     "database_config",
+    "EnvironmentConfig",
     "DbwardenConfig",
     "DbwardenDatabase",
     "ChEngineSpec",

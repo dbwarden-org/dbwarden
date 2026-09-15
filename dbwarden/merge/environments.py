@@ -7,7 +7,6 @@ disposable environments can be reset.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 from dbwarden.logging import get_component_logger
 
@@ -28,37 +27,45 @@ class EnvironmentConfig:
     persistent: bool
 
 
-def load_environments(db_name: str | None = None) -> dict[str, EnvironmentConfig]:
+def load_environments(db_name: str | None = None) -> list[EnvironmentConfig]:
     """Load environment configuration for a database.
 
     Args:
         db_name: Database name. If None, uses default.
 
     Returns:
-        Dict of environment name -> EnvironmentConfig.
+        List of EnvironmentConfig objects.
     """
-    from dbwarden.config import get_database
+    from dbwarden.config_registry import registered_entries
 
     try:
-        config = get_database(db_name)
-        raw_envs = getattr(config, "environments", {}) or {}
+        entries = registered_entries()
+        if db_name is not None:
+            entries = [e for e in entries if e.database_name == db_name]
+        else:
+            entries = [e for e in entries if e.default]
 
-        environments = {}
-        for name, env_config in raw_envs.items():
-            if isinstance(env_config, dict):
-                environments[name] = EnvironmentConfig(
-                    name=name,
-                    url_env=env_config.get("url_env", ""),
-                    persistent=env_config.get("persistent", False),
-                )
-            elif isinstance(env_config, EnvironmentConfig):
-                environments[name] = env_config
+        if not entries:
+            return []
+
+        raw_envs = getattr(entries[0], "environments", None) or []
+
+        environments: list[EnvironmentConfig] = []
+        for env in raw_envs:
+            if isinstance(env, EnvironmentConfig):
+                environments.append(env)
+            elif isinstance(env, dict):
+                environments.append(EnvironmentConfig(
+                    name=env.get("name", ""),
+                    url_env=env.get("url_env", ""),
+                    persistent=env.get("persistent", False),
+                ))
 
         return environments
 
     except Exception as e:
         logger.debug("Could not load environments for %s: %s", db_name, e)
-        return {}
+        return []
 
 
 def is_persistent(environment: str, db_name: str | None = None) -> bool:
@@ -72,8 +79,7 @@ def is_persistent(environment: str, db_name: str | None = None) -> bool:
         True if the environment is persistent, False otherwise.
     """
     envs = load_environments(db_name)
-    env_config = envs.get(environment)
-    return env_config is not None and env_config.persistent
+    return any(e.name == environment and e.persistent for e in envs)
 
 
 def get_persistent_environments(db_name: str | None = None) -> list[str]:
@@ -86,7 +92,7 @@ def get_persistent_environments(db_name: str | None = None) -> list[str]:
         List of persistent environment names.
     """
     envs = load_environments(db_name)
-    return [name for name, config in envs.items() if config.persistent]
+    return [e.name for e in envs if e.persistent]
 
 
 def get_disposable_environments(db_name: str | None = None) -> list[str]:
@@ -99,4 +105,4 @@ def get_disposable_environments(db_name: str | None = None) -> list[str]:
         List of disposable environment names.
     """
     envs = load_environments(db_name)
-    return [name for name, config in envs.items() if not config.persistent]
+    return [e.name for e in envs if not e.persistent]

@@ -134,6 +134,7 @@ class DatabaseEntry:
             raise ValueError(
                 "At least one of database_url_sync or database_url_async must be provided."
             )
+
     secure_values: bool = False
     skip_if_missing: bool = False
     default: bool = False
@@ -168,6 +169,8 @@ class DatabaseEntry:
     rename_policy: str = "prompt"
     # Per-database migration lifecycle hooks
     migration_hooks: dict[str, list] | None = None
+    # Environment registry for merge handling (persistent vs disposable)
+    environments: list[Any] | None = None
     # Backend object keys contributed by plugins (pg_roles, ch_grants, and so on).
     # Kept as a dict so core does not have to know each plugin's key list.
     plugin_config: dict[str, Any] = field(factory=dict)

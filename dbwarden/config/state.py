@@ -48,6 +48,8 @@ class DatabaseConfig:
     pg_migration_lock_timeout: int | None = None
     # Per-database migration lifecycle hooks
     migration_hooks: dict[str, list] | None = None
+    # Environment registry for merge handling (persistent vs disposable)
+    environments: list[Any] | None = None
     # Section 5: Database-scoped settings (recovery, pooling, connection tuning)
     recovery_policy: str = "halt"
     assume_session_pooling: bool = False
