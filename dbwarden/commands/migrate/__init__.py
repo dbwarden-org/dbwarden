@@ -6,6 +6,7 @@ import sys
 import time
 import uuid
 from pathlib import Path
+from typing import Any
 
 from dbwarden.commands.backup import create_backup
 from dbwarden.commands.migrate.state import (
@@ -186,6 +187,346 @@ def set_baseline_migration(
             applied.append(v)
 
     return applied
+
+
+def _run_versioned_migrations(
+    filepaths_by_version: dict[str, str],
+    db_name: str | None,
+    actual_db_name: str,
+    logger: Any,
+    dry_run: bool,
+    perf: bool,
+    migration_conn: Any,
+    fencing_token: int,
+    heartbeat: Any,
+    applied_checksums: set[str],
+    defer_snapshots: bool,
+    batch_snapshots: int | None,
+    config: Any,
+) -> tuple[int, str]:
+    from dbwarden.engine.checksum import calculate_checksum
+    from dbwarden.commands.perf import PhaseTimer
+
+    versioned_count = 0
+    latest_version = "0"
+
+    for version, filepath in filepaths_by_version.items():
+        filename = filepath.split("/")[-1]
+        sql_statements = parse_upgrade_statements(filepath)
+        checksum = calculate_checksum(sql_statements)
+
+        if checksum in applied_checksums:
+            logger.log_migration_skipped(version, filename, checksum)
+            continue
+
+        plan_entry = MigrationPlanEntry(
+            version=version,
+            description=Path(filepath).stem,
+            file_path=Path(filepath),
+            checksum=checksum,
+            kind="versioned",
+            statement_count=len(sql_statements),
+        )
+
+        _pre_hooks = _collect_hooks("pre_migration", db_name)
+        if _pre_hooks:
+            pre_ctx = PreMigrationContext(
+                database=actual_db_name,
+                command="migrate",
+                dry_run=dry_run,
+                dev=False,
+                migration=plan_entry,
+            )
+            execute_veto_hook("pre_migration", _pre_hooks, pre_ctx, command="migrate")
+
+        for sql in sql_statements:
+            logger.log_sql_statement(sql)
+            logger.log_sql_trace(sql)
+
+        if dry_run:
+            warning(f"Would apply version {version}: {filename}")
+            for statement in sql_statements:
+                render_sql(statement)
+            continue
+
+        if heartbeat is not None and heartbeat.is_fatal:
+            raise LockError(
+                "Heartbeat fatal: lease may have been lost on fallback engine. "
+                "Aborting migration to prevent concurrent mutation."
+            )
+
+        start_time = time.time()
+        logger.log_migration_start(version, filename)
+
+        _progress_hooks = _collect_hooks("migration_progress", db_name)
+        _stmt_start_time = start_time
+
+        def _on_progress(
+            stmt_idx: int, total: int,
+            _pe: MigrationPlanEntry = plan_entry,
+            _ph: list = _progress_hooks,
+            _t: float = _stmt_start_time,
+        ) -> None:
+            if _ph:
+                progress_ctx = MigrationProgressContext(
+                    database=actual_db_name,
+                    command="migrate",
+                    dry_run=dry_run,
+                    dev=False,
+                    migration=_pe,
+                    statement_index=stmt_idx,
+                    total_statements=total,
+                    progress_pct=(stmt_idx / total * 100) if total else 100.0,
+                    elapsed_ms=(time.time() - _t) * 1000,
+                )
+                execute_observer_hook("migration_progress", _ph, progress_ctx)
+
+        run_migration(
+            sql_statements=sql_statements,
+            version=version,
+            migration_operation="upgrade",
+            filename=filename,
+            db_name=db_name,
+            perf=perf,
+            connection=migration_conn,
+            namespace="default",
+            fencing_token=fencing_token,
+            progress_callback=_on_progress,
+        )
+
+        if not defer_snapshots:
+            with PhaseTimer(logger, "Snapshot write", perf=perf):
+                _write_migration_snapshot(
+                    db_name=db_name,
+                    migration_id=Path(filename).stem,
+                )
+
+        duration = time.time() - start_time
+        logger.log_migration_end(version, filename, duration)
+        versioned_count += 1
+        applied_checksums.add(checksum)
+        latest_version = version
+        increment_migrations_total(actual_db_name, version, success=True)
+        observe_migration_duration(actual_db_name, version, duration)
+
+        _post_hooks = _collect_hooks("post_migration", db_name)
+        if _post_hooks:
+            post_ctx = PostMigrationContext(
+                database=actual_db_name,
+                command="migrate",
+                dry_run=dry_run,
+                dev=False,
+                migration=plan_entry,
+                duration_ms=duration * 1000,
+                statements_executed=len(sql_statements),
+            )
+            execute_observer_hook("post_migration", _post_hooks, post_ctx)
+
+        if config.database_type == "clickhouse" and fencing_token > 0:
+            try:
+                from dbwarden.lock import get_lock_status
+                current_status = get_lock_status(db_name)
+                if current_status:
+                    current_token = current_status.get("fencing_token", 0)
+                    if current_token > fencing_token:
+                        warning(
+                            f"POSSIBLE_CONCURRENT_EXECUTION: fencing token advanced from "
+                            f"{fencing_token} to {current_token} during migration run. "
+                            f"Another worker may have executed DDL concurrently."
+                        )
+            except Exception as exc:
+                logger.debug("Could not check fencing token after migration: %s", exc)
+
+    return versioned_count, latest_version
+
+
+def _fire_dry_run_hooks(
+    runs_always_filepaths: list[str],
+    runs_on_change_filepaths: list[str],
+    db_name: str | None,
+    actual_db_name: str,
+) -> None:
+    for filepath in runs_always_filepaths:
+        sql_statements = parse_upgrade_statements(filepath)
+        plan_entry = MigrationPlanEntry(
+            version=None,
+            description=Path(filepath).stem,
+            file_path=Path(filepath),
+            checksum="",
+            kind="runs_always",
+            statement_count=len(sql_statements),
+        )
+        _pre_hooks = _collect_hooks("pre_migration", db_name)
+        if _pre_hooks:
+            pre_ctx = PreMigrationContext(
+                database=actual_db_name,
+                command="migrate",
+                dry_run=True,
+                dev=False,
+                migration=plan_entry,
+            )
+            execute_veto_hook("pre_migration", _pre_hooks, pre_ctx, command="migrate")
+    for filepath in runs_on_change_filepaths:
+        sql_statements = parse_upgrade_statements(filepath)
+        plan_entry = MigrationPlanEntry(
+            version=None,
+            description=Path(filepath).stem,
+            file_path=Path(filepath),
+            checksum="",
+            kind="runs_on_change",
+            statement_count=len(sql_statements),
+        )
+        _pre_hooks = _collect_hooks("pre_migration", db_name)
+        if _pre_hooks:
+            pre_ctx = PreMigrationContext(
+                database=actual_db_name,
+                command="migrate",
+                dry_run=True,
+                dev=False,
+                migration=plan_entry,
+            )
+            execute_veto_hook("pre_migration", _pre_hooks, pre_ctx, command="migrate")
+
+
+def _run_always_migrations(
+    runs_always_filepaths: list[str],
+    db_name: str | None,
+    actual_db_name: str,
+    logger: Any,
+    dry_run: bool,
+    perf: bool,
+    migration_conn: Any,
+    fencing_token: int,
+    existing_runs_always: set[str],
+) -> None:
+    for filepath in runs_always_filepaths:
+        filename = filepath.split("/")[-1]
+        sql_statements = parse_upgrade_statements(filepath)
+
+        plan_entry = MigrationPlanEntry(
+            version=None,
+            description=Path(filepath).stem,
+            file_path=Path(filepath),
+            checksum="",
+            kind="runs_always",
+            statement_count=len(sql_statements),
+        )
+
+        _pre_hooks = _collect_hooks("pre_migration", db_name)
+        if _pre_hooks:
+            pre_ctx = PreMigrationContext(
+                database=actual_db_name,
+                command="migrate",
+                dry_run=dry_run,
+                dev=False,
+                migration=plan_entry,
+            )
+            execute_veto_hook("pre_migration", _pre_hooks, pre_ctx, command="migrate")
+
+        start_time = time.time()
+        logger.log_migration_start("RA", filename)
+
+        if filename in existing_runs_always:
+            run_repeatable_migration(
+                sql_statements=sql_statements,
+                filename=filename,
+                migration_type="runs_always",
+                db_name=db_name,
+                perf=perf,
+                connection=migration_conn,
+            )
+        else:
+            run_migration(
+                sql_statements=sql_statements,
+                version=None,
+                migration_operation="upgrade",
+                filename=filename,
+                migration_type="runs_always",
+                db_name=db_name,
+                perf=perf,
+                connection=migration_conn,
+                namespace="default",
+                fencing_token=fencing_token,
+            )
+
+        duration = time.time() - start_time
+        logger.log_migration_end("RA", filename, duration)
+
+        _post_hooks = _collect_hooks("post_migration", db_name)
+        if _post_hooks:
+            post_ctx = PostMigrationContext(
+                database=actual_db_name,
+                command="migrate",
+                dry_run=dry_run,
+                dev=False,
+                migration=plan_entry,
+                duration_ms=duration * 1000,
+                statements_executed=len(sql_statements),
+            )
+            execute_observer_hook("post_migration", _post_hooks, post_ctx)
+
+
+def _run_on_change_migrations(
+    runs_on_change_filepaths: list[str],
+    db_name: str | None,
+    actual_db_name: str,
+    logger: Any,
+    dry_run: bool,
+    perf: bool,
+    migration_conn: Any,
+    fencing_token: int,
+) -> None:
+    for filepath in runs_on_change_filepaths:
+        filename = filepath.split("/")[-1]
+        sql_statements = parse_upgrade_statements(filepath)
+
+        plan_entry = MigrationPlanEntry(
+            version=None,
+            description=Path(filepath).stem,
+            file_path=Path(filepath),
+            checksum="",
+            kind="runs_on_change",
+            statement_count=len(sql_statements),
+        )
+
+        _pre_hooks = _collect_hooks("pre_migration", db_name)
+        if _pre_hooks:
+            pre_ctx = PreMigrationContext(
+                database=actual_db_name,
+                command="migrate",
+                dry_run=dry_run,
+                dev=False,
+                migration=plan_entry,
+            )
+            execute_veto_hook("pre_migration", _pre_hooks, pre_ctx, command="migrate")
+
+        start_time = time.time()
+        logger.log_migration_start("ROC", filename)
+
+        run_repeatable_migration(
+            sql_statements=sql_statements,
+            filename=filename,
+            migration_type="runs_on_change",
+            db_name=db_name,
+            perf=perf,
+            connection=migration_conn,
+        )
+
+        duration = time.time() - start_time
+        logger.log_migration_end("ROC", filename, duration)
+
+        _post_hooks = _collect_hooks("post_migration", db_name)
+        if _post_hooks:
+            post_ctx = PostMigrationContext(
+                database=actual_db_name,
+                command="migrate",
+                dry_run=dry_run,
+                dev=False,
+                migration=plan_entry,
+                duration_ms=duration * 1000,
+                statements_executed=len(sql_statements),
+            )
+            execute_observer_hook("post_migration", _post_hooks, post_ctx)
 
 
 def migrate_single(
@@ -465,6 +806,8 @@ def migrate_single(
                             f"{imp['table']}: {len(refs)} references found"
                         )
 
+        from dbwarden.engine.checksum import calculate_checksum
+
         # Build pending migrations list for hooks
         pending_entries: list[MigrationPlanEntry] = []
         for version, filepath in filepaths_by_version.items():
@@ -492,139 +835,21 @@ def migrate_single(
             )
             execute_veto_hook("pre_migration_run", _run_hooks, pre_run_ctx, command="migrate")
 
-        versioned_count = 0
-        latest_version = "0"
-
-        from dbwarden.engine.checksum import calculate_checksum
-
-        for version, filepath in filepaths_by_version.items():
-            filename = filepath.split("/")[-1]
-            sql_statements = parse_upgrade_statements(filepath)
-            checksum = calculate_checksum(sql_statements)
-
-            if checksum in applied_checksums:
-                logger.log_migration_skipped(version, filename, checksum)
-                continue
-
-            # Execute pre_migration hooks
-            _pre_hooks = _collect_hooks("pre_migration", db_name)
-            if _pre_hooks:
-                plan_entry = MigrationPlanEntry(
-                    version=version,
-                    description=Path(filepath).stem,
-                    file_path=Path(filepath),
-                    checksum=checksum,
-                    kind="versioned",
-                    statement_count=len(sql_statements),
-                )
-                pre_ctx = PreMigrationContext(
-                    database=actual_db_name,
-                    command="migrate",
-                    dry_run=dry_run,
-                    dev=False,
-                    migration=plan_entry,
-                )
-                execute_veto_hook("pre_migration", _pre_hooks, pre_ctx, command="migrate")
-
-            for sql in sql_statements:
-                logger.log_sql_statement(sql)
-                logger.log_sql_trace(sql)
-
-            if dry_run:
-                warning(f"Would apply version {version}: {filename}")
-                for statement in sql_statements:
-                    render_sql(statement)
-                continue
-
-            # Check heartbeat fatal flag (Sec 8.2): abort on fallback engines
-            # if heartbeat indicates lease loss
-            if _heartbeat is not None and _heartbeat.is_fatal:
-                raise LockError(
-                    "Heartbeat fatal: lease may have been lost on fallback engine. "
-                    "Aborting migration to prevent concurrent mutation."
-                )
-
-            start_time = time.time()
-            logger.log_migration_start(version, filename)
-
-            # Section 8: Per-statement progress callback
-            _progress_hooks = _collect_hooks("migration_progress", db_name)
-            _stmt_start_time = start_time
-
-            def _on_progress(stmt_idx: int, total: int) -> None:
-                if _progress_hooks:
-                    progress_ctx = MigrationProgressContext(
-                        database=actual_db_name,
-                        command="migrate",
-                        dry_run=dry_run,
-                        dev=False,
-                        migration=plan_entry,
-                        statement_index=stmt_idx,
-                        total_statements=total,
-                        progress_pct=(stmt_idx / total * 100) if total else 100.0,
-                        elapsed_ms=(time.time() - _stmt_start_time) * 1000,
-                    )
-                    execute_observer_hook("migration_progress", _progress_hooks, progress_ctx)
-
-            run_migration(
-                sql_statements=sql_statements,
-                version=version,
-                migration_operation="upgrade",
-                filename=filename,
-                db_name=db_name,
-                perf=perf,
-                connection=_migration_conn,
-                namespace="default",
-                fencing_token=_fencing_token,
-                progress_callback=_on_progress,
-            )
-
-            if not defer_snapshots:
-                with PhaseTimer(logger, "Snapshot write", perf=perf):
-                    _write_migration_snapshot(
-                        db_name=db_name,
-                        migration_id=Path(filename).stem,
-                    )
-
-            duration = time.time() - start_time
-            logger.log_migration_end(version, filename, duration)
-            versioned_count += 1
-            applied_checksums.add(checksum)
-            latest_version = version
-            increment_migrations_total(actual_db_name, version, success=True)
-            observe_migration_duration(actual_db_name, version, duration)
-
-            # Execute post_migration hooks
-            _post_hooks = _collect_hooks("post_migration", db_name)
-            if _post_hooks:
-                post_ctx = PostMigrationContext(
-                    database=actual_db_name,
-                    command="migrate",
-                    dry_run=dry_run,
-                    dev=False,
-                    migration=plan_entry,
-                    duration_ms=duration * 1000,
-                    statements_executed=len(sql_statements),
-                )
-                execute_observer_hook("post_migration", _post_hooks, post_ctx)
-
-            # CH-0: Check for POSSIBLE_CONCURRENT_EXECUTION (Sec 7.4)
-            # After completion, re-read the lease; if fencing_token advanced, another
-            # worker may have executed DDL during our run
-            if config.database_type == "clickhouse" and _fencing_token > 0:
-                try:
-                    from dbwarden.lock import get_lock_status
-                    current_status = get_lock_status(db_name)
-                    if current_status:
-                        current_token = current_status.get("fencing_token", 0)
-                        if current_token > _fencing_token:
-                            warning(
-                                f"POSSIBLE_CONCURRENT_EXECUTION: fencing token advanced from "
-                                f"{_fencing_token} to {current_token} during migration run. "
-                                f"Another worker may have executed DDL concurrently."
-                            )
-                except Exception as exc:
-                    logger.debug("Could not check fencing token after migration: %s", exc)
+        versioned_count, latest_version = _run_versioned_migrations(
+            filepaths_by_version=filepaths_by_version,
+            db_name=db_name,
+            actual_db_name=actual_db_name,
+            logger=logger,
+            dry_run=dry_run,
+            perf=perf,
+            migration_conn=_migration_conn,
+            fencing_token=_fencing_token,
+            heartbeat=_heartbeat,
+            applied_checksums=applied_checksums,
+            defer_snapshots=defer_snapshots,
+            batch_snapshots=None,
+            config=config,
+        )
 
         if dry_run:
             info(
@@ -634,174 +859,36 @@ def migrate_single(
                 f"{len(runs_on_change_filepaths)} runs-on-change "
                 "migrations would be applied."
             )
-            # Section 13.3: Dry-run fires pre_migration_run and pre_migration
-            # for all migration types (versioned, runs_always, runs_on_change).
-            # The hooks already fired for versioned above (490-508).
-            # Fire pre_migration for runs_always in dry-run.
-            for filepath in runs_always_filepaths:
-                sql_statements = parse_upgrade_statements(filepath)
-                plan_entry = MigrationPlanEntry(
-                    version=None,
-                    description=Path(filepath).stem,
-                    file_path=Path(filepath),
-                    checksum="",
-                    kind="runs_always",
-                    statement_count=len(sql_statements),
-                )
-                _pre_hooks = _collect_hooks("pre_migration", db_name)
-                if _pre_hooks:
-                    pre_ctx = PreMigrationContext(
-                        database=actual_db_name,
-                        command="migrate",
-                        dry_run=True,
-                        dev=False,
-                        migration=plan_entry,
-                    )
-                    execute_veto_hook("pre_migration", _pre_hooks, pre_ctx, command="migrate")
-            # Fire pre_migration for runs_on_change in dry-run.
-            for filepath in runs_on_change_filepaths:
-                sql_statements = parse_upgrade_statements(filepath)
-                plan_entry = MigrationPlanEntry(
-                    version=None,
-                    description=Path(filepath).stem,
-                    file_path=Path(filepath),
-                    checksum="",
-                    kind="runs_on_change",
-                    statement_count=len(sql_statements),
-                )
-                _pre_hooks = _collect_hooks("pre_migration", db_name)
-                if _pre_hooks:
-                    pre_ctx = PreMigrationContext(
-                        database=actual_db_name,
-                        command="migrate",
-                        dry_run=True,
-                        dev=False,
-                        migration=plan_entry,
-                    )
-                    execute_veto_hook("pre_migration", _pre_hooks, pre_ctx, command="migrate")
+            _fire_dry_run_hooks(
+                runs_always_filepaths, runs_on_change_filepaths,
+                db_name, actual_db_name,
+            )
             return
 
         existing_runs_always = get_existing_runs_always_filenames(db_name)
 
-        for filepath in runs_always_filepaths:
-            filename = filepath.split("/")[-1]
-            sql_statements = parse_upgrade_statements(filepath)
+        _run_always_migrations(
+            runs_always_filepaths=runs_always_filepaths,
+            db_name=db_name,
+            actual_db_name=actual_db_name,
+            logger=logger,
+            dry_run=dry_run,
+            perf=perf,
+            migration_conn=_migration_conn,
+            fencing_token=_fencing_token,
+            existing_runs_always=existing_runs_always,
+        )
 
-            # Execute pre_migration hooks for runs_always
-            _pre_hooks = _collect_hooks("pre_migration", db_name)
-            if _pre_hooks:
-                plan_entry = MigrationPlanEntry(
-                    version=None,
-                    description=Path(filepath).stem,
-                    file_path=Path(filepath),
-                    checksum="",
-                    kind="runs_always",
-                    statement_count=len(sql_statements),
-                )
-                pre_ctx = PreMigrationContext(
-                    database=actual_db_name,
-                    command="migrate",
-                    dry_run=dry_run,
-                    dev=False,
-                    migration=plan_entry,
-                )
-                execute_veto_hook("pre_migration", _pre_hooks, pre_ctx, command="migrate")
-
-            start_time = time.time()
-            logger.log_migration_start("RA", filename)
-
-            if filename in existing_runs_always:
-                run_repeatable_migration(
-                    sql_statements=sql_statements,
-                    filename=filename,
-                    migration_type="runs_always",
-                    db_name=db_name,
-                    perf=perf,
-                    connection=_migration_conn,
-                )
-            else:
-                run_migration(
-                    sql_statements=sql_statements,
-                    version=None,
-                    migration_operation="upgrade",
-                    filename=filename,
-                    migration_type="runs_always",
-                    db_name=db_name,
-                    perf=perf,
-                    connection=_migration_conn,
-                    namespace="default",
-                    fencing_token=_fencing_token,
-                )
-
-            duration = time.time() - start_time
-            logger.log_migration_end("RA", filename, duration)
-
-            # Execute post_migration hooks for runs_always
-            _post_hooks = _collect_hooks("post_migration", db_name)
-            if _post_hooks:
-                post_ctx = PostMigrationContext(
-                    database=actual_db_name,
-                    command="migrate",
-                    dry_run=dry_run,
-                    dev=False,
-                    migration=plan_entry,
-                    duration_ms=duration * 1000,
-                    statements_executed=len(sql_statements),
-                )
-                execute_observer_hook("post_migration", _post_hooks, post_ctx)
-
-        for filepath in runs_on_change_filepaths:
-            filename = filepath.split("/")[-1]
-            sql_statements = parse_upgrade_statements(filepath)
-
-            # Execute pre_migration hooks for runs_on_change
-            _pre_hooks = _collect_hooks("pre_migration", db_name)
-            if _pre_hooks:
-                plan_entry = MigrationPlanEntry(
-                    version=None,
-                    description=Path(filepath).stem,
-                    file_path=Path(filepath),
-                    checksum="",
-                    kind="runs_on_change",
-                    statement_count=len(sql_statements),
-                )
-                pre_ctx = PreMigrationContext(
-                    database=actual_db_name,
-                    command="migrate",
-                    dry_run=dry_run,
-                    dev=False,
-                    migration=plan_entry,
-                )
-                execute_veto_hook("pre_migration", _pre_hooks, pre_ctx, command="migrate")
-
-            start_time = time.time()
-            logger.log_migration_start("ROC", filename)
-
-            run_repeatable_migration(
-                sql_statements=sql_statements,
-                filename=filename,
-                migration_type="runs_on_change",
-                db_name=db_name,
-                perf=perf,
-                connection=_migration_conn,
-            )
-
-            duration = time.time() - start_time
-            logger.log_migration_end("ROC", filename, duration)
-
-            # Execute post_migration hooks for runs_on_change
-            _post_hooks = _collect_hooks("post_migration", db_name)
-            if _post_hooks:
-                post_ctx = PostMigrationContext(
-                    database=actual_db_name,
-                    command="migrate",
-                    dry_run=dry_run,
-                    dev=False,
-                    migration=plan_entry,
-                    duration_ms=duration * 1000,
-                    statements_executed=len(sql_statements),
-                )
-                execute_observer_hook("post_migration", _post_hooks, post_ctx)
+        _run_on_change_migrations(
+            runs_on_change_filepaths=runs_on_change_filepaths,
+            db_name=db_name,
+            actual_db_name=actual_db_name,
+            logger=logger,
+            dry_run=dry_run,
+            perf=perf,
+            migration_conn=_migration_conn,
+            fencing_token=_fencing_token,
+        )
 
         # After migrations complete, auto-apply pending seeds if configured or --apply-seeds
         if config.auto_apply_seeds or apply_seeds:
