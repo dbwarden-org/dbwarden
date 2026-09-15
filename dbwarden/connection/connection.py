@@ -82,6 +82,20 @@ def _get_engine(url: str, db_type: str = "postgresql") -> Engine:
             "keepalive_interval": 30,
         }
     engine = create_engine(url=final_url, connect_args=connect_args)
+
+    if db_type == "sqlite":
+        from sqlalchemy import event
+
+        @event.listens_for(engine, "connect")
+        def _set_sqlite_pragmas(dbapi_conn, connection_record):
+            cursor = dbapi_conn.cursor()
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA synchronous=NORMAL")
+            cursor.execute("PRAGMA cache_size=-64000")
+            cursor.execute("PRAGMA temp_store=MEMORY")
+            cursor.execute("PRAGMA mmap_size=268435456")
+            cursor.close()
+
     _engine_cache[key] = engine
     return engine
 
