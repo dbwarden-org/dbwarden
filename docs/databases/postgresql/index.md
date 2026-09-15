@@ -61,6 +61,7 @@ $ dbwarden make-migrations
 - [Event Triggers](event-triggers.md) : DDL event trigger lifecycle
 - [Schemas](schemas.md) : Config-level and model-level schemas, search path
 - [DDL Behavior](ddl-behavior.md) : Transactional DDL, CONCURRENTLY, type change strategies
+- [DDL Semantics](ddl-semantics.md) : Lock modes, CONCURRENTLY lifecycle, fast ADD COLUMN, canonicalization
 - [Type Mapping](type-mapping.md) : SQLAlchemy type → PostgreSQL type normalization
 - [Storage Parameters](storage-params.md) : Table and index storage parameters, autovacuum tuning
 - [Migration Safety](migration-safety.md) : Safety classification table

@@ -13,6 +13,9 @@
 
 ## Column Lifecycle
 
+!!! note "ADD COLUMN lock behavior and PG11+ fast path"
+    For the lock modes, table rewrite conditions, and the PG11+ fast ADD COLUMN optimization (constant defaults are instant on any table size), see [DDL Semantics](ddl-semantics.md#add-column-fast-path-pg11).
+
 | Operation | DDL |
 |-----------|-----|
 | Add column | `ALTER TABLE t ADD COLUMN c type;` |

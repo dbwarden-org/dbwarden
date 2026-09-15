@@ -56,6 +56,9 @@ RENAME TABLE source TO source_broken,
              source_old TO source
 ```
 
+!!! note "Non-recreate ALTERs"
+    For metadata-only ALTERs (ADD COLUMN, ADD INDEX, MODIFY SETTING, etc.), the recreate pipeline does not apply. These are single-statement operations subject to the [CANNOT_ASSIGN_ALTER race](alter-semantics.md#cannot_assign_alter-code-517) on ReplicatedMergeTree. See [ALTER semantics](alter-semantics.md) for batching requirements and `mutations_sync` / `alter_sync` guidance.
+
 ## Rollback of a recreate
 
 The rollback is the reverse pipeline:

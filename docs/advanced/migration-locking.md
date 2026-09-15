@@ -199,6 +199,9 @@ Default is 0 (fail fast). Set to a positive value to wait for the write lock.
 
 dbwarden prohibits 2PC (prepared transactions) on the migration connection. Advisory locks interact badly with prepared transactions, which can lead to lock leaks or corruption.
 
+!!! note "Advisory lock operational details"
+    For PgBouncer detection (double PID check), replica detection (`pg_is_in_recovery()`), re-entrancy protection, and the session-scoped lock lifecycle, see [DDL Semantics](../databases/postgresql/ddl-semantics.md#advisory-lock-operational-details).
+
 ## AUDIT-level logging
 
 dbwarden logs all unlock operations at AUDIT level for compliance and forensics. The audit log includes:

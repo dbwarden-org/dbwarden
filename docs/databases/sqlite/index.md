@@ -76,7 +76,7 @@ CREATE INDEX IF NOT EXISTS ix_users_email ON users (email);
 Notes on the generated sequence:
 
 - **All changes to one table collapse into one rebuild.** Changing three columns and adding a constraint produces a single copy of the table, not four.
-- **The rollback is a rebuild in the other direction**, so a SQLite migration satisfies the [rollback contract](../correctness/rollback-generation.md) instead of emitting a placeholder.
+- **The rollback is a rebuild in the other direction**, so a SQLite migration satisfies the [rollback contract](../../correctness/rollback-generation.md) instead of emitting a placeholder.
 - **The staging table is created without `IF NOT EXISTS`.** A leftover `*__dbw_new` table from a failed run fails the migration rather than silently receiving the copied rows.
 - **Indexes are recreated** after the rename, because `DROP TABLE` takes the original table's indexes with it.
 - **Generated columns are not copied**; SQLite recomputes them.
@@ -118,6 +118,8 @@ An index the migration does not change is recreated from its stored DDL rather t
 | Add / drop index | `CREATE INDEX` / `DROP INDEX` |
 
 A rebuild copies every row and holds a write lock for the duration. `dbwarden check-impact` reports SQLite table-option, generated-column and collation changes as warnings for that reason.
+
+For the semantics behind these statements — native ALTER restrictions, rename rewriting, version-specific behavior, and locking — see [ALTER Semantics](alter-semantics.md).
 
 ## Table Metadata
 
@@ -201,7 +203,7 @@ SQLite reports a primary key column as nullable unless it was declared `NOT NULL
 
 ## SQLite as a Development Database
 
-SQLite is also the usual choice for `dev_database_url`, where the production schema is generated for another backend and translated for local use. That path is unchanged and documented separately in [SQL Translation](../sql-translation.md).
+SQLite is also the usual choice for `dev_database_url`, where the production schema is generated for another backend and translated for local use. That path is unchanged and documented separately in [SQL Translation](../../sql-translation.md).
 
 ## Data Conversion in a Rebuild
 

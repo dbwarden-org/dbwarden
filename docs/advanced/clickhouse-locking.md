@@ -126,6 +126,9 @@ CH-1 adds strict idempotency checking on top of CH-0. Non-idempotent statements 
 
 **Why it exists:** Even with CH-0's lease, a stale worker can execute non-idempotent DDL after losing its lease. Idempotent DDL (`CREATE TABLE IF NOT EXISTS`, `DROP TABLE IF EXISTS`) is safe to re-execute; non-idempotent DDL is not. By refusing non-idempotent statements, CH-1 limits the blast radius of the stale-worker window to idempotent operations only.
 
+!!! note "Concurrent ALTERs on ReplicatedMergeTree"
+    Even with idempotent DDL, multiple separate `ALTER TABLE` statements against the same ReplicatedMergeTree table can trigger [CANNOT_ASSIGN_ALTER (Code 517)](../databases/clickhouse/alter-semantics.md#cannot_assign_alter-code-517). See [ALTER semantics](../databases/clickhouse/alter-semantics.md) for batching requirements.
+
 **Use when:** Production environments where all migrations are idempotent (dbwarden generates idempotent DDL by default).
 
 ### CH-1 prerequisites

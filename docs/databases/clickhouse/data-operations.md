@@ -92,6 +92,9 @@ data_op("ALTER TABLE events DELETE WHERE event_date < '2023-01-01'")
 data_op("ALTER TABLE events UPDATE payload = 'redacted' WHERE id = 123")
 ```
 
+!!! tip "Synchronicity"
+    Mutations are async by default. Use `SETTINGS mutations_sync = 2` to wait for all replicas, or `mutations_sync = 1` to wait for the current server only. See [ALTER semantics](alter-semantics.md#mutations_sync-vs-alter_sync) for the full distinction between `mutations_sync` and `alter_sync`. **Do not use value `3` on ReplicatedMergeTree**; it silently does nothing ([known bug](alter-semantics.md#the-mutations_sync3-bug)).
+
 ## OPTIMIZE
 
 ```python

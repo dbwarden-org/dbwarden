@@ -126,14 +126,17 @@ Added to migration files generated at merge time:
 Configure persistent vs disposable environments in your database config:
 
 ```python
-database_config(
-    database_name="primary",
-    ...
-    environments={
-        "staging": {"url_env": "STAGING_DATABASE_URL", "persistent": True},
-        "production": {"url_env": "PROD_DATABASE_URL", "persistent": True},
-    },
-)
+from dbwarden import DbwardenDatabase, EnvironmentConfig
+
+class Primary(DbwardenDatabase):
+    database_name = "primary"
+    database_type = "postgresql"
+    database_url_sync = "postgresql://..."
+    default = True
+    environments = [
+        EnvironmentConfig(name="staging", url_env="STAGING_DATABASE_URL", persistent=True),
+        EnvironmentConfig(name="production", url_env="PROD_DATABASE_URL", persistent=True),
+    ]
 ```
 
 **Rules:**

@@ -267,17 +267,21 @@ class User(Base):
 
 ## DDL Behavior
 
+For the semantics behind these statements — implicit commits, algorithm and lock selection, metadata locking, replication lag, and version-specific gotchas — see [ALTER Semantics](alter-semantics.md).
+
 ### DDL Is NOT Transactional
 
 MySQL and MariaDB DDL is **non-transactional**: each DDL statement implicitly commits the current transaction. If a migration file contains multiple statements and one fails, the prior DDL cannot be rolled back. This makes MySQL/MariaDB more fragile than PostgreSQL for automated migration runs.
 
 ### Column Type Changes
 
-Emits `ALTER TABLE t MODIFY COLUMN c newtype`. Unlike PostgreSQL, MySQL requires the full column definition on every `MODIFY COLUMN`. dbwarden handles this by re-emitting all column attributes (type, unsigned, nullable, default, comment, charset, collate, auto_increment) in a single statement:
+Emits `ALTER TABLE t MODIFY COLUMN c newtype`:
 
 ```sql
-ALTER TABLE users MODIFY COLUMN email VARCHAR(255) NOT NULL COMMENT 'User email';
+ALTER TABLE users MODIFY COLUMN email VARCHAR(255);
 ```
+
+Unlike PostgreSQL, MySQL drops any column attribute not restated in the `MODIFY COLUMN` definition. The comment, MySQL-meta, and default change paths re-emit the complete definition (type, unsigned, nullable, default, comment, charset, collate, auto_increment); the type-change and nullable-change paths emit only the type and nullability — see [ALTER Semantics](alter-semantics.md#modify-column-drops-unspecified-attributes) for the consequences.
 
 ### Column Nullable Changes
 

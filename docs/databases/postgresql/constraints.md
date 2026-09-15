@@ -52,6 +52,9 @@ ALTER TABLE t ADD CONSTRAINT fk FOREIGN KEY (ref_id) REFERENCES ref (id) NOT VAL
 ALTER TABLE t VALIDATE CONSTRAINT fk;
 ```
 
+!!! tip "Zero-downtime NOT NULL"
+    The same two-step pattern applies to NOT NULL: add a `CHECK (col IS NOT NULL) NOT VALID`, validate it under `SHARE UPDATE EXCLUSIVE`, then `SET NOT NULL` (instant, scan skipped on PG12+). See [DDL Semantics](ddl-semantics.md#not-null-via-check--validate) for the full four-step recipe.
+
 ### ALTER ALTER CONSTRAINT
 
 PostgreSQL 9.4+ supports modifying constraint deferrability without drop/create:

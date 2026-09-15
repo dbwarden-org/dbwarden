@@ -1,5 +1,8 @@
 # DDL Behavior
 
+!!! note "Lock modes and runtime behavior"
+    This page covers transactional DDL, index creation strategies, and type change behavior. For the complete lock mode reference, table rewrite conditions, and the CREATE INDEX CONCURRENTLY lifecycle, see [DDL Semantics](ddl-semantics.md).
+
 ## Transactional DDL
 
 PostgreSQL DDL is transactional. If a migration file contains multiple statements and one fails, all prior DDL in that file is rolled back. This makes PostgreSQL the safest backend for automated migration runs.

@@ -2,6 +2,9 @@
 
 Indexes are handled by `IndexHandler` during the DIFF phase.
 
+!!! note "CONCURRENTLY lifecycle and invalid indexes"
+    For the CREATE INDEX CONCURRENTLY three-transaction lifecycle, invalid index cleanup, and the IF NOT EXISTS trap, see [DDL Semantics](ddl-semantics.md#create-index-concurrently).
+
 ## Supported Index Types
 
 | Method | Description |

@@ -25,6 +25,7 @@ projects and integration examples.
 - [RBAC](rbac.md) : Roles, users, row policies, quotas, settings profiles, grants (needs `dbwarden-ch-rbac`)
 - [Data Operations](data-operations.md) : Partition operations, mutations, `OPTIMIZE`, `POPULATE`
 - [Safety Classification](safety.md) : Classification levels, `--force`, and the recreate pipeline
+- [ALTER Semantics](alter-semantics.md) : Code 517, mutations_sync vs alter_sync, statement batching
 - [ON Cluster](on-cluster.md) : Cluster modes, DDL propagation, and replicated databases
 - [Migration Locking](../../advanced/clickhouse-locking.md) : Lock strategies, ON CLUSTER, idempotency, and production setup
 
@@ -137,7 +138,7 @@ The canonicalizer has **zero version branching**: a single code path covers 24.3
 | | Projections, skip indexes | Done |
 | Materialized views | Class-based API (`materialized_view()` + `CHViewMeta`) | Done |
 | | Forward DDL: TO target, implicit `.inner`, refreshable, POPULATE | Done |
-| | Reverse engineering (`generate-models`) | Partial (see [Known gaps](#known-gaps)) |
+| | Reverse engineering (`generate-models`) | Done |
 | | MODIFY QUERY vs recreate | Done |
 | | POPULATE (data-op) | Done |
 | Dictionaries | CREATE DICTIONARY via ch_dict_* | Done |
@@ -282,16 +283,6 @@ grep -E "RENAME|MODIFY COLUMN|UPDATE|DELETE" migrations/primary/*.sql
 dbwarden migrate --database analytics
 dbwarden migrate --database analytics  # Should be no-op
 ```
-
-## Known gaps
-
-These are real reverse-engineering / round-trip gaps, not deliberate exclusions. They are documented so they can be closed systematically.
-
-| Gap | What happens today | How to close it |
-|-----|-------------------|-----------------|
-| **Materialized view reverse engineering** | `generate-models` emits a plain `Base` subclass with `ch_engine = ChEngineSpec('MaterializedView')` and the implicit result columns. `make-migrations` then wants to drop/recreate the MV because it does not recognize the class as a `MaterializedView` and the stored spec differs. | Make `generate-models` emit `class Foo(MaterializedView):` and reconstruct the `materialized_view(...)` spec (`select`, `to`, `engine`, `order_by`, `populate`, `settings`, `refresh`) instead of emitting the implicit `.inner` columns. |
-| **Default `MergeTree` settings drift** | A hand-written model that omits `ch_settings` is compared against a snapshot that contains ClickHouse's reported defaults (e.g. `index_granularity=8192`), producing a spurious `alter_ch_options`. | Either canonicalize known default settings away in `ChTableHandler.canonicalize`, or always emit settings in generated models (already done) and document that hand-written models should declare them. |
-| **MV `SELECT` database qualifier** | Reverse-engineered `ch_select_statement` includes the database qualifier (`SELECT ... FROM dbwarden_test.events`), while hand-written models usually omit it, so `make-migrations` tries to `MODIFY QUERY`. | Strip the current database prefix from `ch_select_statement` during extraction, or normalize it away during canonicalization/diff. |
 
 ## Config keys
 
