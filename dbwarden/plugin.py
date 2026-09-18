@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import json
 import subprocess
 import sys
@@ -13,18 +14,18 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from importlib.metadata import EntryPoint, entry_points
-from importlib.metadata import PackageNotFoundError, version as package_version
+from importlib.metadata import EntryPoint, PackageNotFoundError, entry_points
+from importlib.metadata import version as package_version
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, ClassVar
 
-from packaging.version import parse as parse_version
 from packaging.requirements import InvalidRequirement, Requirement
+from packaging.version import InvalidVersion
+from packaging.version import parse as parse_version
 
-from dbwarden._verified import VERIFIED_PLUGINS
 from dbwarden._official import OFFICIAL_PLUGINS, OfficialSpec, classify
+from dbwarden._verified import VERIFIED_PLUGINS
 from dbwarden.files import atomic_write_text
-
 from dbwarden.logging import get_component_logger
 
 logger = get_component_logger("plugin")
@@ -61,14 +62,14 @@ LOCK_PATH = Path(".dbwarden") / "plugins.lock"
 PLUGIN_API_VERSION = 1
 PLUGIN_API_ATTR = "DBWARDEN_PLUGIN_API"
 
-from dbwarden.exceptions.plugin import (  # noqa: E402
+from dbwarden.exceptions import ConfigurationError
+from dbwarden.exceptions.plugin import (
     HookConflictError,
     HookNotRegisteredError,
     ObjectHandlerConflictError,
     PluginApiMismatchError,
     PluginInstallError,
 )
-
 
 KNOWN_VALUE_HOOKS: frozenset[str] = frozenset({
     "session_factory",
@@ -214,7 +215,7 @@ class ConfigKeyRegistry:
     an install hint.
     """
 
-    _keys: dict[str, str] = {}
+    _keys: ClassVar[dict[str, str]] = {}
 
     @classmethod
     def register(cls, key: str, *, plugin: str) -> None:
@@ -243,7 +244,7 @@ class ConfigKeyRegistry:
 
 
 class HookRegistry:
-    _hooks: dict[str, list[tuple[str, Callable[..., Any]]]] = {}
+    _hooks: ClassVar[dict[str, list[tuple[str, Callable[..., Any]]]]] = {}
 
     @classmethod
     def register(cls, hook_name: str, fn: Callable[..., Any], *, plugin: str) -> None:
@@ -289,7 +290,7 @@ class HookRegistry:
 
 
 class ObjectPluginRegistry:
-    _handlers: dict[str, ObjectHandlerRegistration] = {}
+    _handlers: ClassVar[dict[str, ObjectHandlerRegistration]] = {}
 
     @classmethod
     def register(cls, handler: Any, *, plugin: str) -> None:
@@ -473,7 +474,7 @@ def validate_migration_hooks(db_name: str | None = None) -> None:
                         ) from exc
         except HookValidationError:
             raise
-        except Exception:
+        except (AttributeError, TypeError, ConfigurationError):
             pass
 
 
@@ -516,7 +517,7 @@ def verified_allows(dist_name: str, version: str | None = None) -> bool:
     try:
         installed = version or package_version(dist_name)
         return parse_version(installed) >= parse_version(min_version)
-    except Exception:
+    except (PackageNotFoundError, InvalidVersion):
         return False
 
 
@@ -677,7 +678,7 @@ def _fetch_url(url: str, *, timeout: float = 30.0, max_bytes: int = 10 * 1024 * 
     if timeout <= 0 or max_bytes <= 0:
         raise ValueError("timeout and max_bytes must be positive")
     request = urllib.request.Request(url, headers={"User-Agent": "dbwarden-plugin-provenance"})
-    with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - https only
+    with urllib.request.urlopen(request, timeout=timeout) as response:
         content_length = response.headers.get("Content-Length")
         if content_length is not None and int(content_length) > max_bytes:
             raise ValueError("Plugin provenance response exceeds the maximum allowed size")
@@ -722,7 +723,7 @@ def _resolve_target_version(
             continue
         try:
             parsed = parse_version(raw_version)
-        except Exception:
+        except InvalidVersion:
             continue
         if parsed.is_prerelease or parsed.is_devrelease:
             continue
@@ -759,7 +760,7 @@ def _attestation_covers_digest(attestation: dict[str, Any], sha256: str) -> bool
         return False
     try:
         statement = json.loads(base64.b64decode(statement_raw, validate=True))
-    except Exception:
+    except (ValueError, TypeError, binascii.Error):
         return False
     for subject in statement.get("subject", []) or []:
         if (subject.get("digest") or {}).get("sha256") == sha256:
@@ -970,7 +971,7 @@ def _lock_key(dist_name: str) -> str:
 def prompt_community_consent(ep: EntryPoint, dist_name: str) -> bool:
     try:
         import typer
-    except Exception:
+    except ImportError:
         return False
     version = _dist_version(ep) or "unknown"
     return bool(typer.confirm(
@@ -1076,7 +1077,7 @@ def _load_plugin_entry_point(ep: EntryPoint, dist_name: str) -> None:
         _LOAD_STATES[dist_name] = "incompatible"
         _LOAD_ERRORS[dist_name] = str(exc)
         logger.error("%s", exc)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 – plugins can raise anything
         _LOAD_STATES[dist_name] = "failed"
         _LOAD_ERRORS[dist_name] = str(exc)
         logger.warning("Failed to load plugin '%s': %s", dist_name, exc)
@@ -1092,19 +1093,19 @@ def _load_plugin_entry_point(ep: EntryPoint, dist_name: str) -> None:
 # is a promise; removing one is a breaking change.
 __all__ = [
     "HOOK_CALL_SPECS",
-    "ConfigKeyRegistry",
+    "KNOWN_VALUE_HOOKS",
+    "MULTI_VALUE_HOOKS",
+    "PLUGIN_API_ATTR",
+    "PLUGIN_API_VERSION",
     "PLUGIN_CONFIG_KEY_OWNERS",
+    "PLUGIN_GROUP",
+    "ConfigKeyRegistry",
     "HookConflictError",
     "HookNotRegisteredError",
     "HookRegistry",
-    "KNOWN_VALUE_HOOKS",
-    "MULTI_VALUE_HOOKS",
     "ObjectHandlerConflictError",
     "ObjectHandlerRegistration",
     "ObjectPluginRegistry",
-    "PLUGIN_API_ATTR",
-    "PLUGIN_API_VERSION",
-    "PLUGIN_GROUP",
     "PluginApiMismatchError",
     "PluginRegistrar",
 ]
