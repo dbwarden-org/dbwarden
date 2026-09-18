@@ -81,6 +81,8 @@ EXCEPTION_NAMES: frozenset[str] = frozenset({
     "DirectoryNotFoundError",
     "HookConflictError",
     "HookNotRegisteredError",
+    "HookValidationError",
+    "HookVetoError",
     "ImmutableChangeError",
     "LockAcquireTimeout",
     "LockError",

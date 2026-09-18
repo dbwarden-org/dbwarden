@@ -12,6 +12,7 @@ inlined in the ``extract_full_schema_snapshot`` God Function. It handles:
 from __future__ import annotations
 
 import re
+from contextlib import contextmanager
 from typing import Any
 
 from dbwarden.engine.backends.postgresql.extract import _strip_pg_expr_parens
@@ -20,17 +21,31 @@ from dbwarden.logging import get_component_logger
 _snapshot_logger = get_component_logger("snapshot")
 
 
+@contextmanager
+def _pg_connection(engine: Any, connection: Any):
+    """Yield a live connection, reusing ``connection`` when no engine is owned."""
+    if connection is not None:
+        yield connection
+    elif engine is not None:
+        with engine.connect() as conn:
+            yield conn
+    else:
+        yield None
+
+
 def enrich_column_pg(
     col_entry: dict[str, Any],
     col: dict[str, Any],
     raw_type_str: str,
     normalized: dict[str, Any],
     engine: Any,
+    connection: Any = None,
 ) -> None:
     """Enrich a column entry with PostgreSQL-specific metadata.
 
     Adds pg_type (enum/array/tsvector/jsonb/range), identity, collation,
-    and generated column information.
+    and generated column information. Reuses ``connection`` when the caller
+    already holds one, so batch extraction does not open an engine per column.
     """
     col_type = col.get("type", "")
 
@@ -43,28 +58,29 @@ def enrich_column_pg(
             "values": list(col_type.enums),
         }
     enum_match = re.match(r"^([a-zA-Z_][a-zA-Z0-9_]*)$", raw_type_str)
-    if enum_match and engine is not None:
+    if enum_match:
         from sqlalchemy import text
-        try:
-            with engine.connect() as conn:
-                enum_row = conn.execute(
-                    text("SELECT t.oid, t.typname FROM pg_type t JOIN pg_enum e ON t.oid = e.enumtypid WHERE t.typname = :tname LIMIT 1"),
-                    {"tname": raw_type_str},
-                ).fetchone()
-                if enum_row:
-                    col_entry["type"] = "enum"
-                    col_entry["enum_name"] = raw_type_str
-                    val_rows = conn.execute(
-                        text("SELECT enumlabel FROM pg_enum WHERE enumtypid = :oid ORDER BY enumsortorder"),
-                        {"oid": enum_row[0]},
-                    ).fetchall()
-                    col_entry["pg_type"] = {
-                        "kind": "enum",
-                        "type_name": raw_type_str,
-                        "values": [r[0] for r in val_rows],
-                    }
-        except Exception:
-            pass
+        with _pg_connection(engine, connection) as conn:
+            if conn is not None:
+                try:
+                    enum_row = conn.execute(
+                        text("SELECT t.oid, t.typname FROM pg_type t JOIN pg_enum e ON t.oid = e.enumtypid WHERE t.typname = :tname LIMIT 1"),
+                        {"tname": raw_type_str},
+                    ).fetchone()
+                    if enum_row:
+                        col_entry["type"] = "enum"
+                        col_entry["enum_name"] = raw_type_str
+                        val_rows = conn.execute(
+                            text("SELECT enumlabel FROM pg_enum WHERE enumtypid = :oid ORDER BY enumsortorder"),
+                            {"oid": enum_row[0]},
+                        ).fetchall()
+                        col_entry["pg_type"] = {
+                            "kind": "enum",
+                            "type_name": raw_type_str,
+                            "values": [r[0] for r in val_rows],
+                        }
+                except Exception:
+                    pass
 
     pg_column: dict[str, Any] = {}
     if col.get("identity"):
@@ -105,9 +121,9 @@ def enrich_column_pg(
         pass
     else:
         from sqlalchemy import text
-        try:
-            if engine is not None:
-                with engine.connect() as _c:
+        with _pg_connection(engine, connection) as _c:
+            if _c is not None:
+                try:
                     range_row = _c.execute(
                         text("SELECT rngtypid::regtype::text FROM pg_range WHERE rngtypid = (SELECT oid FROM pg_type WHERE typname = :t)"),
                         {"t": raw_type_str.lower()},
@@ -115,8 +131,8 @@ def enrich_column_pg(
                     if range_row:
                         col_entry["pg_type"] = {"kind": "range", "range_type": raw_type_str}
                         col_entry["type"] = raw_type_str
-        except Exception:
-            pass
+                except Exception:
+                    pass
 
     if pg_column:
         col_entry["pg_column"] = pg_column

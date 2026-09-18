@@ -749,23 +749,14 @@ def migrate_single(
             project_config = get_project_config()
 
             # Step 1: Always run file validation (existence, readability, parseability)
-            # Step 5: Policy gates only run when project_config exists
-            if project_config:
-                preflight = run_preflight(
-                    filepaths_by_version,
-                    missing_plan=project_config.get("missing_plan", "warn"),
-                    impact_paths=project_config.get("impact_paths"),
-                    migrations_dir=migrations_dir,
-                    applied_versions=applied_versions,
-                )
-            else:
-                preflight = run_preflight(
-                    filepaths_by_version,
-                    missing_plan="off",
-                    impact_paths=None,
-                    migrations_dir=migrations_dir,
-                    applied_versions=applied_versions,
-                )
+            # Step 5: Policy gates use the project config defaults when unset.
+            preflight = run_preflight(
+                filepaths_by_version,
+                missing_plan=project_config.missing_plan,
+                impact_paths=project_config.impact_paths,
+                migrations_dir=migrations_dir,
+                applied_versions=applied_versions,
+            )
 
             for w in preflight.warnings:
                 warning(w)
@@ -782,9 +773,8 @@ def migrate_single(
             # Section 7.3: --force acknowledgement for safety warnings
             # WARNING blocks when pre_migrate_safety="block" unless --force
             if (
-                project_config
-                and not force
-                and project_config.get("pre_migrate_safety") == "block"
+                not force
+                and project_config.pre_migrate_safety == "block"
                 and preflight.warnings
             ):
                 if dry_run:
@@ -798,7 +788,7 @@ def migrate_single(
                     )
                     return
 
-            if project_config and preflight.impact:
+            if preflight.impact:
                 for imp in preflight.impact:
                     refs = imp.get("references", [])
                     if refs:

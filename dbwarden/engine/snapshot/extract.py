@@ -136,7 +136,7 @@ def extract_full_schema_snapshot(
 
         if database_type == "postgresql":
             pg_objects = _extract_pg_objects(
-                engine, connection, own_engine, inspector, pg_schema, pg_version, tables
+                engine, conn, own_engine, inspector, pg_schema, pg_version, tables
             )
             result.update(pg_objects)
 
