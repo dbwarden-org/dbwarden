@@ -41,7 +41,7 @@ PostgreSQL and SQLite (3.25+) support `RENAME COLUMN` natively. dbwarden emits t
 
 **MySQL / MariaDB**: Emits `ALTER TABLE t MODIFY COLUMN c newtype`. Note that `MODIFY COLUMN` requires specifying the entire column definition, not just the type. dbwarden includes only the type in the `MODIFY` statement; if you need additional attributes (e.g., `NOT NULL`, `DEFAULT`), add them manually.
 
-**SQLite**: `ALTER COLUMN TYPE` does not exist, so dbwarden rebuilds the table: create the new shape under a temporary name, copy the rows, drop the original, rename into place, recreate the indexes. The rollback is the rebuild in the other direction. See [SQLite Deep Dive](sqlite.md#table-rebuilds).
+**SQLite**: `ALTER COLUMN TYPE` does not exist, so dbwarden rebuilds the table: create the new shape under a temporary name, copy the rows, drop the original, rename into place, recreate the indexes. The rollback is the rebuild in the other direction. See [SQLite Deep Dive](sqlite/index.md#table-rebuilds).
 
 ## Column Nullable Change
 
@@ -55,7 +55,7 @@ PostgreSQL and SQLite (3.25+) support `RENAME COLUMN` natively. dbwarden emits t
 
 **MySQL / MariaDB**: Uses `MODIFY COLUMN` which requires the full column type. dbwarden includes the type from the model column definition. If the type is not available, nullable changes for MySQL/MariaDB may produce incomplete SQL.
 
-**SQLite**: Nullability is part of the column definition and can only change by rebuilding the table, which dbwarden generates. See [SQLite Deep Dive](sqlite.md#table-rebuilds).
+**SQLite**: Nullability is part of the column definition and can only change by rebuilding the table, which dbwarden generates. See [SQLite Deep Dive](sqlite/index.md#table-rebuilds).
 
 ## Column Default Change
 

@@ -373,7 +373,7 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 
 ### Added
 
-- **MySQL round-trip support.** MySQL schema classes, model discovery, a round-trip engine, and comprehensive test coverage, alongside the MySQL dependency group. See [MySQL](databases/mysql.md).
+- **MySQL round-trip support.** MySQL schema classes, model discovery, a round-trip engine, and comprehensive test coverage, alongside the MySQL dependency group. See [MySQL](databases/mysql/index.md).
 - **Seed export command.** `dbwarden export` writes code seeds to ROC SQL files.
 
 ### Changed

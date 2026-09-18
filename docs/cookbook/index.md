@@ -68,7 +68,7 @@ class Primary(DbwardenDatabase):
 
 MySQL and MariaDB are first-class backends with full round-trip support. All MySQL-specific metadata (engine, charset, collation, row format, auto_increment, unsigned columns, ON UPDATE, column comments) is captured by the snapshot, diffed correctly, and emitted as valid DDL.
 
-See the [MySQL Deep Dive](../databases/mysql.md) for the complete reference, including MySQL-specific model metadata via `class Meta(MyTableMeta)`.
+See the [MySQL Deep Dive](../databases/mysql/index.md) for the complete reference, including MySQL-specific model metadata via `class Meta(MyTableMeta)`.
 
 ```python
 from dbwarden import DbwardenDatabase

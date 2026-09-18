@@ -31,7 +31,7 @@ migration files you write by hand.
 !!! note "Translation and first-class SQLite are different layers"
 
     Translation adapts a *type or default written for another backend* so it is
-    legal in SQLite. [First-class SQLite support](databases/sqlite.md) is about
+    legal in SQLite. [First-class SQLite support](databases/sqlite/index.md) is about
     the shape of the migration itself - table rebuilds, `WITHOUT ROWID`,
     `STRICT`, generated columns. They compose: a translated type is what the
     rebuild then renders.
@@ -118,7 +118,7 @@ Use this when you want to catch every lossy conversion early.
     `--strict-translation` controls what dbwarden does with a type it cannot
     translate. SQLite's `STRICT` keyword is a table option, set with
     `sq_strict` on the model, that makes SQLite itself enforce column types.
-    See [SQLite](databases/sqlite.md#types-and-strict-tables).
+    See [SQLite](databases/sqlite/index.md#types-and-strict-tables).
 
 ## Recommended team workflow
 

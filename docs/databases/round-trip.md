@@ -34,7 +34,7 @@ See [PostgreSQL Deep Dive](postgresql/index.md) for the complete list of support
 
 MySQL is a **first-class backend** with full round-trip support. All metadata (engine, charset, collation, row format, auto_increment, unsigned columns, `ON UPDATE`, and column comments) is captured by the snapshot, diffed correctly, and emitted as valid DDL.
 
-See [MySQL Deep Dive](mysql.md) for the complete list of supported features.
+See [MySQL Deep Dive](mysql/index.md) for the complete list of supported features.
 
 ### ClickHouse
 
@@ -54,7 +54,7 @@ SQLite is a **first-class backend** with full round-trip support. Table options 
 
 SQLite remains the usual choice for a `dev_database_url` as well; see [SQL Translation](../sql-translation.md).
 
-See [SQLite Deep Dive](sqlite.md) for the complete list of supported features.
+See [SQLite Deep Dive](sqlite/index.md) for the complete list of supported features.
 
 ### MariaDB
 

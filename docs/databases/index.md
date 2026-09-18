@@ -145,7 +145,7 @@ Each backend has deep-dive documentation:
 | Backend | Guide |
 |---------|-------|
 | PostgreSQL | [PostgreSQL Deep Dive](postgresql/index.md) |
-| MySQL / MariaDB | [MySQL Deep Dive](mysql.md) |
+| MySQL / MariaDB | [MySQL Deep Dive](mysql/index.md) |
 | SQLite | [SQL Databases](sql-databases.md) |
 | ClickHouse | [ClickHouse Deep Dive](clickhouse/index.md) |
 
@@ -168,13 +168,13 @@ Key MySQL DDL behavior:
 - Auto-increment toggle uses `MODIFY COLUMN ... AUTO_INCREMENT`
 - FK drop uses `DROP FOREIGN KEY` (not `DROP CONSTRAINT`)
 
-See [MySQL Deep Dive](mysql.md) for the complete reference.
+See [MySQL Deep Dive](mysql/index.md) for the complete reference.
 
 ### MariaDB
 
 MariaDB is supported as a separate `database_type` (`mariadb`). Schema layer is complete with `MdbTableMeta` / `MdbColumnMeta` and `mdb.field()` spec objects including MariaDB-specific features. Snapshot capture and reverse-engineering of MariaDB-specific features are not yet complete, so full round-trip is not yet available.
 
-See [MySQL Deep Dive](mysql.md) for MariaDB-specific notes.
+See [MySQL Deep Dive](mysql/index.md) for MariaDB-specific notes.
 
 ### SQLite
 
