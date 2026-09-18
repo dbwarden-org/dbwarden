@@ -228,6 +228,7 @@ def _file_has_database_config_call(path: Path) -> bool:
 
 def _full_scan_database_config_calls(root: Path) -> list[Path]:
     matches: list[Path] = []
+    pkg_dir = root / "dbwarden"
     for current, dirs, files in os.walk(root):
         dirs[:] = [
             d for d in dirs
@@ -237,6 +238,11 @@ def _full_scan_database_config_calls(root: Path) -> list[Path]:
             if not filename.endswith(".py"):
                 continue
             path = Path(current) / filename
+            try:
+                path.relative_to(pkg_dir)
+                continue  # skip framework source files
+            except ValueError:
+                pass
             if not path.is_symlink() and path.is_file() and _file_has_database_config_call(path):
                 matches.append(path)
     return sorted(matches)
