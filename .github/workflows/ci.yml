@@ -113,6 +113,7 @@ jobs:
           uv run pytest
           tests/integration/test_ch_convergence.py
           tests/integration/test_ch_multi_version_audit.py
+          tests/integration/test_live_connections.py
           -m integration --ch-integration --tb=short -v
 
   pg-integration:
@@ -161,4 +162,64 @@ jobs:
           tests/integration/test_pg_no_spurious_diff.py
           tests/integration/test_pg_constraint_emission.py
           tests/integration/test_pg_snapshot_fidelity.py
+          tests/integration/test_live_connections.py
           -m integration --pg-integration --tb=short -v
+
+  mysql-integration:
+    needs: [test]
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        ports:
+          - 3306/tcp
+        env:
+          MYSQL_ROOT_PASSWORD: test
+          MYSQL_DATABASE: test
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -ptest"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+          --health-start-period 30s
+      mariadb:
+        image: mariadb:11
+        ports:
+          - 3306/tcp
+        env:
+          MARIADB_ROOT_PASSWORD: test
+          MARIADB_DATABASE: test
+        options: >-
+          --health-cmd "mariadb-admin ping -h 127.0.0.1 -uroot -ptest"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+          --health-start-period 30s
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12.7"
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Install MySQL test dependencies
+        run: uv pip install pymysql
+
+      - name: Live connection smoke tests
+        env:
+          MYSQL_HOST: localhost
+          MYSQL_PORT: ${{ job.services.mysql.ports[3306] }}
+          MYSQL_USER: root
+          MYSQL_PASSWORD: test
+          MYSQL_DATABASE: test
+          MARIADB_HOST: localhost
+          MARIADB_PORT: ${{ job.services.mariadb.ports[3306] }}
+          MARIADB_USER: root
+          MARIADB_PASSWORD: test
+          MARIADB_DATABASE: test
+        run: >-
+          uv run pytest
+          tests/integration/test_live_connections.py
+          -m integration --mysql-integration --mariadb-integration --tb=short -v

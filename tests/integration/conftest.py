@@ -19,3 +19,15 @@ def pytest_addoption(parser):
         default=False,
         help="Run PostgreSQL integration tests that require a live container",
     )
+    parser.addoption(
+        "--mysql-integration",
+        action="store_true",
+        default=False,
+        help="Run MySQL integration tests that require a live container",
+    )
+    parser.addoption(
+        "--mariadb-integration",
+        action="store_true",
+        default=False,
+        help="Run MariaDB integration tests that require a live container",
+    )
