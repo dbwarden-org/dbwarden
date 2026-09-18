@@ -55,7 +55,7 @@ def extract_full_schema_snapshot(
         return _extract_clickhouse(database, sqlalchemy_url, db_name)
 
     engine, inspector, own_engine, conn, conn_context = _setup_connection(
-        database, sqlalchemy_url, database_type, connection=connection
+        database, sqlalchemy_url, database_type
     )
 
     try:
@@ -206,11 +206,6 @@ def _setup_connection(
     from dbwarden.config import get_database
     database_type = get_database(database).database_type
     return None, inspector, False, conn, conn_context
-        raise
-
-    from dbwarden.config import get_database
-    database_type = get_database(database).database_type
-    return None, inspector, False, connection, conn_context
 
 
 def _extract_tables(
