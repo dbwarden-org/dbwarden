@@ -460,6 +460,9 @@ def _build_index_sql(op: dict[str, Any], backend: str) -> list[MigrationStatemen
         if include and backend == "postgresql":
             parts.append(f"INCLUDE ({', '.join(include_sql)})")
 
+        if nulls_not_distinct and backend == "postgresql":
+            parts.append("NULLS NOT DISTINCT")
+
         if with_params and backend == "postgresql":
             opts = ", ".join(f"{k} = {v}" for k, v in with_params.items())
             parts.append(f"WITH ({opts})")
@@ -469,9 +472,6 @@ def _build_index_sql(op: dict[str, Any], backend: str) -> list[MigrationStatemen
 
         if where:
             parts.append(f"WHERE {where}")
-
-        if nulls_not_distinct and backend == "postgresql":
-            parts.append("NULLS NOT DISTINCT")
 
         upgrade = " ".join(parts) + ";"
         if backend == "postgresql" and concurrently:
@@ -534,6 +534,8 @@ def _build_index_sql(op: dict[str, Any], backend: str) -> list[MigrationStatemen
 
         if include and backend == "postgresql":
             rollback_parts.append(f"INCLUDE ({', '.join(include)})")
+        if nulls_not_distinct and backend == "postgresql":
+            rollback_parts.append("NULLS NOT DISTINCT")
         if with_params and backend == "postgresql":
             opts = ", ".join(f"{k} = {v}" for k, v in with_params.items())
             rollback_parts.append(f"WITH ({opts})")
@@ -541,8 +543,6 @@ def _build_index_sql(op: dict[str, Any], backend: str) -> list[MigrationStatemen
             rollback_parts.append(f"TABLESPACE {tablespace}")
         if where:
             rollback_parts.append(f"WHERE {where}")
-        if nulls_not_distinct and backend == "postgresql":
-            rollback_parts.append("NULLS NOT DISTINCT")
 
         rollback = " ".join(rollback_parts) + ";"
         return [

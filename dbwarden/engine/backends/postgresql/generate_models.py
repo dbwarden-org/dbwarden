@@ -88,8 +88,8 @@ def _extract_postgresql_meta(
                 sort_rows = connection.execute(
                     text("""
                         SELECT a.attname,
-                               pg_index_column_has_property(i.indexrelid, k, 'asc') AS is_asc,
-                               pg_index_column_has_property(i.indexrelid, k, 'nulls_first') AS nf
+                               pg_index_column_has_property(i.indexrelid, k + 1, 'asc') AS is_asc,
+                               pg_index_column_has_property(i.indexrelid, k + 1, 'nulls_first') AS nf
                         FROM pg_index i
                         CROSS JOIN LATERAL generate_series(0, i.indnkeyatts - 1) AS k
                         JOIN pg_class ci ON ci.oid = i.indexrelid
