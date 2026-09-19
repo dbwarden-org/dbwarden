@@ -281,6 +281,11 @@ def run_migration(
                     )
                 elif autocommit_statements and migration_operation == "rollback":
                     _record_rollback(version=version, db_name=db_name, connection=conn)
+                # MySQL DDL implicitly commits each statement, but the bookkeeping
+                # INSERT above opens a fresh transaction that nothing commits. The
+                # next migration's DDL would commit it implicitly, so the last
+                # migration of a run was silently dropped from the history.
+                conn.commit()
                 return
 
             # For external connections (long-lived), don't use savepoints
