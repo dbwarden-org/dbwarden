@@ -98,7 +98,15 @@ def _postgres_serial_type(column, col_type: str, *, allow_composite: bool = True
         return col_type
     pg_meta = column.pg_meta or {}
     if pg_meta.get("identity") or pg_meta.get("pg_identity"):
-        return col_type
+        # An identity column owns its sequence through GENERATED ... AS IDENTITY,
+        # and the primary-key type mapper has already rewritten the base integer
+        # to SERIAL. Emitting both makes PostgreSQL reject the column with
+        # "both default and identity specified", so hand back the integer type.
+        return {
+            "SERIAL": "INTEGER",
+            "BIGSERIAL": "BIGINT",
+            "SMALLSERIAL": "SMALLINT",
+        }.get(col_type.upper().replace(" ", ""), col_type)
     normalized = col_type.lower().replace(" ", "")
     if normalized in ("biginteger", "bigint"):
         return "BIGSERIAL"
