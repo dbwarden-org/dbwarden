@@ -559,6 +559,7 @@ def enrich_table_pg(
             _pg_partition_strategy(_conn, _regclass_name),
             _pg_exclusion_constraints(_conn, _regclass_name),
             _pg_child_partitions(_conn, _regclass_name, pg_schema),
+            _pg_rls(_conn, _regclass_name),
         ):
             for k, v in update.items():
                 if k == "pg_storage_params" and k in pg_table:
@@ -569,7 +570,6 @@ def enrich_table_pg(
         _pg_column_storage(_conn, _regclass_name, columns_dict, pg_version)
 
         for update in (
-            _pg_rls(_conn, _regclass_name),
             _pg_policies(_conn, table_name, pg_schema),
             _pg_table_grants(_conn, _regclass_name),
             _pg_triggers(_conn, _regclass_name),
