@@ -361,6 +361,18 @@ def _render_postgresql_meta(columns: list[dict], pg_meta: dict | None = None) ->
     for key, value in pg_meta.items():
         if key == "comment":
             lines.append(f"        comment = {value!r}")
+        elif key == "pg_indexes":
+            lines.append("        pg_indexes = [")
+            for idx_entry in value:
+                entry = dict(idx_entry)
+                entry.setdefault("columns", [])
+                kwargs = ", ".join(
+                    f"{k}={v!r}"
+                    for k, v in entry.items()
+                    if v is not None and not (isinstance(v, (list, dict)) and not v and k != "columns")
+                )
+                lines.append(f"            PgIndexSpec({kwargs}),")
+            lines.append("        ]")
         else:
             rendered = _format_meta_value(value)
             if len(rendered) == 1:

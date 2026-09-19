@@ -85,6 +85,8 @@ def _write_models(
                 needs_ch_spec = True
         if any(table.get("pg_meta") for table in tables):
             pg_meta_imports.add("PGTableMeta")
+        if any((table.get("pg_meta") or {}).get("pg_indexes") for table in tables):
+            pg_meta_imports.add("PgIndexSpec")
         if any(table.get("my_meta") for table in tables):
             my_meta_imports.add("MyTableMeta")
         if any(table.get("sq_meta") for table in tables):
@@ -160,6 +162,8 @@ def _write_models(
             needs_pg_spec = True
         if table.get("pg_meta"):
             needs_pg_base.add("PGTableMeta")
+        if (table.get("pg_meta") or {}).get("pg_indexes"):
+            needs_pg_base.add("PgIndexSpec")
         if any(col.get("my_meta") for col in table["columns"]):
             needs_my_base.add("MyColumnMeta")
             needs_my_base.add("MyTableMeta")

@@ -213,7 +213,11 @@ def extract_table_from_model(
                     storage_params.update(model_storage)
                 if "pg_fillfactor" in pg_table and "fillfactor" not in storage_params:
                     storage_params["fillfactor"] = pg_table["pg_fillfactor"]
-                pg_table["pg_storage_params"] = storage_params or None
+                # ``pg_storage_params`` is the public spelling a model uses;
+                # the diff and the reverse-engineering writer both read it, so
+                # it must reach the model spec rather than be dropped here.
+                if storage_params:
+                    pg_table["pg_storage_params"] = storage_params
             if type(dw_meta.backend_table).__name__ == "PgViewSpec":
                 object_type = "materialized_view" if dw_meta.backend_table.materialized else "view"
                 pg_view_definition = dw_meta.backend_table.query
@@ -240,7 +244,8 @@ def extract_table_from_model(
                     storage_params.update(attrs_storage)
                 if "pg_fillfactor" in pg_table and "fillfactor" not in storage_params:
                     storage_params["fillfactor"] = pg_table["pg_fillfactor"]
-                pg_table["pg_storage_params"] = storage_params or None
+                if storage_params:
+                    pg_table["pg_storage_params"] = storage_params
             if schema is None and type(dw_meta.backend_table).__name__ == "PgTableSpec":
                 schema = dw_meta.backend_table.schema
             if not my_table and any(k.startswith("my_") for k in getattr(dw_meta, "table_attrs", {})):

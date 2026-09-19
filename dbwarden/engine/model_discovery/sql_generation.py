@@ -231,6 +231,16 @@ def generate_create_table_sql(table: ModelTable, db_name: str | None = None) -> 
             col_type = col.type
         col_name = _quote_identifier(col.name, backend)
         col_def = f"    {col_name} {col_type}"
+        if backend == "postgresql":
+            # Collation and compression are declared on the column, not applied
+            # afterwards, so a fresh CREATE TABLE carries them.
+            pg_meta = col.pg_meta or {}
+            collation = pg_meta.get("pg_collation")
+            if collation:
+                col_def += f' COLLATE "{collation}"'
+            compression = pg_meta.get("pg_compression")
+            if compression:
+                col_def += f" COMPRESSION {compression}"
         is_serial = (
             col.type.upper() in ("SERIAL", "BIGSERIAL")
             if backend == "postgresql"
@@ -312,7 +322,12 @@ def generate_create_table_sql(table: ModelTable, db_name: str | None = None) -> 
         sql = f"CREATE TABLE IF NOT EXISTS {qname} PARTITION OF {qparent} {bound}"
     else:
         unlogged = "UNLOGGED " if table.pg_table and table.pg_table.get("pg_unlogged") else ""
-        sql = f"CREATE {unlogged}TABLE IF NOT EXISTS {qname} (\n{columns_sql}\n)"
+        pg_storage_params = table.pg_table.get("pg_storage_params") if table.pg_table else None
+        with_clause = ""
+        if backend == "postgresql" and pg_storage_params:
+            opts = ", ".join(f"{k} = {v}" for k, v in pg_storage_params.items())
+            with_clause = f" WITH ({opts})"
+        sql = f"CREATE {unlogged}TABLE IF NOT EXISTS {qname} (\n{columns_sql}\n){with_clause}"
     if backend == "clickhouse":
         if table.object_type == "table":
             sql += _render_clickhouse_table_suffix(table)
