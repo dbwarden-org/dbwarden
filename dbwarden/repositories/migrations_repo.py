@@ -441,8 +441,30 @@ def fetch_latest_versioned_migration(
     )
 
 
+def ensure_schema_exists(db_name: str | None = None) -> None:
+    """Create the configured Postgres schema before bookkeeping tables.
+
+    Bookkeeping queries reference ``<schema>._dbwarden_migrations``, but the
+    schema may only be created by a user migration (e.g. ``cms``). On a fresh
+    database the first CREATE then fails with InvalidSchemaName.
+    """
+    from dbwarden.config import get_database
+    from dbwarden.connection.queries import get_schema_name
+
+    try:
+        if get_database(db_name).database_type != "postgresql":
+            return
+    except Exception:
+        return
+
+    schema = get_schema_name(db_name).replace('"', '""')
+    with get_db_connection(db_name) as connection:
+        connection.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema}"'))
+
+
 def create_migrations_table_if_not_exists(db_name: str | None = None) -> None:
     """Create the migrations table if it doesn't exist."""
+    ensure_schema_exists(db_name)
     with get_db_connection(db_name) as connection:
         connection.execute(
             text(get_query(QueryMethod.CREATE_MIGRATIONS_TABLE, db_name))

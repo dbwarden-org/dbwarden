@@ -11,6 +11,9 @@ logger = get_component_logger("lock")
 
 def create_lock_table_if_not_exists(db_name: str | None = None) -> None:
     """Create the lock table if it doesn't exist."""
+    from dbwarden.repositories.migrations_repo import ensure_schema_exists
+
+    ensure_schema_exists(db_name)
     with get_db_connection(db_name) as connection:
         connection.execute(text(get_query(QueryMethod.CREATE_LOCK_TABLE, db_name)))
         try:
