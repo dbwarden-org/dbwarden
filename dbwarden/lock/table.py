@@ -246,6 +246,17 @@ _READ_STATUS_ROW = {
     """,
 }
 
+# MariaDB shares MySQL's DDL and syntax; alias it so a config declaring
+# ``database_type = "mariadb"`` does not fall back to the SQLite templates.
+for _queries in (
+    _LOCK_TABLE_V2_DDL,
+    _UPSERT_STATUS_ROW,
+    _UPDATE_HEARTBEAT,
+    _UPDATE_STATE,
+    _READ_STATUS_ROW,
+):
+    _queries.setdefault("mariadb", _queries["mysql"])
+
 
 def _get_db_type(connection: Any) -> str:
     """Infer database type from the connection's dialect."""
@@ -308,7 +319,7 @@ def _ensure_v2_schema(connection: Any, db_type: str, schema: str = "public") -> 
                 {"schema": schema},
             )
             columns = {row[0] for row in result.fetchall()}
-        elif db_type == "mysql":
+        elif db_type in ("mysql", "mariadb"):
             result = connection.execute(
                 text(
                     "SELECT column_name FROM information_schema.columns "
