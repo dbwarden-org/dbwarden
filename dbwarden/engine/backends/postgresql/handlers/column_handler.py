@@ -12,6 +12,32 @@ from dbwarden.engine.snapshot import (
 )
 
 
+def _snapshot_type_sql(snap_col: dict[str, Any]) -> str:
+    """Rebuild a full SQL type from a snapshot column entry.
+
+    The snapshot stores the base type and its length/precision separately, as
+    ``{"type": "varchar", "length": 255}``. Handing the bare base type to a
+    column-definition builder produces ``varchar`` without a length, which
+    MySQL rejects, so reattach the parameters.
+    """
+    base = str(snap_col.get("type") or "")
+    if not base or "(" in base:
+        return base
+    lower = base.lower()
+    length = snap_col.get("length")
+    if length is not None and lower in (
+        "varchar", "character varying", "char", "character", "varbinary", "binary",
+    ):
+        return f"{base}({length})"
+    precision = snap_col.get("precision")
+    if precision is not None and lower in ("decimal", "numeric"):
+        scale = snap_col.get("scale")
+        if scale is not None:
+            return f"{base}({precision},{scale})"
+        return f"{base}({precision})"
+    return base
+
+
 class ColumnHandler(ObjectHandler):
     object_type: str = "column"
     op_types: tuple[str, ...] = (
@@ -131,7 +157,7 @@ class ColumnHandler(ObjectHandler):
                 snap_col = snap_columns[col_name]
                 model_col = model_columns_dict[col_name]
 
-                snap_raw = snap_col.get("type", "")
+                snap_raw = _snapshot_type_sql(snap_col)
                 if backend == "clickhouse":
                     snap_raw = _strip_ch_type_wrappers(snap_raw)
                     model_raw = model_col.ch_meta.get("ch_type", str(model_col.type))
@@ -146,12 +172,12 @@ class ColumnHandler(ObjectHandler):
                         object_type="alter_column_type",
                         upgrade_attrs={
                             "table": tname, "column": col_name,
-                            "snap_type": snap_col.get("type", ""),
+                            "snap_type": _snapshot_type_sql(snap_col),
                             "model_type": op_model_type,
                         },
                         rollback_attrs={
                             "table": tname, "column": col_name,
-                            "snap_type": snap_col.get("type", ""),
+                            "snap_type": _snapshot_type_sql(snap_col),
                             "model_type": op_model_type,
                         },
                     ))
@@ -159,12 +185,12 @@ class ColumnHandler(ObjectHandler):
                         object_type="alter_column_type",
                         upgrade_attrs={
                             "table": tname, "column": col_name,
-                            "snap_type": snap_col.get("type", ""),
+                            "snap_type": _snapshot_type_sql(snap_col),
                             "model_type": op_model_type,
                         },
                         rollback_attrs={
                             "table": tname, "column": col_name,
-                            "snap_type": snap_col.get("type", ""),
+                            "snap_type": _snapshot_type_sql(snap_col),
                             "model_type": op_model_type,
                         },
                     ))
@@ -181,7 +207,7 @@ class ColumnHandler(ObjectHandler):
                         rollback_attrs={
                             "table": tname, "column": col_name,
                             "nullable": snap_nullable,
-                            "col_type": snap_col.get("type", ""),
+                            "col_type": _snapshot_type_sql(snap_col),
                         },
                     ))
                     rollback_ops.append(Op(
@@ -189,7 +215,7 @@ class ColumnHandler(ObjectHandler):
                         upgrade_attrs={
                             "table": tname, "column": col_name,
                             "nullable": snap_nullable,
-                            "col_type": snap_col.get("type", ""),
+                            "col_type": _snapshot_type_sql(snap_col),
                         },
                         rollback_attrs={
                             "table": tname, "column": col_name,
@@ -226,7 +252,7 @@ class ColumnHandler(ObjectHandler):
                         rollback_attrs={
                             "table": tname, "column": col_name,
                             "comment": snap_col_comment,
-                            "col_type": snap_col.get("type", ""),
+                            "col_type": _snapshot_type_sql(snap_col),
                             "nullable": snap_nullable,
                             "autoincrement": snap_col.get("autoincrement", False),
                             "my_meta": snap_my_col,
@@ -237,7 +263,7 @@ class ColumnHandler(ObjectHandler):
                         upgrade_attrs={
                             "table": tname, "column": col_name,
                             "comment": snap_col_comment,
-                            "col_type": snap_col.get("type", ""),
+                            "col_type": _snapshot_type_sql(snap_col),
                             "nullable": snap_nullable,
                             "autoincrement": snap_col.get("autoincrement", False),
                             "my_meta": snap_my_col,
@@ -274,13 +300,13 @@ class ColumnHandler(ObjectHandler):
                         upgrade_attrs={
                             "table": tname, "column": col_name,
                             "col_type": model_col.type,
-                            "snap_type": snap_col.get("type", ""),
+                            "snap_type": _snapshot_type_sql(snap_col),
                             "from_pg_column": snap_pg_col,
                             "to_pg_column": model_pg_meta,
                         },
                         rollback_attrs={
                             "table": tname, "column": col_name,
-                            "col_type": snap_col.get("type", ""),
+                            "col_type": _snapshot_type_sql(snap_col),
                             "snap_type": model_col.type,
                             "from_pg_column": model_pg_meta,
                             "to_pg_column": snap_pg_col,
@@ -290,7 +316,7 @@ class ColumnHandler(ObjectHandler):
                         object_type="alter_pg_column_meta",
                         upgrade_attrs={
                             "table": tname, "column": col_name,
-                            "col_type": snap_col.get("type", ""),
+                            "col_type": _snapshot_type_sql(snap_col),
                             "snap_type": model_col.type,
                             "from_pg_column": model_pg_meta,
                             "to_pg_column": snap_pg_col,
@@ -298,7 +324,7 @@ class ColumnHandler(ObjectHandler):
                         rollback_attrs={
                             "table": tname, "column": col_name,
                             "col_type": model_col.type,
-                            "snap_type": snap_col.get("type", ""),
+                            "snap_type": _snapshot_type_sql(snap_col),
                             "from_pg_column": snap_pg_col,
                             "to_pg_column": model_pg_meta,
                         },
@@ -306,13 +332,23 @@ class ColumnHandler(ObjectHandler):
 
                 snap_my_col = snap_col.get("my_column") or {}
                 model_my_col = model_col.my_meta or {}
+                # MySQL reports the column's charset and collation explicitly,
+                # including values inherited from the table default. A model
+                # that does not mention them is not asking to change them, so
+                # only compare what the model actually declares.
+                for _tuning_key in ("my_charset", "my_collate"):
+                    if _tuning_key not in model_my_col:
+                        snap_my_col = {
+                            k: v for k, v in snap_my_col.items() if k != _tuning_key
+                        }
                 if snap_my_col != model_my_col:
+                    snap_type_sql = _snapshot_type_sql(snap_col)
                     upgrade_ops.append(Op(
                         object_type="alter_my_column_meta",
                         upgrade_attrs={
                             "table": tname, "column": col_name,
                             "col_type": model_col.type,
-                            "snap_type": snap_col.get("type", ""),
+                            "snap_type": snap_type_sql,
                             "from_my_column": snap_my_col,
                             "to_my_column": model_my_col,
                             "nullable": model_col.nullable,
@@ -325,7 +361,7 @@ class ColumnHandler(ObjectHandler):
                         },
                         rollback_attrs={
                             "table": tname, "column": col_name,
-                            "col_type": snap_col.get("type", ""),
+                            "col_type": snap_type_sql,
                             "snap_type": model_col.type,
                             "from_my_column": model_my_col,
                             "to_my_column": snap_my_col,
@@ -342,7 +378,7 @@ class ColumnHandler(ObjectHandler):
                         object_type="alter_my_column_meta",
                         upgrade_attrs={
                             "table": tname, "column": col_name,
-                            "col_type": snap_col.get("type", ""),
+                            "col_type": snap_type_sql,
                             "snap_type": model_col.type,
                             "from_my_column": model_my_col,
                             "to_my_column": snap_my_col,
@@ -357,7 +393,7 @@ class ColumnHandler(ObjectHandler):
                         rollback_attrs={
                             "table": tname, "column": col_name,
                             "col_type": model_col.type,
-                            "snap_type": snap_col.get("type", ""),
+                            "snap_type": snap_type_sql,
                             "from_my_column": snap_my_col,
                             "to_my_column": model_my_col,
                             "nullable": model_col.nullable,
@@ -426,7 +462,7 @@ class ColumnHandler(ObjectHandler):
         snap_autoinc = snap_col.get("autoincrement", False)
         model_autoinc = model_col.autoincrement
         model_type_lower = str(model_col.type).lower()
-        snap_type_lower = str(snap_col.get("type", "")).lower()
+        snap_type_lower = str(_snapshot_type_sql(snap_col)).lower()
         model_has_identity = bool((model_col.pg_meta or {}).get("pg_identity"))
         snap_has_identity = bool((snap_col.get("pg_column") or {}).get("identity"))
 
@@ -477,7 +513,7 @@ class ColumnHandler(ObjectHandler):
                 rollback_attrs={
                     "table": tname, "column": col_name,
                     "autoincrement": bool(snap_autoinc),
-                    "col_type": snap_col.get("type", ""),
+                    "col_type": _snapshot_type_sql(snap_col),
                     "nullable": snap_col.get("nullable", True),
                 },
             ))
@@ -486,7 +522,7 @@ class ColumnHandler(ObjectHandler):
                 upgrade_attrs={
                     "table": tname, "column": col_name,
                     "autoincrement": bool(snap_autoinc),
-                    "col_type": snap_col.get("type", ""),
+                    "col_type": _snapshot_type_sql(snap_col),
                     "nullable": snap_col.get("nullable", True),
                 },
                 rollback_attrs={
@@ -528,7 +564,7 @@ class ColumnHandler(ObjectHandler):
                 rollback_attrs={
                     "table": tname, "column": col_name,
                     "default": snap_default,
-                    "col_type": snap_col.get("type", ""),
+                    "col_type": _snapshot_type_sql(snap_col),
                     "nullable": snap_col.get("nullable", True),
                     "my_meta": snap_col.get("my_column", {}),
                 },
@@ -538,7 +574,7 @@ class ColumnHandler(ObjectHandler):
                 upgrade_attrs={
                     "table": tname, "column": col_name,
                     "default": snap_default,
-                    "col_type": snap_col.get("type", ""),
+                    "col_type": _snapshot_type_sql(snap_col),
                     "nullable": snap_col.get("nullable", True),
                     "my_meta": snap_col.get("my_column", {}),
                 },
