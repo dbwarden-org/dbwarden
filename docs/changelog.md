@@ -41,6 +41,15 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 
 ### Fixed
 
+- **A PostgreSQL identity column is no longer rendered as `SERIAL` too.** A model declaring `pg.field(identity=...)` on an integer primary key had the base type rewritten to `SERIAL` by the primary-key mapper and *also* rendered as `GENERATED ... AS IDENTITY`, and PostgreSQL rejected the column with *both default and identity specified*.
+- **PostgreSQL index sort options are captured.** The snapshot extractor and `generate-models` called `pg_index_column_has_property` with the 0-based series index where the function is 1-based, so no index ever recorded its `ASC`/`DESC` or `NULLS FIRST`/`NULLS LAST`.
+- **`NULLS NOT DISTINCT` is emitted in the right position.** It was appended after `WHERE`, which PostgreSQL cannot parse; it now precedes `INCLUDE` and `WHERE` in both the upgrade and the rollback.
+- **PostgreSQL storage parameters, column `COLLATE`, and `COMPRESSION` are emitted.** `pg_storage_params` was dropped from the model spec, `CREATE TABLE` never rendered a `WITH (...)` storage clause, and neither collation nor compression reached the DDL.
+- **Reverse-engineered PostgreSQL models keep their index list.** `generate-models` now writes `pg_indexes` entries as `PgIndexSpec` objects, emitting `columns=[]` for expression indexes.
+- **MySQL and MariaDB snapshot types carry their length and precision.** A reverse-engineered `varchar` reached the column-definition builder as the bare base type and raised *Incomplete MySQL column type*, so `diff` never converged. Inherited charset and collation are also no longer treated as model differences.
+- **The last migration of a MySQL or MariaDB run is recorded.** Each DDL statement implicitly commits, but the bookkeeping `INSERT` opened a transaction nothing committed; the next migration's DDL committed it implicitly, so the final migration was silently dropped from the history and re-applying it failed with *Duplicate column name*.
+- **MariaDB uses the MySQL lock DDL instead of the SQLite fallback.** The v2 lock templates are keyed by database type and `mariadb` was not a key, so `CREATE TABLE` used `TEXT` for the namespace primary key and MariaDB rejected it with *BLOB/TEXT column 'namespace' used in key specification without a key length*.
+- **The configured PostgreSQL schema is created before the bookkeeping tables.** Bookkeeping queries reference `<schema>._dbwarden_migrations`, but the schema may only be created by a user migration; on a fresh database the first `CREATE` failed with `InvalidSchemaName`.
 - **`_parse_plan_safety` no longer crashes** on `operations: null` in plan files.
 - **`ProjectConfig.impact_paths` default** now matches spec (`["."]`).
 - **Plugin-registered lifecycle hooks** are now collected and executed (previously silently ignored).
