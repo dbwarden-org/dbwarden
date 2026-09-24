@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List, Optional, Tuple
 
-from dbwarden.engine.model_discovery import generate_add_column_sql
 from dbwarden.engine.core.protocol import ObjectHandler, Op, RunPhase
+from dbwarden.engine.model_discovery import generate_add_column_sql
 from dbwarden.engine.snapshot import (
     MigrationStatement,
     StatementOrder,
@@ -41,6 +41,7 @@ def _snapshot_type_sql(snap_col: dict[str, Any]) -> str:
 class ColumnHandler(ObjectHandler):
     object_type: str = "column"
     op_types: tuple[str, ...] = (
+        "safe_type_contract",
         "add_column",
         "drop_column",
         "alter_column_type",
@@ -86,8 +87,8 @@ class ColumnHandler(ObjectHandler):
             _get_backend,
             _model_type_str,
             _strip_ch_type_wrappers,
-            snap_to_model_key,
             detect_renames,
+            snap_to_model_key,
         )
 
         upgrade_ops: list[Op] = []
@@ -537,7 +538,10 @@ class ColumnHandler(ObjectHandler):
         self, tname, col_name, snap_col, model_col, backend,
         up_ops, rb_ops,
     ):
-        from dbwarden.engine.snapshot import _normalize_default, _normalize_mysql_default
+        from dbwarden.engine.snapshot import (
+            _normalize_default,
+            _normalize_mysql_default,
+        )
 
         snap_default = _normalize_default(snap_col.get("default"))
         model_default = _normalize_default(model_col.default)
@@ -606,7 +610,43 @@ class ColumnHandler(ObjectHandler):
         stmts: list[MigrationStatement] = []
         table = op.upgrade_attrs["table"]
 
-        if op.object_type == "rename_column":
+        if op.object_type == "safe_type_contract":
+            from dbwarden.engine.backends.postgresql.render import _quote_pg
+            table = ".".join(_quote_pg(part) for part in table.split("."))
+            attrs = op.upgrade_attrs
+            column, temporary = _quote_pg(attrs["column"]), _quote_pg(attrs["temporary"])
+            old_type = attrs["old_definition"]["type"]
+            new_type = attrs["definition"]["type"]
+            def restore(definition):
+                sql = []
+                if definition.get("default") is not None:
+                    sql.append(f"ALTER TABLE {table} ALTER COLUMN {column} SET DEFAULT {definition['default']};")
+                if definition.get("nullable") is False:
+                    sql.append(f"ALTER TABLE {table} ALTER COLUMN {column} SET NOT NULL;")
+                if definition.get("comment"):
+                    comment = definition["comment"].replace("'", "''")
+                    sql.append(f"COMMENT ON COLUMN {table}.{column} IS '{comment}';")
+                return "\n".join(sql)
+            stmts.append(MigrationStatement(
+                order=StatementOrder.DROP_COLUMN,
+                upgrade_sql=(
+                    f"LOCK TABLE {table} IN ACCESS EXCLUSIVE MODE;\n"
+                    f"DO $dbwarden$ BEGIN IF EXISTS (SELECT 1 FROM {table} WHERE "
+                    f"{temporary} IS DISTINCT FROM CAST({column} AS {new_type}) OR "
+                    f"CAST(CAST({column} AS {new_type}) AS {old_type}) IS DISTINCT FROM {column}) "
+                    "THEN RAISE EXCEPTION 'dbwarden: complete and verify the lossless backfill before contract'; END IF; END $dbwarden$;\n"
+                    f"ALTER TABLE {table} DROP COLUMN {column};\n"
+                    f"ALTER TABLE {table} RENAME COLUMN {temporary} TO {column};\n"
+                    + restore(attrs["target_definition"])
+                ),
+                rollback_sql=(
+                    f"ALTER TABLE {table} RENAME COLUMN {column} TO {temporary};\n"
+                    f"ALTER TABLE {table} ADD COLUMN {column} {old_type};\n"
+                    f"UPDATE {table} SET {column} = CAST({temporary} AS {old_type});\n"
+                    + restore(attrs["old_definition"])
+                ),
+            ))
+        elif op.object_type == "rename_column":
             old_name = op.upgrade_attrs["old_name"]
             new_name = op.upgrade_attrs["new_name"]
             stmts.append(MigrationStatement(
@@ -627,6 +667,21 @@ class ColumnHandler(ObjectHandler):
                 ))
             else:
                 col_def = op.upgrade_attrs.get("definition", {})
+                if col_def.get("type"):
+                    from dbwarden.engine.core.model_state import (
+                        reconstruct_model_column,
+                    )
+
+                    model_col = reconstruct_model_column({"name": column, **col_def})
+                    upgrade = generate_add_column_sql(table, model_col, db_name)
+                    if op.upgrade_attrs.get("safe_type_source"):
+                        upgrade += (f"\n-- Backfill {table}.{column} from {op.upgrade_attrs['safe_type_source']} in bounded key batches."
+                                    "\n-- Verify dual writes and complete backfill before applying the deferred contract.")
+                    return [MigrationStatement(
+                        order=StatementOrder.ADD_COLUMN,
+                        upgrade_sql=upgrade,
+                        rollback_sql=f"ALTER TABLE {table} DROP COLUMN {column}",
+                    )]
                 col_type = col_def.get("type")
                 if not col_type:
                     col_type = _missing_def_placeholder(backend)
@@ -656,6 +711,7 @@ class ColumnHandler(ObjectHandler):
             alter_up, alter_rb = _build_alter_type_sql(
                 table, column, model_type, backend,
                 old_type=op.upgrade_attrs.get("snap_type", ""),
+                postgres_auto_using=op.upgrade_attrs.get("postgres_auto_using", False),
             )
             stmts.append(MigrationStatement(
                 order=StatementOrder.ALTER_COLUMN_TYPE,
