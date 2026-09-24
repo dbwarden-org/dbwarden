@@ -155,7 +155,7 @@ A rebuild is a single `MigrationStatement` whose SQL is a multi-statement script
 
 ## Operation catalog
 
-Complete reference of the ALTER shapes dbwarden generates for SQLite, with their classification. Two systems apply: the **`--force` gate** (blocks migration generation/apply on dangerous changes; shown as the Safety column below, `—` = not gated) and the **impact-plan severity** reported by `dbwarden check-impact`, which additionally rates `drop_column` as ERROR and `drop_index` / `drop_foreign_key` / `recreate_sq_table` as WARNING.
+Complete reference of the ALTER shapes dbwarden generates for SQLite, with their classification. Two systems apply: the **`--force` gate** (blocks migration generation/apply on dangerous changes; shown as the Safety column below, `—` = not gated) and the **impact-plan severity** reported by `dbwarden check-impact`, which additionally rates `drop_column` as ERROR and `drop_index` / `drop_foreign_key` / `recreate_sq_table` as WARNING. Legacy `WARNING` / `ERROR` display labels map to `WARN` / `CRITICAL`. Use the generated plan for operation-specific decisions and the [safety scope contract](../../correctness/safety-scoped-migrations.md) for gates.
 
 ### Native ALTER operations
 
