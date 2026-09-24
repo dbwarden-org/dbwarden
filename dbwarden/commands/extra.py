@@ -26,6 +26,7 @@ def diff_cmd(
     verbose: bool = False,
     database: str | None = None,
     offline: bool = False,
+    data: bool = False,
 ) -> None:
     """
     Show structural differences between models and database.
@@ -79,9 +80,23 @@ def diff_cmd(
     upgrade_ops, rollback_ops = diff_models_against_snapshot(
         tables, snapshot, database=database, db_name=actual_db_name
     )
+    data_findings = []
+    if data:
+        from dbwarden.data.convergence import project_data_findings
+        data_findings = project_data_findings(database, offline=offline)
+        if output_format == "json":
+            from dataclasses import asdict
+            _, _, changes = snapshot_diff_to_sql(upgrade_ops, rollback_ops, database=database, db_name=actual_db_name)
+            emit_json({"schema": [asdict(change) for change in changes], "data": data_findings})
+            return
+        for finding in data_findings:
+            warning(f"{finding['declaration_id']}: {finding['message']}")
 
     if not upgrade_ops:
-        success("No differences found between models and database.")
+        if output_format == "json":
+            _display_json([])
+        elif output_format != "sql" and not data_findings:
+            success("No differences found between models and database.")
         return
 
     from dbwarden.engine.snapshot import _apply_rename_intents
