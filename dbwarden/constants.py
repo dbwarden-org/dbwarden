@@ -9,6 +9,7 @@ RUNS_ALWAYS_FILE_PREFIX: Final[str] = "RA__"
 RUNS_ON_CHANGE_FILE_PREFIX: Final[str] = "ROC__"
 VERSION_FILE_PREFIX: Final[str] = "V"
 DEFAULT_DELIMITER: Final[str] = ";"
+INTERNAL_TABLE_PREFIXES: Final[tuple[str, ...]] = (".inner", "_dbwarden_", "dbwarden_lock")
 
 DBWARDEN_VERSION: Final[str] = version("dbwarden")
 
