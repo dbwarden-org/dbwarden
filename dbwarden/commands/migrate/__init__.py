@@ -5,35 +5,43 @@ import signal
 import sys
 import time
 import uuid
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
+from dbwarden import __version__
 from dbwarden.commands.backup import create_backup
+from dbwarden.commands.migrate.hooks import (
+    MigrationFailureContext,
+    MigrationPlanEntry,
+    MigrationProgressContext,
+    PostMigrationContext,
+    PostMigrationRunContext,
+    PreMigrationContext,
+    PreMigrationRunContext,
+    execute_failure_hook,
+    execute_observer_hook,
+    execute_veto_hook,
+)
 from dbwarden.commands.migrate.state import (
     _write_migration_snapshot,
     _write_model_state,
 )
-from dbwarden.commands.migrate.hooks import (
-    MigrationPlanEntry,
-    PreMigrationRunContext,
-    PreMigrationContext,
-    MigrationProgressContext,
-    PostMigrationContext,
-    MigrationFailureContext,
-    PostMigrationRunContext,
-    execute_veto_hook,
-    execute_observer_hook,
-    execute_failure_hook,
-)
-from dbwarden.engine.preflight import run_preflight
 from dbwarden.constants import RUNS_ALWAYS_FILE_PREFIX
+from dbwarden.engine.discovery import (
+    filter_model_tables_by_name,
+    get_all_model_tables,
+    validate_model_tables_exist,
+)
 from dbwarden.engine.file_parser import parse_upgrade_statements
-from dbwarden.exceptions import DBDisconnectedError, LockError
+from dbwarden.engine.offline import model_state_to_dict
+from dbwarden.engine.preflight import run_preflight
 from dbwarden.engine.version import (
     get_migrations_directory,
     get_runs_always_filepaths,
     get_runs_on_change_filepaths,
 )
+from dbwarden.exceptions import DBDisconnectedError, LockError
+from dbwarden.lock import acquire_lock, check_lock, release_lock
 from dbwarden.logging import get_logger
 from dbwarden.metrics import (
     increment_migration_errors,
@@ -43,7 +51,16 @@ from dbwarden.metrics import (
     set_pending_migrations,
     set_schema_version,
 )
-from dbwarden import __version__
+from dbwarden.output import error, info, section, sql as render_sql, success, warning
+from dbwarden.repositories import (
+    create_lock_table_if_not_exists,
+    create_migrations_table_if_not_exists,
+    get_applied_checksums,
+    get_existing_runs_always_filenames,
+    get_migrated_versions,
+    run_migration,
+    run_repeatable_migration,
+)
 
 
 def _collect_hooks(
@@ -55,7 +72,7 @@ def _collect_hooks(
     app hooks (configuration import order), then per-database app hooks
     (declaration order). Section 8.
     """
-    from dbwarden.plugin import HookRegistry, _APP_HOOKS_SOURCE
+    from dbwarden.plugin import _APP_HOOKS_SOURCE, HookRegistry
 
     hooks = []
     # 1. Plugin hooks (registered via PluginRegistrar.register)
@@ -126,23 +143,6 @@ class MigrationSignalHandler:
     def is_interrupted(self) -> bool:
         """Check if a signal was received."""
         return self._interrupted
-from dbwarden.output import error, info, section, sql as render_sql, success, warning
-from dbwarden.repositories import (
-    create_migrations_table_if_not_exists,
-    create_lock_table_if_not_exists,
-    get_existing_runs_always_filenames,
-    get_applied_checksums,
-    get_migrated_versions,
-    run_migration,
-    run_repeatable_migration,
-)
-from dbwarden.lock import acquire_lock, check_lock, release_lock
-from dbwarden.engine.discovery import (
-    get_all_model_tables,
-    filter_model_tables_by_name,
-    validate_model_tables_exist,
-)
-from dbwarden.engine.offline import model_state_to_dict
 
 
 def set_baseline_migration(
@@ -162,29 +162,41 @@ def set_baseline_migration(
     Returns:
         list[str]: List of applied versions.
     """
-    from dbwarden.engine.file_parser import parse_migration_header
-    from dbwarden.engine.checksum import calculate_checksum
     from dbwarden.engine.version import get_migration_filepaths_by_version
+    from dbwarden.merge.marker import is_superseded
+    from dbwarden.repositories.migrations_repo import _record_upgrade
 
     filepaths = get_migration_filepaths_by_version(migrations_dir)
+    existing = set(get_migrated_versions(db_name))
 
     applied = []
     for v, fp in sorted(filepaths.items()):
-        if v <= version:
+        if v <= version and v not in existing and not is_superseded(fp):
             statements = parse_upgrade_statements(fp)
-            checksum = calculate_checksum(statements)
-            filename = fp.split("/")[-1]
-            description = parse_migration_header(fp).description or filename
-
-            run_migration(
+            from dbwarden.data.integration import execute_migration_bundle, load_data_plan
+            data_plan = load_data_plan(fp, db_name)
+            if data_plan is not None:
+                kwargs = dict(version=v, filename=Path(fp).name, migration_type="baseline",
+                              direction="upgrade", sql_statements=statements, db_name=db_name, baseline=True)
+                if connection is not None:
+                    execute_migration_bundle(connection, data_plan, **kwargs)
+                else:
+                    from dbwarden.connection.connection import get_db_connection
+                    with get_db_connection(db_name) as data_connection:
+                        execute_migration_bundle(data_connection, data_plan, **kwargs)
+                applied.append(v)
+                continue
+            _record_upgrade(
                 sql_statements=statements,
                 version=v,
-                migration_operation="upgrade",
-                filename=filename,
+                filename=Path(fp).name,
+                migration_type="baseline",
                 db_name=db_name,
                 connection=connection,
             )
             applied.append(v)
+    if connection is not None:
+        connection.commit()
 
     return applied
 
@@ -203,19 +215,22 @@ def _run_versioned_migrations(
     defer_snapshots: bool,
     batch_snapshots: int | None,
     config: Any,
+    reconciliation: bool = False,
+    reapply_data: bool = False,
 ) -> tuple[int, str]:
-    from dbwarden.engine.checksum import calculate_checksum
     from dbwarden.commands.perf import PhaseTimer
+    from dbwarden.engine.checksum import calculate_checksum
 
     versioned_count = 0
     latest_version = "0"
 
     for version, filepath in filepaths_by_version.items():
-        filename = filepath.split("/")[-1]
+        filename = Path(filepath).name
         sql_statements = parse_upgrade_statements(filepath)
         checksum = calculate_checksum(sql_statements)
-
-        if checksum in applied_checksums:
+        from dbwarden.data.integration import load_data_plan
+        data_plan = load_data_plan(filepath, db_name)
+        if data_plan is None and checksum in applied_checksums:
             logger.log_migration_skipped(version, filename, checksum)
             continue
 
@@ -283,7 +298,7 @@ def _run_versioned_migrations(
 
         run_migration(
             sql_statements=sql_statements,
-            version=version,
+            version=None if reconciliation else version,
             migration_operation="upgrade",
             filename=filename,
             db_name=db_name,
@@ -292,9 +307,14 @@ def _run_versioned_migrations(
             namespace="default",
             fencing_token=fencing_token,
             progress_callback=_on_progress,
+            # Data-bundle kwargs only when a frozen bundle exists; they are
+            # accepted by run_migration once the repositories merge lands, and
+            # plain migrations keep calling it with the legacy signature.
+            **({"migration_path": filepath, "reapply_data": reapply_data} if data_plan is not None else {}),
+            **({"migration_type": "reconciliation"} if reconciliation else {}),
         )
 
-        if not defer_snapshots:
+        if not defer_snapshots and not reconciliation:
             with PhaseTimer(logger, "Snapshot write", perf=perf):
                 _write_migration_snapshot(
                     db_name=db_name,
@@ -399,8 +419,9 @@ def _run_always_migrations(
     fencing_token: int,
     existing_runs_always: set[str],
 ) -> None:
+    history_names = {PureWindowsPath(name).name: name for name in existing_runs_always}
     for filepath in runs_always_filepaths:
-        filename = filepath.split("/")[-1]
+        filename = history_names.get(Path(filepath).name, Path(filepath).name)
         sql_statements = parse_upgrade_statements(filepath)
 
         plan_entry = MigrationPlanEntry(
@@ -476,8 +497,13 @@ def _run_on_change_migrations(
     migration_conn: Any,
     fencing_token: int,
 ) -> None:
+    if not runs_on_change_filepaths:
+        return
+    from dbwarden.repositories import get_existing_runs_on_change_filenames_to_checksums
+
+    history_names = {PureWindowsPath(name).name: name for name in get_existing_runs_on_change_filenames_to_checksums(db_name)}
     for filepath in runs_on_change_filepaths:
-        filename = filepath.split("/")[-1]
+        filename = history_names.get(Path(filepath).name, Path(filepath).name)
         sql_statements = parse_upgrade_statements(filepath)
 
         plan_entry = MigrationPlanEntry(
@@ -543,7 +569,12 @@ def migrate_single(
     perf: bool = False,
     defer_snapshots: bool = False,
     force: bool = False,
-) -> None:
+    max_severity: str | None = None,
+    data: bool = False,
+    reapply_data: bool = False,
+    reconciliation_dir: str | None = None,
+    reconciliation_complete=None,
+):
     """
     Apply pending migrations to a single database.
 
@@ -560,12 +591,28 @@ def migrate_single(
         apply_seeds: Apply pending seeds after migrations (overrides config).
         perf: Emit per-statement timing breakdowns for executed SQL.
         defer_snapshots: Write only the final schema snapshot for a batch.
+        force: Acknowledge warning-level safety issues (Section 7.3).
+        max_severity: Severity ceiling (SAFE/INFO/WARN/CRITICAL). Stops
+            before higher-severity or UNKNOWN files; returns the deferred stop.
+        data: Preview frozen data bundles (requires dry_run).
+        reapply_data: Re-execute data bundles for already-applied migrations.
+        reconciliation_dir: Apply reconciled migration files from this directory.
+        reconciliation_complete: Optional callable invoked with the migration
+            connection after reconciliation migrations finish.
     """
     from dbwarden.commands.perf import PhaseTimer
     from dbwarden.config import get_database
     from dbwarden.plugin import validate_migration_hooks
 
     config = get_database(db_name)
+    from dbwarden.engine.safety.classifiers import severity_level
+    from dbwarden.engine.safety.scope import (
+        filter_repeatables,
+        report_stop,
+        severity_prefix,
+    )
+
+    ceiling = severity_level(max_severity or getattr(config, "max_severity", None) or "CRITICAL").value
     sqlalchemy_url = config.sqlalchemy_url
     actual_db_name = db_name or config.sqlalchemy_url.split("/")[-1].split("?")[0]
 
@@ -599,6 +646,8 @@ def migrate_single(
             sandbox_url = sandbox_provider.start()
             sandbox_db_type = sandbox_provider.get_database_type()
             warning(f"Sandbox started (built-in {sandbox_provider.__class__.__name__}): {sandbox_url}")
+        if sandbox_db_type is None:
+            raise ValueError("Sandbox provider must return a database type")
         _sandbox_cm = _sandbox_ctx(sandbox_url, sandbox_db_type)
         _sandbox_cm.__enter__()
         _sandbox_started = True
@@ -618,14 +667,14 @@ def migrate_single(
 
     try:
         _migration_start_time = time.time()
-        migrations_dir = get_migrations_directory(db_name)
+        migrations_dir = reconciliation_dir or get_migrations_directory(db_name)
 
         # Section 7.1: Steps 1-2 run BEFORE lock acquisition (static checks)
         # Step 1: Validate migration files, checksums, headers, parseability
         # Step 2: Detect merge conflicts, collisions, superseded, MERGE_PENDING
         # Section 13.3: Dry-run runs core static artifact and merge checks.
         from dbwarden.merge.detection import check_dirty_environment
-        if check_dirty_environment(db_name):
+        if not reconciliation_dir and check_dirty_environment(db_name):
             if dry_run:
                 warning(
                     f"Environment '{db_name or 'default'}' has unreconciled merge changes. "
@@ -636,7 +685,7 @@ def migrate_single(
                     f"Environment '{db_name or 'default'}' has unreconciled merge changes. "
                     "Run 'dbwarden reconcile' first, or use --dry-run to preview."
                 )
-                return
+                raise RuntimeError("Environment has unreconciled merge changes. hint: run dbwarden reconcile")
 
         if not dry_run:
             # Step 3: Acquire the target database lock
@@ -690,13 +739,24 @@ def migrate_single(
 
         applied_versions = set()
         applied_checksums = set()
-        if not dry_run:
+        read_history = not dry_run
+        if dry_run:
+            from sqlalchemy.engine import make_url
+
+            from dbwarden.repositories import migrations_table_exists
+            url = make_url(sqlalchemy_url)
+            if config.database_type != "sqlite" or (url.database and url.database != ":memory:" and Path(url.database).exists()):
+                read_history = migrations_table_exists(db_name)
+        if read_history:
             applied_versions = set(get_migrated_versions(db_name))
             applied_checksums = get_applied_checksums(db_name)
 
         if baseline:
             if not to_version:
                 raise ValueError("--baseline requires --to-version to be specified.")
+            if dry_run:
+                info(f"Would baseline through version {to_version}; severity ceiling does not apply to baseline metadata.")
+                return
 
             applied = set_baseline_migration(migrations_dir, to_version, db_name, connection=_migration_conn)
             logger.log_baseline_set(to_version)
@@ -712,19 +772,46 @@ def migrate_single(
             count=count,
             to_version=to_version,
             migrations_dir=migrations_dir,
-            applied_versions=applied_versions,
+            applied_versions=set() if reconciliation_dir else applied_versions,
             db_name=db_name,
         )
+        if reconciliation_dir:
+            from dbwarden.repositories import get_migration_records
+            recorded = {record.filename for record in get_migration_records(db_name)}
+            filepaths_by_version = {version: path for version, path in filepaths_by_version.items() if Path(path).name not in recorded and path not in recorded}
+
+        filepaths_by_version, deferred_stop = severity_prefix(filepaths_by_version, ceiling)
+
+        if data:
+            _preview_frozen_data(filepaths_by_version.values(), db_name)
 
         runs_always_filepaths = get_runs_always_filepaths(migrations_dir)
         runs_on_change_filepaths = get_runs_on_change_filepaths(
             migrations_dir, changed_only=not dry_run, db_name=db_name
         )
 
+        if deferred_stop:
+            runs_always_filepaths = []
+            runs_on_change_filepaths = []
+        else:
+            runs_always_filepaths = filter_repeatables(runs_always_filepaths, ceiling, actual_db_name, dry_run=dry_run)
+            runs_on_change_filepaths = filter_repeatables(runs_on_change_filepaths, ceiling, actual_db_name, dry_run=dry_run)
+        if not force:
+            from dbwarden.engine.safety.plans import read_trusted_plan
+            for filepath in [*runs_always_filepaths, *runs_on_change_filepaths]:
+                plan, _ = read_trusted_plan(filepath)
+                if plan and "--force" in plan["required_flags"]:
+                    if dry_run:
+                        warning(f"Repeatable {filepath} requires --force acknowledgement")
+                    else:
+                        raise RuntimeError(f"Repeatable {filepath} requires --force acknowledgement")
+
         if (
             not filepaths_by_version
             and not runs_always_filepaths
             and not runs_on_change_filepaths
+            and not deferred_stop
+            and reconciliation_complete is None
         ):
             info("Migrations are up to date.")
             return
@@ -756,6 +843,7 @@ def migrate_single(
                 impact_paths=project_config.impact_paths,
                 migrations_dir=migrations_dir,
                 applied_versions=applied_versions,
+                force=force,
             )
 
             for w in preflight.warnings:
@@ -767,8 +855,7 @@ def migrate_single(
                 if dry_run:
                     warning("Preflight checks would abort this migration.")
                 else:
-                    error("Migration aborted by preflight checks.")
-                    return
+                    raise RuntimeError("Migration aborted by preflight checks. hint: resolve the reported errors")
 
             # Section 7.3: --force acknowledgement for safety warnings
             # WARNING blocks when pre_migrate_safety="block" unless --force
@@ -786,7 +873,7 @@ def migrate_single(
                         "Migration aborted: safety warnings detected. "
                         "Use --force to acknowledge and proceed."
                     )
-                    return
+                    raise RuntimeError("Migration aborted by safety policy. hint: review warnings and use --force")
 
             if preflight.impact:
                 for imp in preflight.impact:
@@ -795,6 +882,29 @@ def migrate_single(
                         warning(
                             f"{imp['table']}: {len(refs)} references found"
                         )
+
+            # Section 7.3: --force acknowledgement for trusted plans on the
+            # pending versioned batch. (The Downloads preflight enforces this
+            # via its force= parameter; it is enforced here so required-flag
+            # plans cannot run without acknowledgement.)
+            if not force:
+                from dbwarden.engine.safety.plans import read_trusted_plan
+
+                for version, filepath in filepaths_by_version.items():
+                    plan, _ = read_trusted_plan(filepath)
+                    if plan and "--force" in plan.get("required_flags", []):
+                        message = (
+                            f"{version}: acknowledgement required. "
+                            "hint: review the plan and pass --force"
+                        )
+                        if dry_run:
+                            warning(message)
+                        else:
+                            error(message)
+                            raise RuntimeError(
+                                "Migration aborted by preflight checks. "
+                                "hint: resolve the reported errors"
+                            )
 
         from dbwarden.engine.checksum import calculate_checksum
 
@@ -839,9 +949,13 @@ def migrate_single(
             defer_snapshots=defer_snapshots,
             batch_snapshots=None,
             config=config,
+            reconciliation=bool(reconciliation_dir),
+            reapply_data=reapply_data,
         )
 
         if dry_run:
+            if deferred_stop:
+                report_stop(deferred_stop, actual_db_name, dry_run=True)
             info(
                 "Dry-run summary: "
                 f"{len(filepaths_by_version)} versioned, "
@@ -880,11 +994,18 @@ def migrate_single(
             fencing_token=_fencing_token,
         )
 
+        if sandbox and not dry_run and not deferred_stop:
+            from dbwarden.data.convergence import verify_sandbox_convergence
+
+            verify_sandbox_convergence(actual_db_name)
+
         # After migrations complete, auto-apply pending seeds if configured or --apply-seeds
-        if config.auto_apply_seeds or apply_seeds:
+        if reconciliation_complete is not None and not dry_run:
+            reconciliation_complete(_migration_conn)
+        if not deferred_stop and not reconciliation_dir and (config.auto_apply_seeds or apply_seeds):
             _apply_pending_seeds_after_migrate(db_name)
 
-        if defer_snapshots and (versioned_count > 0 or runs_always_filepaths or runs_on_change_filepaths):
+        if not reconciliation_dir and defer_snapshots and (versioned_count > 0 or runs_always_filepaths or runs_on_change_filepaths):
             with PhaseTimer(logger, "Final snapshot write", perf=perf):
                 _write_migration_snapshot(
                     db_name=db_name,
@@ -895,10 +1016,11 @@ def migrate_single(
             success(f"Migrations completed successfully: {versioned_count} migrations applied.")
             if metrics_enabled():
                 set_schema_version(actual_db_name, latest_version)
-                set_pending_migrations(actual_db_name, 0)
-            with PhaseTimer(logger, "Model state write", perf=perf):
-                _write_model_state(config=config, db_name=db_name)
-        elif runs_always_filepaths or runs_on_change_filepaths:
+                set_pending_migrations(actual_db_name, deferred_stop.remaining if deferred_stop else 0)
+            if not deferred_stop and not reconciliation_dir:
+                with PhaseTimer(logger, "Model state write", perf=perf):
+                    _write_model_state(config=config, db_name=db_name)
+        elif not deferred_stop and (runs_always_filepaths or runs_on_change_filepaths):
             with PhaseTimer(logger, "Model state write", perf=perf):
                 _write_model_state(config=config, db_name=db_name)
 
@@ -915,6 +1037,10 @@ def migrate_single(
                     total_duration_ms=(time.time() - _migration_start_time) * 1000 if '_migration_start_time' in dir() else 0,
                 )
                 execute_observer_hook("post_migration_run", _post_run_hooks, post_run_ctx)
+
+        if deferred_stop:
+            report_stop(deferred_stop, actual_db_name)
+            return deferred_stop
 
     except Exception as exc:
         # Execute on_migration_failure hooks
@@ -1007,6 +1133,9 @@ def migrate_cmd(
     perf: bool = False,
     defer_snapshots: bool = False,
     force: bool = False,
+    max_severity: str | None = None,
+    data: bool = False,
+    reapply_data: bool = False,
 ) -> None:
     """
     Apply pending migrations to the database.
@@ -1025,7 +1154,13 @@ def migrate_cmd(
         apply_seeds: Apply pending seeds after migrations (overrides config).
         perf: Emit per-statement timing breakdowns for executed SQL.
         force: Acknowledge warning-level safety issues (Section 7.3).
+        max_severity: Severity ceiling; a deferred stop exits with code 3.
+        data: Preview frozen data bundles (requires --dry-run).
+        reapply_data: Re-execute data bundles for already-applied migrations.
     """
+    if data and not dry_run:
+        raise ValueError("--data requires --dry-run; data execution uses the normal migrate path")
+
     if count is not None and to_version is not None:
         raise ValueError("Cannot specify both 'count' and 'to-version'.")
 
@@ -1044,6 +1179,7 @@ def migrate_cmd(
         databases = config.databases
 
         result = MultiDatabaseResult()
+        deferred = []
         for db_name in databases:
             configured = databases[db_name]
             availability = (
@@ -1062,7 +1198,7 @@ def migrate_cmd(
                 error(f"Error migrating database '{db_name}': {availability.message}")
                 continue
             try:
-                migrate_single(
+                outcome = migrate_single(
                     db_name=db_name,
                     count=count,
                     to_version=to_version,
@@ -1076,7 +1212,12 @@ def migrate_cmd(
                     perf=perf,
                     defer_snapshots=defer_snapshots,
                     force=force,
+                    max_severity=max_severity,
+                    data=data,
+                    reapply_data=reapply_data,
                 )
+                if outcome is not None:
+                    deferred.append(db_name)
                 result.succeeded.append(db_name)
             except Exception as e:
                 error(f"Error migrating database '{db_name}': {e}")
@@ -1091,7 +1232,7 @@ def migrate_cmd(
         if result.skipped:
             from dbwarden.output import emit_json, json_mode
             if json_mode():
-                emit_json(result.as_dict())
+                emit_json({**result.as_dict(), "deferred": deferred})
             if result.failed:
                 details = "; ".join(
                     f"{item.database}: {item.message}" for item in result.failed
@@ -1108,8 +1249,14 @@ def migrate_cmd(
                 f"{item.database}: {item.message}" for item in result.failed
             )
             raise RuntimeError(f"Migration failed for {len(result.failed)} database(s): {details}")
+        if deferred:
+            from dbwarden.output import emit_json, json_mode
+            if json_mode():
+                emit_json({**result.as_dict(), "status": "deferred", "deferred": deferred})
+            import typer
+            raise typer.Exit(code=3)
     else:
-        migrate_single(
+        outcome = migrate_single(
             db_name=database,
             count=count,
             to_version=to_version,
@@ -1123,7 +1270,61 @@ def migrate_cmd(
             perf=perf,
             defer_snapshots=defer_snapshots,
             force=force,
+            max_severity=max_severity,
+            data=data,
+            reapply_data=reapply_data,
         )
+        if outcome is not None:
+            import typer
+            raise typer.Exit(code=3)
+
+
+def _preview_frozen_data(filepaths, database: str | None) -> None:
+    """Read and verify frozen bundles before reporting data dry-run details."""
+    import json
+    from pathlib import Path
+
+    from dbwarden.commands.data import dry_run_data_plan
+    from dbwarden.engine.safety.plans import read_trusted_plan
+    from dbwarden.data.artifacts import verify_bundle
+    from dbwarden.merge.marker import is_superseded
+    from dbwarden.output import info
+
+    bundles = []
+    from dbwarden.config import get_database
+    from dbwarden.connection.connection import get_db_connection
+    from sqlalchemy.engine import make_url
+
+    config = get_database(database)
+    url = make_url(config.sqlalchemy_url)
+    available = config.database_type != "sqlite" or bool(url.database and url.database != ":memory:" and Path(url.database).is_file())
+
+    for path in sorted(map(Path, filepaths)):
+        if is_superseded(path):
+            continue
+        plan, reason = read_trusted_plan(path)
+        if plan is None:
+            continue
+        if not isinstance(plan.get("data_bundle"), dict):
+            continue
+        verify_bundle(path, plan)
+        try:
+            if not available:
+                raise ValueError("Read-only probes require an existing database; no database file was created")
+            with get_db_connection(database) as connection:
+                preview = dry_run_data_plan(plan, connection)
+        except Exception as exc:
+            from dbwarden.data.execution import _failure_text
+
+            preview = dry_run_data_plan(plan)
+            preview["probes_unavailable"] = _failure_text(exc, None)
+        bundles.append({"migration": path.name, **preview})
+    if not bundles:
+        info("Data dry-run: no verified frozen data bundles found.")
+        return
+    info("Data dry-run: verified frozen bundles; no data writes executed.")
+    for bundle in bundles:
+        info(json.dumps(bundle, sort_keys=True, default=str))
 
 
 def _get_filepaths_by_version(
@@ -1151,14 +1352,12 @@ def _get_filepaths_by_version(
         if not is_superseded(filepath):
             filepaths[version] = filepath
 
-    if count:
+    filepaths = dict(sorted(filepaths.items()))
+    if to_version:
+        filepaths = {version: path for version, path in filepaths.items() if version <= to_version.zfill(4)}
+    if count is not None:
+        if count < 0:
+            raise ValueError("--count must be non-negative")
         filepaths = dict(list(filepaths.items())[:count])
-    elif to_version:
-        seen = {}
-        for v, p in filepaths.items():
-            seen[v] = p
-            if v == to_version:
-                break
-        filepaths = seen
 
     return filepaths
