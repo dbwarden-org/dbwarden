@@ -11,7 +11,7 @@ class Meta(CHTableMeta):
     ch = ch_table(
         engine=kafka(
             named_collection="kafka_prod",
-            topic="events",
+            topic_list="events",
             format="JSONEachRow",
             group_name="dbwarden_consumer",
         ),
@@ -34,14 +34,16 @@ Parameters that can be set directly (overriding the named collection):
 
 | Factory parameter | DDL setting |
 |------------------|-------------|
-| `named_collection` | `kafka_named_collection` |
-| `topic` | `kafka_topic_list` |
-| `format` | `kafka_format` |
+| `named_collection` | collection name argument |
+| `broker_list` | `kafka_broker_list` |
+| `topic_list` | `kafka_topic_list` |
 | `group_name` | `kafka_group_name` |
+| `format` | `kafka_format` |
 | `num_consumers` | `kafka_num_consumers` |
-| `thread_per_consumer` | `kafka_thread_per_consumer` |
-| `handle_error_mode` | `kafka_handle_error_mode` |
-| `commit_every_batch` | `kafka_commit_every_batch` |
+
+Other Kafka settings (`kafka_thread_per_consumer`, `kafka_handle_error_mode`,
+`kafka_commit_every_batch`, ...) are set through the `KafkaSettings` TypedDict
+below, not as `kafka()` parameters.
 
 `KafkaSettings` is a fully-typed TypedDict for arbitrary Kafka engine settings:
 
@@ -62,7 +64,7 @@ class Meta(CHTableMeta):
     ch = ch_table(
         engine=s3(
             named_collection="s3_prod",
-            pattern="events/*.parquet",
+            path="events/*.parquet",
             format="Parquet",
         ),
     )
@@ -72,8 +74,8 @@ Parameters:
 
 | Parameter | DDL setting |
 |-----------|-------------|
-| `named_collection` | `s3_named_collection` |
-| `pattern` | `url` (first positional) |
+| `named_collection` | collection name argument |
+| `path` | `url` |
 | `format` | `format` |
 | `compression` | `compression` |
 
@@ -88,7 +90,7 @@ class Meta(CHTableMeta):
     ch = ch_table(
         engine=s3_queue(
             named_collection="s3_prod",
-            pattern="incoming/*.json",
+            path="incoming/*.json",
             format="JSONEachRow",
         ),
     )
@@ -134,28 +136,16 @@ class Meta(CHTableMeta):
 from dbwarden.databases.clickhouse import mysql_engine, postgresql_engine, mongodb, redis
 
 # MySQL engine
-engine = mysql_engine(
-    named_collection="mysql_prod",
-    query="SELECT * FROM source_db.table",
-)
+engine = mysql_engine("mysql-host.example.com", 3306, "source_db", "source_table", "reader", "secret")
 
 # PostgreSQL engine
-engine = postgresql_engine(
-    named_collection="pg_prod",
-    query="SELECT * FROM source_schema.source_table",
-)
+engine = postgresql_engine("pg-host.example.com", 5432, "source_db", "source_table", "reader", "secret")
 
 # MongoDB engine
-engine = mongodb(
-    named_collection="mongo_prod",
-    collection="source_collection",
-)
+engine = mongodb("mongo-host.example.com", 27017, "source_db", "source_collection", "reader", "secret")
 
-# Redis engine
-engine = redis(
-    named_collection="redis_prod",
-    key="prefix:*",
-)
+# Redis engine (storage is the database index)
+engine = redis("redis-host.example.com", 6379, "secret", 0)
 ```
 
 Each has an associated `*Settings` TypedDict for engine-specific settings.
@@ -177,14 +167,14 @@ named_collection(
 
 engine = kafka(
     named_collection="aws_prod",
-    topic="events",
+    topic_list="events",
     format="JSONEachRow",
     group_name="ch_consumer",
 )
 
 engine2 = s3(
     named_collection="aws_prod",
-    pattern="data/*.parquet",
+    path="data/*.parquet",
     format="Parquet",
 )
 ```
@@ -194,7 +184,7 @@ engine2 = s3(
 ```python
 engine = s3_queue(
     named_collection="aws_prod",
-    pattern="incoming/*.json",
+    path="incoming/*.json",
     format="JSONEachRow",
 )
 
@@ -207,30 +197,20 @@ settings: S3QueueSettings = {
 }
 ```
 
-### PostgreSQL engine with query
+### PostgreSQL engine
 
 ```python
-engine = postgresql_engine(
-    named_collection="pg_prod",
-    query="SELECT id, name, created_at FROM public.users WHERE active = 1",
-)
+engine = postgresql_engine("pg-host.example.com", 5432, "source_db", "users", "reader", "secret")
 ```
 
 ### URL engine with multiple formats
 
 ```python
 # CSV
-engine = url_engine(
-    named_collection="http_data",
-    format="CSV",
-)
+engine = url_engine("https://data.example.com/export.csv", "CSV")
 
-# With specific compression
-engine = url_engine(
-    named_collection="http_data",
-    format="JSONEachRow",
-    compression="gzip",
-)
+# JSONEachRow
+engine = url_engine("https://data.example.com/events.json", "JSONEachRow")
 ```
 
 ## URL
@@ -240,10 +220,7 @@ from dbwarden.databases.clickhouse import url_engine
 
 class Meta(CHTableMeta):
     ch = ch_table(
-        engine=url_engine(
-            named_collection="http_prod",
-            format="CSV",
-        ),
+        engine=url_engine("https://data.example.com/export.csv", "CSV"),
     )
 ```
 
@@ -270,10 +247,7 @@ from dbwarden.databases.clickhouse import hdfs
 
 class Meta(CHTableMeta):
     ch = ch_table(
-        engine=hdfs(
-            named_collection="hdfs_prod",
-            format="Parquet",
-        ),
+        engine=hdfs("hdfs://namenode:9000/data/events.parquet", "Parquet"),
     )
 ```
 
