@@ -67,6 +67,16 @@ plugin_app = typer.Typer(help="Manage dbwarden plugins")
 app.add_typer(plugin_app, name="plugin")
 
 
+def _severity_option(value: str | None) -> str | None:
+    from dbwarden.engine.safety.classifiers import severity_level
+    if value is None:
+        return None
+    try:
+        return severity_level(value).value
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+
 @app.callback()
 def app_callback(
     ctx: typer.Context,
@@ -716,6 +726,8 @@ def unlock(
 
 @app.command()
 def merge(
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview reconciliation and superseded files without writing."),
+    split_at_severity: str | None = typer.Option(None, "--split-at-severity", callback=_severity_option, help="Split reconciliation at SAFE, INFO, WARN, or CRITICAL."),
     database: str | None = typer.Option(
         None, "--database", "-d", help="Target database name"
     ),
@@ -749,6 +761,8 @@ def merge(
         commit=commit,
         json_output=json_output,
         verbose=verbose,
+        dry_run=dry_run,
+        split_at_severity=split_at_severity,
     )
 
 
@@ -764,7 +778,7 @@ def rebase(
         False, "--force", "-f", help="Force operation even against persistent environments"
     ),
     check: bool = typer.Option(
-        False, "--check", help="Only check what would happen, don't make changes"
+        False, "--check", "--dry-run", help="Only check what would happen, don't make changes"
     ),
     verbose: bool = typer.Option(
         False, "--verbose", "-v", help="Enable verbose logging"
@@ -784,6 +798,8 @@ def rebase(
 
 @app.command()
 def reconcile(
+    force: bool = typer.Option(False, "--force", help="Acknowledge operation risks in reconciliation."),
+    split_at_severity: str | None = typer.Option(None, "--split-at-severity", callback=_severity_option, help="Split reconciliation by severity."),
     environment: str = typer.Argument(..., help="Environment name to reconcile"),
     database: str | None = typer.Option(
         None, "--database", "-d", help="Target database name"
@@ -807,6 +823,8 @@ def reconcile(
         rename_columns=rename_column,
         dry_run=dry_run,
         verbose=verbose,
+        force=force,
+        split_at_severity=split_at_severity,
     )
 
 
