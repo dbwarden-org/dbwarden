@@ -126,7 +126,7 @@ def find_latest_snapshot(database: str | None = None) -> dict[str, Any] | None:
             continue
         stem = fname[: -len(".schema.json")]
         migration_id = stem
-        version_match = re.search(r"__(\d{4})_", migration_id)
+        version_match = re.search(r"__(?:baseline-)?(\d{4})(?:_|$)", migration_id)
         if version_match:
             version = version_match.group(1)
             path = os.path.join(schemas_dir, fname)

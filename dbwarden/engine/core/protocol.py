@@ -33,6 +33,8 @@ class Op:
     upgrade_attrs: dict[str, Any] = field(default_factory=dict)
     rollback_attrs: dict[str, Any] = field(default_factory=dict)
     irreversible: bool = False
+    category: str | None = None
+    safety: str | None = None
 
 
 def op_to_dict(op: Op, *, skip_none: bool = False) -> dict[str, Any]:
@@ -46,6 +48,10 @@ def op_to_dict(op: Op, *, skip_none: bool = False) -> dict[str, Any]:
         data["__rollback_attrs"] = op.rollback_attrs
     if op.irreversible:
         data["__irreversible"] = True
+    if op.category is not None:
+        data["category"] = op.category
+    if op.safety is not None:
+        data["safety"] = op.safety
     return data
 
 
