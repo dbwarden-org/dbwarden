@@ -111,16 +111,13 @@ class Metrics(Base):
 
     width: Mapped[float] = mapped_column()
     height: Mapped[float] = mapped_column()
-    area: Mapped[float] = mapped_column()
+    area: Mapped[float] = mapped_column(comment="Calculated area in pixels")
 
     class Meta(CHTableMeta):
         ch = ch_table(engine=merge_tree(), order_by="width")
 
         class area(CHColumnMeta):
-            ch = ch.field(
-                alias="width * height",
-                comment="Calculated area in pixels",
-            )
+            ch = ch.field(alias="width * height")
 ```
 
 ### REMOVE clause example
@@ -146,7 +143,10 @@ class Meta(CHTableMeta):
 | `ttl` | `str` | `TTL expr` | `MODIFY COLUMN c REMOVE TTL` |
 | `low_cardinality` | `bool` | `LowCardinality(String)` | Wrapped into type |
 | `nullable` | `bool` | `Nullable(String)` | Wrapped into type |
-| `comment` | `str` | `COMMENT ON COLUMN` | `MODIFY COLUMN c REMOVE COMMENT` |
+
+Column comments are not a `ch.field()` option; they ride on the SQLAlchemy
+column itself (`mapped_column(comment=...)`) and are diffed by the comment
+handler into `MODIFY COLUMN c COMMENT '...'` / `MODIFY COLUMN c REMOVE COMMENT`.
 
 Setting a property to `None` (or omitting it) and then setting it to a value emits `MODIFY COLUMN ... <property>`. The reverse (removing a property) emits the `REMOVE` form. This is a write-only asymmetry in ClickHouse that dbwarden handles for you.
 
