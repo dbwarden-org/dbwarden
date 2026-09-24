@@ -2,6 +2,10 @@
 
 Generate SQL migration file(s) from SQLAlchemy models.
 
+Use `--split-at-severity WARN` to write low-severity changes and dependent deferred work as separate versioned files. `--strict-pending` requires composable plans for pending files; `--no-strict-pending` overrides that database setting. `--dry-run` previews without writing SQL, plans, or model state.
+
+Online and offline generation share the same typed pipeline. Its baseline is the latest applied snapshot plus pending trusted plans. Superseded files are audit-only. See [Safety-scoped migrations](../correctness/safety-scoped-migrations.md).
+
 ## Usage
 
 ```bash
