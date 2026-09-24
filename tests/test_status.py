@@ -6,6 +6,11 @@ import pytest
 
 
 class TestStatus:
+    @pytest.fixture(autouse=True)
+    def severity_config(self):
+        from types import SimpleNamespace
+        with patch("dbwarden.config.get_database", return_value=SimpleNamespace(max_severity="CRITICAL")):
+            yield
     @patch("dbwarden.commands.status.get_migrations_directory")
     @patch("dbwarden.output.console.print")
     def test_status_single_no_migrations_dir(self, mock_print, mock_get_dir):

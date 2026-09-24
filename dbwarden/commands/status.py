@@ -41,10 +41,21 @@ def _status_payload(database: str | None = None) -> dict:
     from dbwarden.engine.version import get_migration_filepaths_by_version
 
     all_migrations = get_migration_filepaths_by_version(directory=migrations_dir)
+    import time
+    from pathlib import Path
+
+    from dbwarden.config import get_database
+    from dbwarden.engine.safety.classifiers import exceeds
+    from dbwarden.engine.safety.plans import file_severity, read_trusted_plan
+    from dbwarden.merge.marker import is_superseded
+    from dbwarden.metrics import set_deferred_age
+
+    ceiling = getattr(get_database(database), "max_severity", "CRITICAL")
+    payload["max_severity"] = ceiling
     payload["migrations"] = [
         {
             "version": version,
-            "filename": filepath.split("/")[-1],
+            "filename": Path(filepath).name,
             "status": "applied" if version in applied_versions else "pending",
         }
         for version, filepath in all_migrations.items()
@@ -54,6 +65,31 @@ def _status_payload(database: str | None = None) -> dict:
         "pending": len([v for v in all_migrations if v not in applied_versions]),
         "total": len(all_migrations),
     }
+    blocked_by = None
+    for entry in payload["migrations"]:
+        path = all_migrations[entry["version"]]
+        plan, _ = read_trusted_plan(path)
+        entry["category"] = plan.get("category", {}).get("name", "unsplit") if plan else None
+        if is_superseded(path):
+            entry.update(status="superseded", state="superseded", severity="UNKNOWN")
+            continue
+        if entry["status"] == "applied":
+            entry["state"] = "applied"
+            continue
+        level, reason = file_severity(path)
+        entry.update(severity=level.value, severity_reason=reason)
+        if exceeds(level, ceiling):
+            entry["state"] = "deferred"
+            blocked_by = blocked_by or entry["version"]
+        elif blocked_by:
+            entry.update(state="blocked", blocked_by=blocked_by)
+        else:
+            entry["state"] = "pending"
+        if entry["state"] == "deferred" or "__deferred" in Path(path).stem:
+            age = max(0, time.time() - Path(path).stat().st_mtime)
+            entry["deferred_age_seconds"] = age
+            set_deferred_age(db_name, entry["version"], age)
+    payload["summary"]["pending"] = sum(e["status"] == "pending" for e in payload["migrations"])
 
     # Phase 2: Add merge signal detection
     from dbwarden.merge.detection import detect_merge_signals
@@ -96,12 +132,15 @@ def status_single(database: str | None = None) -> None:
     render(
         data_table(
             f"Migration Status - {db_name}",
-            ("Status", "Version", "Filename"),
+            ("Status", "Version", "Filename", "Severity", "State", "Category"),
             (
                 (
                     entry["status"].capitalize(),
                     entry["version"],
                     entry["filename"],
+                    entry.get("severity", "—"),
+                    entry.get("state", entry["status"]),
+                    entry.get("category") or "—",
                 )
                 for entry in payload["migrations"]
             ),
@@ -148,12 +187,12 @@ def status_cmd(
         return
 
     if all_databases:
+        from dbwarden.config import get_multi_db_config
         from dbwarden.connection.availability import (
             DatabaseAvailability,
             MultiDatabaseResult,
             probe_database,
         )
-        from dbwarden.config import get_multi_db_config
 
         config = get_multi_db_config()
         result = MultiDatabaseResult()
@@ -225,8 +264,8 @@ def _render_status_payload(payload: dict) -> None:
     render(
         data_table(
             f"Migration Status - {payload['database']}",
-            ("Status", "Version", "Filename"),
-            ((entry["status"].capitalize(), entry["version"], entry["filename"])
+            ("Status", "Version", "Filename", "Severity", "State"),
+            ((entry["status"].capitalize(), entry["version"], entry["filename"], entry.get("severity", "—"), entry.get("state", entry["status"]))
              for entry in payload["migrations"]),
         )
     )
@@ -264,9 +303,12 @@ def _show_all_environments_status(database: str | None = None) -> None:
     R8.1: status --all-environments MUST surface unreconciled dirty
     environments until reconciliation completes.
     """
+    from dbwarden.engine.version import (
+        get_migration_filepaths_by_version,
+        get_migrations_directory,
+    )
     from dbwarden.merge.environments import load_environments
     from dbwarden.merge.marker import is_superseded
-    from dbwarden.engine.version import get_migrations_directory, get_migration_filepaths_by_version
 
     envs = load_environments(database)
 
