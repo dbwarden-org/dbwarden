@@ -1,12 +1,13 @@
-import logging
 import re
 import time
+from collections.abc import Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Any, Generator
+from pathlib import Path
+from typing import Any
 
 from sqlalchemy import create_engine, text
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Engine, make_url
 
 from dbwarden.config import get_database
 from dbwarden.exceptions import DBDisconnectedError
@@ -39,6 +40,24 @@ def _convert_url_to_clickhouse_dialect(url: str) -> str:
 _engine_cache: dict[tuple[str, str], Engine] = {}
 
 
+def _engine_url(url: str, db_type: str) -> str:
+    if db_type != "sqlite":
+        return url
+    parsed = make_url(url)
+    database = parsed.database
+    if (
+        not database
+        or database in {":memory:", "file::memory:"}
+        or parsed.query.get("mode") == "memory"
+    ):
+        return url
+    prefix = "file:" if database.startswith("file:") else ""
+    database = database.removeprefix(prefix) if prefix else database
+    if not Path(database).is_absolute():
+        parsed = parsed.set(database=prefix + Path(database).resolve().as_posix())
+    return parsed.render_as_string(hide_password=False)
+
+
 def sanitize_connection_error(message: str) -> str:
     """Remove passwords from driver errors before they cross the API boundary."""
     return re.sub(
@@ -50,7 +69,7 @@ def sanitize_connection_error(message: str) -> str:
 
 def dispose_engine(url: str, db_type: str = "postgresql") -> None:
     """Dispose of a cached engine, releasing its connection pool."""
-    key = (url, db_type)
+    key = (_engine_url(url, db_type), db_type)
     engine = _engine_cache.pop(key, None)
     if engine is not None:
         try:
@@ -61,6 +80,7 @@ def dispose_engine(url: str, db_type: str = "postgresql") -> None:
 
 def _get_engine(url: str, db_type: str = "postgresql") -> Engine:
     """Create SQLAlchemy engine with dialect-specific URL handling."""
+    url = _engine_url(url, db_type)
     key = (url, db_type)
     if key in _engine_cache:
         return _engine_cache[key]
@@ -148,7 +168,9 @@ def reset_connection_logging() -> None:
 
 
 _sandbox_url_var: ContextVar[str | None] = ContextVar("_sandbox_url", default=None)
-_sandbox_db_type_var: ContextVar[str | None] = ContextVar("_sandbox_db_type", default=None)
+_sandbox_db_type_var: ContextVar[str | None] = ContextVar(
+    "_sandbox_db_type", default=None
+)
 
 
 def set_sandbox_override(url: str, db_type: str) -> None:
@@ -197,6 +219,7 @@ def get_db_connection(db_name: str | None = None) -> Generator[Any, None, None]:
     db_type = sandbox_db_type if sandbox_db_type is not None else config.database_type
 
     from sqlalchemy.engine import make_url
+
     parsed = make_url(url)
     actual_db_name = db_name or (parsed.database or "default")
     logger = get_logger(
@@ -265,6 +288,7 @@ def hold_migration_connection(db_name: str | None = None) -> Any:
     db_type = sandbox_db_type if sandbox_db_type is not None else config.database_type
 
     from sqlalchemy.engine import make_url
+
     parsed = make_url(url)
     actual_db_name = db_name or (parsed.database or "default")
     logger = get_logger(
