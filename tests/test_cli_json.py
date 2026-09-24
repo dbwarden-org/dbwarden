@@ -84,6 +84,15 @@ def _all_docs(output: str):
 
 
 class TestJsonFlag:
+    def test_empty_diff_emits_json_array(self, project, monkeypatch, capsys):
+        from dbwarden.commands.extra import diff_cmd
+
+        monkeypatch.setattr("dbwarden.commands.extra._load_live_snapshot", lambda *args: {})
+        monkeypatch.setattr("dbwarden.engine.model_discovery.get_all_model_tables", lambda *args, **kwargs: [object()])
+        monkeypatch.setattr("dbwarden.engine.snapshot.diff_models_against_snapshot", lambda *args, **kwargs: ([], []))
+        diff_cmd(output_format="json", database="primary")
+        assert json.loads(capsys.readouterr().out) == []
+
     def test_json_version(self):
         runner = CliRunner()
         result = runner.invoke(app, ["--json", "version"])
