@@ -2,6 +2,10 @@
 
 Manage branch merge reconciliation for migration histories.
 
+`merge --dry-run` previews artifacts and superseded filenames without writes. `merge --split-at-severity WARN` uses the same typed writer and dependency split as `make-migrations`. Both reconciliation files, their plans, and complete version metadata are recorded. Untrusted branch files require review and `--force`.
+
+`reconcile --dry-run` computes real environment repair SQL without applying it. `--force` acknowledges repair risks, and `--split-at-severity` splits its artifacts. Successful repair verifies the target schema and records normal reconciliation versions as satisfied. `rebase --dry-run` aliases `--check`; non-interactive rebase requires `--yes`. See [Safety-scoped migrations](../correctness/safety-scoped-migrations.md).
+
 ## `merge`
 
 Reconciles divergent migration histories after a branch merge.
