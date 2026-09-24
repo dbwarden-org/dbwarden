@@ -197,6 +197,8 @@ Every ALTER shape dbwarden generates for MySQL/MariaDB, with its classification.
 
 The `--force` gate flags only: drop table, drop column, and column type change (`WARNING`, requires `--force`). MySQL table-option and column-meta changes are **not gated** — review them in the generated SQL instead.
 
+The canonical classifier uses SAFE, INFO, WARN, CRITICAL, and UNKNOWN; legacy impact labels map onto these levels. See the [safety scope contract](../../correctness/safety-scoped-migrations.md).
+
 ### Column operations
 
 | Operation | Handler | Server algorithm | Impact severity | Example |
