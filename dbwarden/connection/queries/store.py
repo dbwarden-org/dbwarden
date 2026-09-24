@@ -230,12 +230,12 @@ POSTGRES_QUERIES = {
     """,
     QueryMethod.GET_LATEST_VERSION: """
         SELECT version FROM {schema}.{migration_table}
-        WHERE migration_type = 'version'
+        WHERE version IS NOT NULL
         ORDER BY version DESC LIMIT 1
     """,
     QueryMethod.GET_MIGRATED_VERSIONS: """
         SELECT version FROM {schema}.{migration_table}
-        WHERE migration_type = 'version'
+        WHERE version IS NOT NULL
         ORDER BY version ASC
     """,
     QueryMethod.CHECK_IF_MIGRATIONS_TABLE_EXISTS: """
