@@ -105,7 +105,12 @@ from dbwarden_redis import migration_lock
 redis = Redis.from_url("redis://localhost:6379")
 
 async with migration_lock(redis):
-    await run_migration()
+    await run_migration(
+        sql_statements,
+        version="0002",
+        migration_operation="apply",
+        filename="primary__0002_feature.sql",
+    )
 ```
 
 The Redis lock uses `SET NX EX` with a configurable TTL (default 60 seconds). The database lock and Redis lock guard different entry points (CLI vs any wrapped code path) and can be used independently or together. See [dbwarden-redis](https://github.com/dbwarden-org/dbwarden-redis) for full documentation.
