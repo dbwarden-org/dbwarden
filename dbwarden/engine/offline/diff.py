@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from dbwarden.engine.backends.clickhouse.handlers.ch_table_handler import (
+    _CH_OPTION_KEYS,
+)
 from dbwarden.engine.core.model_state import (
     _normalize_mysql_table_value,
     _normalize_type,
@@ -20,14 +23,17 @@ from dbwarden.engine.snapshot import (
     normalize_type,
     snap_to_model_key,
 )
-from dbwarden.engine.backends.clickhouse.handlers.ch_table_handler import _CH_OPTION_KEYS
 
 from .constraints import _diff_constraints, _diff_enums
 
 
 def diff_model_states(
     prev_state: dict, curr_state: dict, db_name: str | None = None,
+    *, detect_column_renames: bool = True,
 ) -> tuple[list[dict], list[dict]]:
+    from dbwarden.engine.model_discovery.type_mapping import _get_backend_name
+
+    backend = _get_backend_name(db_name)
     prev_state = normalize_model_state(prev_state)
     curr_state = normalize_model_state(curr_state)
 
@@ -54,14 +60,14 @@ def diff_model_states(
                 "type": "create_table",
                 "table": table_name,
                 "object_type": curr_entry.get("object_type", "table"),
-                "state_table": curr_entry,
+                "state_table": _complete_table_entry(table_name, curr_state),
                 "severity": "INFO",
             })
             rollback_ops.append({
                 "type": "drop_table",
                 "table": table_name,
                 "object_type": curr_entry.get("object_type", "table"),
-                "state_table": curr_entry,
+                "state_table": _complete_table_entry(table_name, curr_state),
                 "severity": "WARNING",
             })
             continue
@@ -71,14 +77,14 @@ def diff_model_states(
                 "type": "drop_table",
                 "table": table_name,
                 "object_type": prev_entry.get("object_type", "table"),
-                "state_table": prev_entry,
+                "state_table": _complete_table_entry(table_name, prev_state),
                 "severity": "WARNING",
             })
             rollback_ops.insert(0, {
                 "type": "create_table",
                 "table": table_name,
                 "object_type": prev_entry.get("object_type", "table"),
-                "state_table": prev_entry,
+                "state_table": _complete_table_entry(table_name, prev_state),
                 "severity": "INFO",
             })
             continue
@@ -90,7 +96,7 @@ def diff_model_states(
 
         dropped_cols = [(col_name, prev_cols[col_name]) for col_name in prev_cols if col_name not in curr_cols]
         added_cols = [(col_name, curr_model_cols[col_name]) for col_name in curr_model_cols if col_name not in prev_cols]
-        renames = detect_renames(table_name, dropped_cols, added_cols)
+        renames = detect_renames(table_name, dropped_cols, added_cols) if detect_column_renames else []
         renamed_old = {old for old, _ in renames}
         renamed_new = {new for _, new in renames}
 
@@ -164,15 +170,20 @@ def diff_model_states(
                     "severity": "WARNING",
                 })
 
-            if prev_col.get("autoincrement") is not None and bool(prev_col.get("autoincrement")) != bool(curr_col.get("autoincrement")):
+            prev_auto = prev_col.get("autoincrement")
+            curr_auto = curr_col.get("autoincrement")
+            if backend == "sqlite":
+                prev_auto = prev_col.get("sq_column", {}).get("sq_autoincrement", prev_auto is True)
+                curr_auto = curr_col.get("sq_column", {}).get("sq_autoincrement", curr_auto is True)
+            if prev_auto is not None and bool(prev_auto) != bool(curr_auto):
                 upgrade_ops.append({
                     "type": "alter_column_autoincrement", "table": table_name, "column": col_name,
-                    "autoincrement": bool(curr_col.get("autoincrement")), "col_type": curr_type,
+                    "autoincrement": bool(curr_auto), "col_type": curr_type,
                     "nullable": curr_col.get("nullable"),
                 })
                 rollback_ops.insert(0, {
                     "type": "alter_column_autoincrement", "table": table_name, "column": col_name,
-                    "autoincrement": bool(prev_col.get("autoincrement")), "col_type": prev_type,
+                    "autoincrement": bool(prev_auto), "col_type": prev_type,
                     "nullable": prev_col.get("nullable"),
                 })
 
@@ -226,17 +237,24 @@ def diff_model_states(
                     "from_pg_column": curr_pg_col, "to_pg_column": prev_pg_col,
                 })
 
-            _diff_ch_column_extras(
-                prev_col.get("ch_column", {}) or {},
-                curr_col.get("ch_column", {}) or {},
-                table_name,
-                col_name,
-                upgrade_ops,
-                rollback_ops,
-            )
+            if backend == "clickhouse":
+                _diff_ch_column_extras(
+                    prev_col.get("ch_column", {}) or {},
+                    curr_col.get("ch_column", {}) or {},
+                    table_name,
+                    col_name,
+                    upgrade_ops,
+                    rollback_ops,
+                )
 
             prev_sq_col = prev_col.get("sq_column", {}) or {}
             curr_sq_col = curr_col.get("sq_column", {}) or {}
+            if backend == "sqlite":
+                prev_sq_col = {**prev_sq_col, "sq_declared_type": _normalize_type(prev_sq_col.get("sq_declared_type", prev_type)), "sq_autoincrement": bool(prev_auto)}
+                curr_sq_col = {**curr_sq_col, "sq_declared_type": _normalize_type(curr_sq_col.get("sq_declared_type", curr_type)), "sq_autoincrement": bool(curr_auto)}
+                if _normalize_type(prev_type) != _normalize_type(curr_type):
+                    prev_sq_col.pop("sq_declared_type")
+                    curr_sq_col.pop("sq_declared_type")
             if prev_sq_col != curr_sq_col:
                 upgrade_ops.append({
                     "type": "alter_sq_column_meta", "table": table_name, "column": col_name,
@@ -281,7 +299,9 @@ def diff_model_states(
         curr_ch_spec = curr_spec if curr_spec.get("backend") == "clickhouse" else {}
         if prev_ch_spec.get("ch_engine") != curr_ch_spec.get("ch_engine") and prev_ch_spec.get("ch_engine") is not None and curr_ch_spec.get("ch_engine") is not None:
             _check_ch_engine_recreate_allowed(prev_ch_spec, curr_ch_spec, table_name)
-            from dbwarden.engine.snapshot.ch_utils import classify_clickhouse_recreate_rollback
+            from dbwarden.engine.snapshot.ch_utils import (
+                classify_clickhouse_recreate_rollback,
+            )
             rollback_kind, rollback_reason = classify_clickhouse_recreate_rollback(
                 prev_ch_spec.get("ch_engine"),
                 curr_ch_spec.get("ch_engine"),
@@ -335,17 +355,12 @@ def diff_model_states(
 
         prev_pg_table = prev_spec if prev_spec.get("backend") == "postgresql" else {}
         curr_pg_table = curr_spec if curr_spec.get("backend") == "postgresql" else {}
-        scalar_keys = {k for k in set(prev_pg_table.keys()) | set(curr_pg_table.keys()) if k != "pg_excludes"}
-        for key in sorted(scalar_keys):
-            if prev_pg_table.get(key) != curr_pg_table.get(key):
-                upgrade_ops.append({
-                    "type": "alter_pg_table", "table": table_name, "key": key,
-                    "from_value": prev_pg_table.get(key), "to_value": curr_pg_table.get(key),
-                })
-                rollback_ops.insert(0, {
-                    "type": "alter_pg_table", "table": table_name, "key": key,
-                    "from_value": curr_pg_table.get(key), "to_value": prev_pg_table.get(key),
-                })
+        from dbwarden.engine.backends.postgresql.handlers import PgTableHandler
+
+        pg_handler = PgTableHandler()
+        pg_up, pg_rb = pg_handler.diff({table_name: prev_pg_table}, {table_name: curr_pg_table})
+        upgrade_ops.extend(op_to_dict(op) for op in pg_up)
+        rollback_ops[0:0] = [op_to_dict(op) for op in reversed(pg_rb)]
 
         prev_my_table = prev_spec if prev_spec.get("backend") == "mysql" else {}
         curr_my_table = curr_spec if curr_spec.get("backend") == "mysql" else {}
@@ -439,12 +454,15 @@ def diff_model_states(
     from dbwarden.plugin import ObjectPluginRegistry as _ObjectPluginRegistry
 
     _state_handlers: list[Any] = []
-    # Plugin handlers that diff model state (policies, grants, ...) participate
-    # here too. PREAMBLE handlers are skipped: they diff against the config,
-    # which offline state does not carry. "enum" is already handled above.
     for _registration in _ObjectPluginRegistry.handlers().values():
         _plugin_handler = _registration.handler
         if _plugin_handler.run_phase == _RunPhase.PREAMBLE:
+            name = _plugin_handler.object_type
+            old = prev_state.get("configured_objects", {}).get(name, {})
+            new = curr_state.get("configured_objects", {}).get(name, {})
+            up, rb = _plugin_handler.diff(old, new)
+            upgrade_ops.extend({**op_to_dict(op), "handler": name} for op in up)
+            rollback_ops.extend({**op_to_dict(op), "handler": name} for op in rb)
             continue
         if _plugin_handler.object_type == "enum":
             continue
@@ -488,6 +506,8 @@ def diff_model_states(
             snapshot_state_entries,
         )
 
+        inline = {"add_foreign_key", "add_unique_constraint", "add_check_constraint"}
+        upgrade_ops = [op for op in upgrade_ops if not (op["type"] in inline and op.get("table") in new_tables)]
         upgrade_ops, rollback_ops = collapse_sqlite_ops(
             upgrade_ops,
             rollback_ops,
@@ -495,4 +515,23 @@ def diff_model_states(
             to_entries=snapshot_state_entries(curr_state),
         )
 
+    from dbwarden.engine.safety.classifiers import LEGACY_SEVERITY, classify_operation
+    for op in upgrade_ops:
+        if "__rollback_attrs" not in op:
+            inverse = next((other for other in rollback_ops if other["type"] == op["type"]
+                            and other.get("table") == op.get("table")
+                            and other.get("column") == op.get("column")
+                            and other.get("name") == op.get("name")), None)
+            if inverse is not None:
+                op["__rollback_attrs"] = {key: value for key, value in inverse.items() if key not in {"type", "severity", "__rollback_attrs"}}
+    for op in upgrade_ops + rollback_ops:
+        op.setdefault("severity", LEGACY_SEVERITY[classify_operation(op, backend)])
     return upgrade_ops, rollback_ops
+
+
+def _complete_table_entry(name: str, state: dict) -> dict:
+    entry = dict(state["tables"][name], name=name)
+    entry["indexes"] = [dict(value) for value in state.get("indexes", {}).values() if value.get("table") == name]
+    for key, kind in (("foreign_keys", "foreign_key"), ("uniques", "unique"), ("checks", "check")):
+        entry[key] = [dict(value) for value in state.get("constraints", {}).values() if value.get("table") == name and value.get("type") == kind]
+    return entry
