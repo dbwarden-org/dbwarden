@@ -32,6 +32,12 @@ primary__0001_initial_schema.plan.json
 
 That file captures machine-readable metadata for CI and debugging and is not executed by `migrate`.
 
+Schema 1.1 plans retain legacy fields and add full typed `upgrade_ops`, `base_checksum`, `target_checksum`, `content_hash`, and `severity`. The content hash covers both SQL sections and headers, normalizing line endings. Missing, stale, inconsistent, or unmapped severity becomes UNKNOWN.
+
+A severity split uses ordinary consecutive versions; `__deferred` is description text. Both files contain their own rollback. The deferred header names its base with `-- depends_on: ["0007"]` and records `-- dbwarden: split-from 0007 (threshold WARN)`. Both files record `-- dbwarden: file-severity LEVEL`. See [Safety-scoped migrations](correctness/safety-scoped-migrations.md).
+
+Plugins may add named migration groups. Files in a custom group end in `__<category>.sql`; their plans include `category: {name, order, plugin}` and SQL includes `-- dbwarden: category <name>`. Groups receive consecutive versions and retain the same severity/force rules. Categories never allow skipping earlier versions. See [plugin categories](plugins/developing/object-plugins.md#safety-and-migration-categories).
+
 ## Required sections
 
 Each migration file must define both:
