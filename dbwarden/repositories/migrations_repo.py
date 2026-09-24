@@ -163,6 +163,8 @@ def run_migration(
     namespace: str = "default",
     fencing_token: int = 0,
     progress_callback: Any | None = None,
+    migration_path: str | None = None,
+    reapply_data: bool = False,
 ) -> None:
     """Execute SQL statements and record the migration.
 
@@ -189,6 +191,43 @@ def run_migration(
     from dbwarden.logging import get_logger
 
     logger = get_logger(db_name=db_name)
+
+    from dbwarden.data.integration import execute_migration_bundle, load_data_plan
+    data_plan = load_data_plan(migration_path or filename, db_name)
+    if data_plan is not None:
+        if migration_type not in {"versioned", "reconciliation"}:
+            raise ValueError("Data migration bundles cannot run as repeatable migrations")
+        kwargs = dict(version=version, filename=filename, migration_type=migration_type,
+                      direction=migration_operation, sql_statements=sql_statements,
+                      db_name=db_name, reapply=reapply_data)
+
+        def run_data(conn):
+            _set_lock_timeout(conn, db_name)
+            completed = 0
+            total = sum(len(step.get("sql", [])) for step in data_plan["data_execution"][migration_operation])
+
+            def before_statement(_statement):
+                if conn.dialect.name in {"clickhouse", "clickhousedb"} and fencing_token > 0:
+                    from dbwarden.lock.clickhouse import ClickHouseStrategy
+                    from dbwarden.exceptions import LockError
+
+                    if not ClickHouseStrategy().fence_check(conn, namespace, fencing_token):
+                        raise LockError("ClickHouse fencing token mismatch or lease expired; data execution stopped")
+
+            def after_statement(_statement):
+                nonlocal completed
+                completed += 1
+                if progress_callback is not None:
+                    progress_callback(completed, total)
+
+            execute_migration_bundle(conn, data_plan, before_statement=before_statement, after_statement=after_statement, **kwargs)
+
+        if connection is not None:
+            run_data(connection)
+        else:
+            with get_db_connection(db_name) as data_connection:
+                run_data(data_connection)
+        return
 
     # Separate autocommit statements from transactional ones
     txn_statements: list[str] = []
