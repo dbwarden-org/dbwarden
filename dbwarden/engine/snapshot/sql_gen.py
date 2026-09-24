@@ -19,6 +19,7 @@ _IRREVERSIBLE_ROLLBACK_OPS: frozenset[str] = frozenset({
     "alter_pg_partition",
     "apply_data_op",
     "recreate_ch_table",
+    "declarative_data",
 })
 
 
@@ -83,6 +84,7 @@ def snapshot_diff_to_sql(
     postgres_auto_using: bool = False,
     enforce_rollback_contract: bool = False,
     acknowledge_irreversible: bool = False,
+    statement_sink: list | None = None,
 ) -> tuple[str, str, list[Any]]:
     """Convert upgrade and rollback ops into migration SQL files.
 
@@ -156,7 +158,10 @@ def snapshot_diff_to_sql(
     from dbwarden.logging import Verbosity, get_logger
 
     _emit_dispatch: dict[str, Any] = {}
+    from dbwarden.data.handler import DataHandler
+
     for _h in (
+        DataHandler(),
         ChTableHandler(),
         ChAggTargetHandler(),
         ColumnHandler(),
@@ -182,11 +187,13 @@ def snapshot_diff_to_sql(
     ):
         for _ot in getattr(_h, "op_types", (_h.object_type,)):
             _emit_dispatch[_ot] = _h
+    _plugin_owners = {}
     for _registration in ObjectPluginRegistry.handlers().values():
         _h = _registration.handler
         apply_public_ordering(_h)
         for _ot in getattr(_h, "op_types", (_h.object_type,)):
             _emit_dispatch[_ot] = _h
+            _plugin_owners[_ot] = _registration.plugin
 
     _CHANGE_TABLE_KEY: dict[str, str] = {
         "rename_table": "old_table",
@@ -347,15 +354,33 @@ def snapshot_diff_to_sql(
                     if op.get(_k) is not None:
                         _info[_k] = op[_k]
                 _attrs = {"seq_name": op.get("name") or op.get("seq_name", ""), "seq_info": _info}
+            if _ot == "alter_column_type":
+                _attrs["postgres_auto_using"] = postgres_auto_using
             _op_obj = Op(
                 object_type=_ot,
                 upgrade_attrs=_attrs,
                 rollback_attrs=_rollback_attrs,
                 irreversible=bool(op.get("__irreversible", False)),
+                category=op.get("category"),
+                safety=op.get("safety"),
             )
             _table_key = _CHANGE_TABLE_KEY.get(_ot, "table")
             _table = op.get(_table_key) or op.get("name") or op.get("table", "")
             emitted = _handler.emit(_op_obj, db_name=db_name)
+            if _ot in _plugin_owners:
+                from dbwarden.engine.safety.classifiers import LEVELS, severity_level
+
+                categories = {stmt.category or op.get("category") for stmt in emitted} - {None}
+                if len(categories) > 1:
+                    raise ValueError("An atomic operation cannot span migration categories. hint: emit separate Ops for independently deployable statements")
+                if categories:
+                    op["category"] = categories.pop()
+                levels = [severity_level(value) for value in [op.get("safety"), *(stmt.safety for stmt in emitted)] if value is not None]
+                if levels:
+                    op["plugin_safety"] = {
+                        "plugin": _plugin_owners[_ot],
+                        "severity": max(levels, key=LEVELS.index).value,
+                    }
             if op.get("__irreversible"):
                 for stmt in emitted:
                     stmt.rollback_kind = "irreversible"
@@ -371,6 +396,8 @@ def snapshot_diff_to_sql(
                     acknowledge_irreversible=acknowledge_irreversible,
                 )
             statements.extend(emitted)
+            if statement_sink is not None:
+                statement_sink.extend((op, stmt) for stmt in emitted)
             _change: dict[str, Any] = {"operation": _ot, "table": _table}
             _target_key = _CHANGE_TARGET_KEY.get(_ot)
             if _target_key and op.get(_target_key) is not None:
@@ -394,7 +421,7 @@ def snapshot_diff_to_sql(
                     target=f"{op.get('referenced_table', '')}({','.join(op.get('referenced_columns', []))})",
                 )
             if _ot == "create_table":
-                _ct_table = _find_model_table(_table, db_name=db_name)
+                _ct_table = reconstruct_model_table(op["state_table"]) if op.get("state_table") else _find_model_table(_table, db_name=db_name)
                 if _ct_table and hasattr(_ct_table, 'indexes') and _ct_table.indexes:
                     for _idx in _ct_table.indexes:
                         changes.append(Change(
@@ -408,6 +435,8 @@ def snapshot_diff_to_sql(
                     resolved_from=op.get("resolved_from"),
                 )
             continue
+
+        raise ValueError(f"No SQL emitter for operation {op['type']}. hint: install its object plugin or update the handler")
 
     upgrade_sql, rollback_sql = _assemble_migration(statements)
     return upgrade_sql, rollback_sql, changes
