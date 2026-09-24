@@ -1,6 +1,22 @@
 # CLI Reference
 
-Pure command lookup for dbwarden CLI.
+Pure command lookup for dbwarden CLI. The [CLI option inventory](reference/cli-options.md) lists every built-in argument, option, type, and default from the current CLI.
+
+## Safety-Scoped Options
+
+| Command | Option | Effect |
+|---|---|---|
+| `make-migrations` | `--split-at-severity LEVEL` | Defer operations at or above LEVEL plus dependent operations |
+| `make-migrations` | `--strict-pending / --no-strict-pending` | Override refusal of pending files without composable plans |
+| `make-migrations` | `--dry-run` | Preview artifacts without writing |
+| `migrate` | `--max-severity LEVEL` | Apply a strict version prefix; severity stop exits 3 |
+| `migrate` | `--force` | Acknowledge risks without changing the ceiling |
+| `check` | `--write-plan [--all] [VERSION]` | Statically classify SQL; unresolved files exit 4 |
+| `merge` | `--dry-run`, `--split-at-severity LEVEL` | Preview or split reconciliation |
+| `reconcile` | `--force`, `--split-at-severity LEVEL` | Acknowledge and split environment repair |
+| `rebase` | `--dry-run` | Alias of `--check`; no mutation |
+
+LEVEL is `SAFE`, `INFO`, `WARN`, or `CRITICAL`. See [Safety-scoped migrations](correctness/safety-scoped-migrations.md) for plans, UNKNOWN handling, configuration, and exit-code compatibility.
 
 ## Syntax
 
@@ -298,10 +314,15 @@ Output formats: `txt`, `json`, `yaml`, `sql`
 ```bash
 $ dbwarden check --database primary
 $ dbwarden check --database primary --force
+$ dbwarden check --database primary --data
 $ dbwarden check --database primary --out json
+$ dbwarden check --write-plan 0042 --database primary
+$ dbwarden check --write-plan --all
 ```
 
 Output formats: `txt`, `json`
+
+The live command combines model-versus-database findings with the safety of SQL that can still execute: unapplied versioned files, all runs-always files, and runs-on-change files whose checksum changed since their recorded execution. Superseded files are excluded. A trusted checksum-bound plan supplies the file's classification when present; otherwise dbwarden classifies the SQL in memory without writing a sidecar. Pending `WARN` and `CRITICAL` operations require `--force`. An incompletely classified file is `UNKNOWN` and always blocks, even with `--force`. Declarative-data drift requested through `--data` also cannot be forced.
 
 ## Locking
 
@@ -348,9 +369,9 @@ $ dbwarden plugin list
 $ dbwarden plugin list --format json
 ```
 
-Shows discovered plugins with tier, trust/load state, registered hooks, object handlers, and lock status.
+Shows discovered plugins with tier, trust/load state, registered hooks, object handlers, and lock status. Use `--load` to import trusted plugins without prompting and inspect their registered handlers and migration categories. Default inspection does not import plugins.
 
-Options: `--format`/`-f` (`table` or `json`, default `table`)
+Options: `--format`/`-f` (`table` or `json`, default `table`), `--load` (import trusted plugins before inspection)
 
 ### `plugin info`
 
@@ -359,7 +380,7 @@ $ dbwarden plugin info dbwarden-fastapi
 $ dbwarden plugin info dbwarden-fastapi --format json
 ```
 
-Shows entry point, tier, trust/load state, hooks, official repository, approved minimum version, and lockfile provenance. Exits `1` if the plugin is not found.
+Shows entry point, tier, trust/load state, hooks, official repository, approved minimum version, and lockfile provenance. Exits `1` if the plugin is not found. Accepts `--load`; JSON includes `migration_categories`.
 
 Options: `--format`/`-f` (`table` or `json`, default `table`)
 
@@ -401,6 +422,14 @@ $ dbwarden plugin untrust dbwarden-example
 ```
 
 Revokes consent for a community plugin.
+
+### `plugin categories`
+
+```bash
+$ dbwarden plugin categories --format json
+```
+
+Loads trusted plugins without prompting and lists built-in/custom migration groups with `name`, `order`, and owning `plugin`. Default output is a table. `status` also displays each generated file's category.
 
 ## Utility
 
