@@ -21,7 +21,16 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 - **`DependencyError` dataclass.** Structured error type for dependency validation results.
 - **`--force` acknowledgement for safety warnings.** When `pre_migrate_safety="block"`, WARNING safety ops block unless `--force` is used.
 - **`progress_callback` in `run_migration()`.** Per-statement progress hooks fire via callback parameter.
-- **Operation severity mapping.** `migrate_plan.py` maps `drop_table`/`drop_column` → ERROR, alterations → WARNING.
+- **Operation severity classification.** Canonical SAFE/INFO/WARN/CRITICAL/UNKNOWN levels via `engine.safety.classifiers`, derived per operation and backend.
+- **Plugin migration groups through `register_migration_category`.** Operation/statement `category` and `safety` fields, `plugin categories` inspection with `--load`. Custom groups retain dependency closure, state checksums, and existing ceilings.
+- **Safety-scoped generation and execution.** Dependency-closed split files, recorded severity, strict-prefix ceilings, exit 3 deferrals, and static plan adoption with exit 4 for unresolved files.
+- **Schema 1.1 plans with full typed operations**, normalized content hashes, state checksums, split pairing, and required acknowledgements.
+- **Shared effective-state generation** for online, offline, merge, and reconciliation workflows; pending plans compose without SQL replay.
+- **Static SQL parsing through SQLGlot and native PostgreSQL grammar validation through pglast.** Unmapped statements remain UNKNOWN; neither parser executes SQL.
+- **Severity status, structured deferral/skip events, and optional deferral metrics.**
+- **Declarative data migrations.** `dbwarden data` command group (`render`, `describe`, `docs`, `data transition` workflows), frozen `.data.py` bundles, snapshot registry, and guarded rollback of created targets.
+- **Data-aware CLI surface.** `make-data-migration`, `diff --data`, `check --write-plan`/`--all`, `migrate --max-severity`/`--data`/`--reapply-data`, and `make-migrations --split-at-severity`/`--strict-pending`/`--dry-run`/`--param`/`--show-managed-values`.
+- **Data path configuration.** `data_paths`, `data_snapshot_dir`, and `snapshot_registry` on `database_config()`.
 - **DB-scoped settings in resolved state.** `recovery_policy`, `tcp_keepalive`, `rename_policy`, etc. now flow through `DatabaseConfig`.
 - **Python 3.10+ support.** Lowered from 3.12.7+ with `tomli` and `typing-extensions` fallbacks.
 
@@ -41,6 +50,16 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 
 ### Fixed
 
+- **Offline safe type changes accept SQLAlchemy's non-key `autoincrement="auto"`.**
+- **PostgreSQL diffs no longer emit ClickHouse SQL from cached column type metadata.**
+- **Type-change `--plan` output remains valid JSON.**
+- **Merge refreshes both state JSON paths.**
+- **Windows repeatables use matching history keys and preserve legacy records.**
+- **Unknown emitters and failed diffs are rejected** instead of silently omitting operations.
+- **Colliding branch files are preserved during merge** and all reconciliation versions are recorded.
+- **Persistent-environment convergence is verified** before marking repair complete.
+- **Baseline records history without executing migration SQL.** PostgreSQL history lookup includes every non-null version, including baseline and reconciliation rows.
+- **Severity levels are canonical.** Drop table/column is CRITICAL; SET NOT NULL and non-concurrent PostgreSQL indexes are WARN. Legacy plan values retain their INFO/WARNING/ERROR spellings.
 - **A PostgreSQL identity column is no longer rendered as `SERIAL` too.** A model declaring `pg.field(identity=...)` on an integer primary key had the base type rewritten to `SERIAL` by the primary-key mapper and *also* rendered as `GENERATED ... AS IDENTITY`, and PostgreSQL rejected the column with *both default and identity specified*.
 - **PostgreSQL index sort options are captured.** The snapshot extractor and `generate-models` called `pg_index_column_has_property` with the 0-based series index where the function is 1-based, so no index ever recorded its `ASC`/`DESC` or `NULLS FIRST`/`NULLS LAST`.
 - **`NULLS NOT DISTINCT` is emitted in the right position.** It was appended after `WHERE`, which PostgreSQL cannot parse; it now precedes `INCLUDE` and `WHERE` in both the upgrade and the rollback.
