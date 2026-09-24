@@ -105,6 +105,7 @@ Overview = [
   {"Migration Files" = "migration-files.md"},
   {"SQLAlchemy Models" = "models.md"},
   {Seeds = "seeds.md"},
+  {"Declarative data migrations" = "declarative-data-migrations.md"},
   {"SQL Translation" = "sql-translation.md"},
   {Observability = "observability.md"},
   {Architecture = "architecture-deep-dive.md"},
@@ -117,10 +118,16 @@ Correctness = [
   {"Round Trip Verification" = "correctness/round-trip-verification.md"},
   {"Deterministic Diff" = "correctness/deterministic-diff.md"},
   {"Safety Classifier" = "correctness/safety-classifier.md"},
+  {"Safety-Scoped Migrations" = "correctness/safety-scoped-migrations.md"},
   {"Offline Integrity" = "correctness/offline-integrity.md"},
   {"SQL Generation" = "correctness/sql-generation.md"},
   {"Rollback Generation" = "correctness/rollback-generation.md"},
   {"Rollback Coverage Matrix" = "correctness/rollback-coverage-matrix.md"},
+]
+
+[[project.nav]]
+Design = [
+  {"Declarative data migration design" = "design/declarative-data-migrations.md"},
 ]
 
 [[project.nav]]
@@ -247,24 +254,25 @@ Reference = [
     {"CI/CD Patterns" = "advanced/ci-cd-patterns.md"},
   ]},
   {"API Reference" = [
+    {"Feature map" = "reference/feature-map.md"},
     {"Configuration API" = "reference/configuration-api.md"},
+    {"Python API inventory" = "reference/python-api.md"},
+    {"CLI option inventory" = "reference/cli-options.md"},
     {"Migrate from TOML" = "reference/migrate-from-toml.md"},
   ]},
   {Glossary = "glossary.md"},
 ]
 
-[project.markdown_extensions]
-"seoslug.contrib.zensical" = {
-  canonical_host = "dbwarden.org",
-  public_base_url = "https://docs.dbwarden.org/",
-  site_name = "dbwarden Documentation",
-  title_template = "{title} - dbwarden",
-  default_og_image = "https://docs.dbwarden.org/assets/images/og-image.png",
-  publisher_name = "Emiliano Gandini Outeda",
-  locale = "en_US",
-  twitter_site = "@emiliano_go_",
-  auto_generate_schema = true,
-}
+[project.markdown_extensions."seoslug.contrib.zensical"]
+canonical_host = "dbwarden.org"
+public_base_url = "https://docs.dbwarden.org/"
+site_name = "dbwarden Documentation"
+title_template = "{title} - dbwarden"
+default_og_image = "https://docs.dbwarden.org/assets/images/og-image.png"
+publisher_name = "Emiliano Gandini Outeda"
+locale = "en_US"
+twitter_site = "@emiliano_go_"
+auto_generate_schema = true
 
 [project.markdown_extensions.tables]
 
