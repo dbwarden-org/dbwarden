@@ -56,7 +56,9 @@ def load_issues(database: str | None = None) -> list[SafetyIssue]:
     validate_model_tables_exist(model_tables, config.model_tables, database or "default")
     model_tables = filter_model_tables_by_name(model_tables, config.model_tables)
     schema_snapshot = extract_schema_snapshot(database=database)
-    return analyze_schema(model_tables, schema_snapshot)
+    from dbwarden.engine.safety.static import pending_file_issues
+
+    return analyze_schema(model_tables, schema_snapshot) + pending_file_issues(database, config.database_type)
 
 
 def issues_to_json(issues: list[SafetyIssue]) -> str:
