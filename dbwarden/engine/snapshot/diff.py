@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from dbwarden.constants import INTERNAL_TABLE_PREFIXES
 from dbwarden.engine.model_discovery.type_mapping import _get_backend_name, is_sqlite_target
 
 
@@ -29,7 +30,7 @@ def _suppress_ch_column_ops(ops: list[Any]) -> list[Any]:
     ]
 
 
-_SYSTEM_TABLE_PREFIXES = (".inner", "_dbwarden_", "dbwarden_lock")
+_SYSTEM_TABLE_PREFIXES = INTERNAL_TABLE_PREFIXES
 
 
 def _is_system_table_name(name: str | None) -> bool:
@@ -62,7 +63,9 @@ def diff_models_against_snapshot(
     upgrade_ops: list[dict[str, Any]] = []
     rollback_ops: list[dict[str, Any]] = []
 
-    snapshot = _filter_system_objects(snapshot)
+    from dbwarden.data.integration import filter_data_tables
+
+    snapshot = filter_data_tables(_filter_system_objects(snapshot), db_name or database)
     model_tables = [t for t in model_tables if not _is_system_table_name(t.name)]
 
     # The SQLite rebuild renders whole tables out of the snapshot, and the
@@ -301,4 +304,9 @@ def diff_models_against_snapshot(
             to_entries=model_state_entries(model_tables),
         )
 
+    from dbwarden.engine.core.model_state import _table_to_state_entry
+
+    for op in upgrade_ops + rollback_ops:
+        if op.get("type") == "create_table" and op["table"] in model_by_name:
+            op["state_table"] = _table_to_state_entry(model_by_name[op["table"]])
     return upgrade_ops, rollback_ops
