@@ -99,10 +99,14 @@
 - [Checksum Integrity](https://docs.dbwarden.org/advanced/checksum-integrity/): SHA-256 checksums to detect file tampering or accidental edits
 - [Safe Deployment](https://docs.dbwarden.org/advanced/safe-deployment/): Pre-flight checks, impact analysis, sandbox validation, rollback planning
 - [CI/CD Patterns](https://docs.dbwarden.org/advanced/ci-cd-patterns/): GitHub Actions and GitLab CI patterns for automated migrations
+- [Safety-Scoped Migrations](https://docs.dbwarden.org/correctness/safety-scoped-migrations/): Severity splits, execution ceilings, pending-state composition, and custom plugin groups
 
 ## Reference
 - [Configuration API](https://docs.dbwarden.org/reference/configuration-api/): Complete reference for `database_config()` parameters
 - [Migrate from TOML](https://docs.dbwarden.org/reference/migrate-from-toml/): Transition from `warden.toml` to Python-based configuration
+- [Feature Map](https://docs.dbwarden.org/reference/feature-map/): Capability map with implementation boundaries and guide index
+- [CLI Options](https://docs.dbwarden.org/reference/cli-options/): Inventory of every built-in command, option, type, and default
+- [Python API](https://docs.dbwarden.org/reference/python-api/): Inventory of exports, signatures, declared fields, and methods
 
 ## Additional
 - [Glossary](https://docs.dbwarden.org/glossary/): Key terms and concepts in dbwarden
