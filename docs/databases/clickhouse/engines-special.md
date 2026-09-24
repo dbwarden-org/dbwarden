@@ -17,6 +17,8 @@ from dbwarden.databases.clickhouse import (
 ### Null engine as MV sink
 
 ```python
+from dbwarden.databases.clickhouse import MaterializedView, CHViewMeta, materialized_view
+
 class NullSink(Base):
     __tablename__ = "null_sink"
 
@@ -27,17 +29,13 @@ class NullSink(Base):
             engine=null(),
         )
 
-class ViewFromSink(Base):
+class ViewFromSink(MaterializedView):
     __tablename__ = "view_from_sink"
 
-    value: Mapped[int] = mapped_column()
-
-    class Meta(CHTableMeta):
-        ch = ch_table(
-            engine=merge_tree(),
-            order_by="value",
-            ch_to_table="sink_dest",
-            ch_select="SELECT count(*) AS value FROM null_sink",
+    class Meta(CHViewMeta):
+        ch = materialized_view(
+            to="sink_dest",
+            select="SELECT count(*) AS value FROM null_sink",
         )
 ```
 
@@ -52,10 +50,7 @@ class AllEvents(Base):
 
     class Meta(CHTableMeta):
         ch = ch_table(
-            engine=merge(
-                source_database="analytics",
-                table_regex="events_202[0-9]_*",
-            ),
+            engine=merge("analytics", "events_202[0-9]_*"),
         )
 ```
 
@@ -69,10 +64,10 @@ class CountryDict(Base):
     name: Mapped[str] = mapped_column()
 
     class Meta(CHTableMeta):
-        ch = ch_table(engine=dictionary_engine())
+        ch = ch_table(engine=dictionary_engine("countries"))
 ```
 
-The dictionary is declared separately via `ch_dictionary()`. See [Dictionaries](dictionaries.md).
+The dictionary is declared separately via `dictionary()`. See [Dictionaries](dictionaries.md).
 
 ## Null
 
@@ -93,10 +88,7 @@ DDL: `ENGINE = Memory`. In-memory storage, lost on restart. Schema management on
 ## Merge
 
 ```python
-engine = merge(
-    source_database="analytics",
-    table_regex="events_.*",
-)
+engine = merge("analytics", "events_.*")
 ```
 
 DDL: `ENGINE = Merge('analytics', 'events_.*')`. A virtual table that reads from multiple tables whose names match the regex.
@@ -112,18 +104,15 @@ DDL: `ENGINE = Set`. Always in-memory. Use for IN-query acceleration.
 ## Join
 
 ```python
-engine = join_engine(
-    join_type="LEFT",
-    strictness="ALL",
-)
+engine = join_engine("ALL", "LEFT")
 ```
 
-DDL: `ENGINE = Join(LEFT, ALL)`. Specialized for JOIN queries.
+DDL: `ENGINE = Join(ALL, LEFT)`. Specialized for JOIN queries.
 
 ## Dictionary
 
 ```python
-engine = dictionary_engine()
+engine = dictionary_engine("countries")
 ```
 
 DDL: `ENGINE = Dictionary(<dict_name>)`. References a [Dictionary](dictionaries.md) object by name.
