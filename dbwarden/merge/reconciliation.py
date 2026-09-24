@@ -119,18 +119,18 @@ def write_reconciliation_header(
         file_path: Path to the migration file.
         header: The header to write.
     """
+    from dbwarden.files import atomic_write_text
+
     path = Path(file_path)
     content = path.read_text()
+    atomic_write_text(path, format_reconciliation_header(header) + content)
 
-    # Build probe string
-    probe_parts = [f"{env}={result}" for env, result in header.probe_results.items()]
+
+def format_reconciliation_header(header: ReconciliationHeader) -> str:
+    probe_parts = [f"{env}={result}" for env, result in sorted(header.probe_results.items())]
     probe_str = ", ".join(probe_parts) if probe_parts else "none"
-
-    # Build supersedes string
     supersedes_str = ", ".join(header.supersedes) if header.supersedes else "none"
-
-    # Build header block
-    header_block = "\n".join([
+    return "\n".join([
         _HEADER_START,
         f"-- merge-base: {header.merge_base} (state checksum {header.merge_base_checksum})",
         f"-- supersedes: {supersedes_str}",
@@ -138,10 +138,6 @@ def write_reconciliation_header(
         f"-- generated-by: {header.generated_by}",
         "",
     ])
-
-    # Insert header at the beginning
-    new_content = header_block + content
-    path.write_text(new_content)
 
 
 def is_reconciliation(file_path: str | Path) -> bool:
