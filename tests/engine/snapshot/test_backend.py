@@ -306,7 +306,7 @@ class TestHandlerConvergence:
 
     def test_all_op_types_emit(self, monkeypatch):
         """Convergence test: every handler-registered op type emits SQL without error."""
-        with tempfile.TemporaryDirectory() as tmpdir:
+        with tempfile.TemporaryDirectory() as tmpdir, monkeypatch.context() as monkeypatch:
             monkeypatch.chdir(tmpdir)
             Path("dbwarden/schemas").mkdir(parents=True)
             Path("dbwarden.py").write_text(

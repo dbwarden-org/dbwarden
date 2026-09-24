@@ -846,7 +846,7 @@ class TestSnapshotDiffToSqlEdgeCases:
         assert changes == []
 
     def test_all_op_types_together(self, monkeypatch):
-        with tempfile.TemporaryDirectory() as tmpdir:
+        with tempfile.TemporaryDirectory() as tmpdir, monkeypatch.context() as monkeypatch:
             monkeypatch.chdir(tmpdir)
             Path("dbwarden/schemas").mkdir(parents=True)
             Path("dbwarden.py").write_text(
@@ -919,7 +919,7 @@ class TestSnapshotDiffToSqlEdgeCases:
         assert any(c.operation == "rename_column" for c in changes)
         assert any(c.operation == "alter_column_type" for c in changes)
 
-    def test_malformed_op_missing_keys_skipped(self):
+    def test_unknown_operation_fails_closed(self):
         ops = [
             {"type": "unknown_op", "table": "users"},
             {"type": "rename_column", "table": "users", "old_name": "name", "new_name": "full_name"},
@@ -928,8 +928,8 @@ class TestSnapshotDiffToSqlEdgeCases:
             {"type": "unknown_op", "table": "users"},
             {"type": "rename_column", "table": "users", "old_name": "full_name", "new_name": "name"},
         ]
-        sql, rb_sql, changes = snapshot_diff_to_sql(ops, rollback_ops, db_name=None)
-        assert "RENAME COLUMN" in sql
+        with pytest.raises(ValueError, match="No SQL emitter for operation unknown_op"):
+            snapshot_diff_to_sql(ops, rollback_ops, db_name=None)
 
     def test_mysql_syntax_is_used(self):
         ops = [

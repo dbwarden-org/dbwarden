@@ -77,7 +77,7 @@ def _fallback_sql(tables):
              "dbwarden.engine.snapshot.extract_full_schema_snapshot",
              side_effect=OSError("database unreachable"),
          ), \
-         patch("dbwarden.engine.discovery.extract_tables_from_database", return_value={}):
+         patch("dbwarden.commands.make_migrations.pipeline.extract_tables_from_database", return_value={}):
         upgrade, rollback, changes = generate_migration_sql(tables, None, None, None)
     return upgrade, rollback, changes
 
@@ -271,10 +271,10 @@ class TestNoDuplicateUniqueConstraint:
         assert "CONSTRAINT uq_users_email UNIQUE (email)" in sql
 
 
-class TestFallbackIsAnnounced:
-    """Degrading to model-only generation must not be silent."""
+class TestDiffFailure:
+    """A failed diff must not be replaced with a partial migration."""
 
-    def test_a_failed_snapshot_diff_warns(self, pg_backend, monkeypatch):
+    def test_a_failed_snapshot_diff_stops_generation(self, pg_backend, monkeypatch):
         messages = []
         monkeypatch.setattr(
             "dbwarden.commands.make_migrations.pipeline.warning",
@@ -291,11 +291,9 @@ class TestFallbackIsAnnounced:
                  side_effect=RuntimeError("boom"),
              ), \
              patch("dbwarden.engine.discovery.extract_tables_from_database", return_value={}):
-            upgrade, _, _ = generate_migration_sql([table], None, None, None)
-
-        assert any("generating from models" in m for m in messages)
-        # And the degraded output still carries the constraint.
-        assert "ADD CONSTRAINT uq_sync_heartbeat_branch_id" in upgrade
+            with pytest.raises(RuntimeError, match="boom"):
+                generate_migration_sql([table], None, None, None)
+        assert not messages
 
 
 class TestForeignKeyToANewTable:
