@@ -13,6 +13,10 @@ The canonicalizer normalizes DDL before diffing. These normalizations apply:
 | Type alias expansion | `INT` → `Int32`, `VARCHAR` → `String` |
 | Nullable/LowCardinality wrapper normalization | Wrapping order |
 | `ENGINE = Distributed(cluster, db, table)` | Shard/key delimiters |
+| Primary key matched to sorting key | `ch_primary_key` omitted when it equals `ch_order_by` |
+| TTL normalization | `INTERVAL` → `toInterval`, absence vs `[]` |
+| Settings matching captured server defaults removed | Compared against defaults snapshotted at extract time |
+| Materialized-view table reference qualification | Bare MV table names qualified with the database |
 
 ## Defaults-as-absence
 
@@ -20,6 +24,8 @@ If a property matches the ClickHouse default, it is omitted from the emitted DDL
 
 - `index_granularity = 8192` is the default and is not emitted unless explicitly set to a non-default value
 - `SETTINGS` block is omitted entirely when all settings are at their defaults
+
+Default settings come from the captured server metadata: unknown defaults are not guessed, and offline state must contain the relevant metadata before a comparison can remove those differences. An explicit `index_granularity=8192` does not imply identical output on every server or in every generation path.
 
 This means the diff is clean: only non-default values appear in the DDL and the field is absent from declarations until overridden.
 
