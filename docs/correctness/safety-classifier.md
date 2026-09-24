@@ -4,6 +4,8 @@ The safety classifier detects risky schema changes before migration execution. I
 
 The principle is simple: dbwarden should not silently drop data.
 
+The shared classifier now feeds generated plans, static SQL adoption, and deployment scope. Canonical levels are SAFE, INFO, WARN, CRITICAL, and UNKNOWN. Legacy plan fields keep INFO/WARNING/ERROR. A missing mapping remains UNKNOWN. See [Safety-scoped migrations](safety-scoped-migrations.md) for split closure, ceiling behavior, parser coverage, and plan trust rules.
+
 ## What It Scans
 
 `make-migrations` writes a companion `.plan.json` file next to generated SQL migrations. The plan records the typed operations that produced the SQL. A safety check can inspect that plan before the SQL is applied.
