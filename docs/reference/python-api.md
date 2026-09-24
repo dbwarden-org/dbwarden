@@ -181,7 +181,7 @@ generate_migration_sql(tables: list, migrations_dir: str | None = None, database
 ### `get_all_model_tables`
 
 ```text
-get_all_model_tables(model_paths: Optional[List[str]] = None, db_name: str | None = None) -> List[dbwarden.engine.core.models.ModelTable]
+get_all_model_tables(model_paths: List[str] | None = None, db_name: str | None = None) -> List[dbwarden.engine.core.models.ModelTable]
 ```
 
 ### `get_current_model_state_path`
@@ -2268,7 +2268,7 @@ Declared fields: `order`, `upgrade_sql`, `rollback_sql`, `rollback_kind`, `rollb
 ### `Change`
 
 ```text
-Change(operation: str, table: str, target: Optional[str] = None, resolved_from: Optional[str] = None, index_type: Optional[str] = None) -> None
+Change(operation: str, table: str, target: str | None = None, resolved_from: str | None = None, index_type: str | None = None) -> None
 ```
 
 Declared fields: `operation`, `table`, `target`, `resolved_from`, `index_type`.
@@ -2524,19 +2524,19 @@ discover_models_in_directory(directory: str) -> List[str]
 ### `load_model_from_path`
 
 ```text
-load_model_from_path(filepath: str) -> Optional[module]
+load_model_from_path(filepath: str) -> module | None
 ```
 
 ### `extract_column_info`
 
 ```text
-extract_column_info(column, db_name: str | None = None, backend: str | None = None) -> Optional[dbwarden.engine.core.models.ModelColumn]
+extract_column_info(column, db_name: str | None = None, backend: str | None = None) -> dbwarden.engine.core.models.ModelColumn | None
 ```
 
 ### `extract_table_from_model`
 
 ```text
-extract_table_from_model(model_class: type, db_name: str | None = None) -> Optional[dbwarden.engine.core.models.ModelTable]
+extract_table_from_model(model_class: type, db_name: str | None = None) -> dbwarden.engine.core.models.ModelTable | None
 ```
 
 ### `extract_tables_from_database`
@@ -3044,7 +3044,7 @@ create_migrations_table_if_not_exists(db_name: str | None = None) -> None
 ### `fetch_latest_versioned_migration`
 
 ```text
-fetch_latest_versioned_migration(db_name: str | None = None) -> Optional[dbwarden.models.MigrationRecord]
+fetch_latest_versioned_migration(db_name: str | None = None) -> dbwarden.models.MigrationRecord | None
 ```
 
 ### `get_existing_runs_always_filenames`
@@ -3086,13 +3086,13 @@ migrations_table_exists(db_name: str | None = None) -> bool
 ### `run_migration`
 
 ```text
-run_migration(sql_statements: list[str], version: Optional[str], migration_operation: str, filename: str, migration_type: str = 'versioned', db_name: str | None = None, perf: bool = False, connection: typing.Any | None = None, namespace: str = 'default', fencing_token: int = 0, progress_callback: typing.Any | None = None, migration_path: str | None = None, reapply_data: bool = False) -> None
+run_migration(sql_statements: list[str], version: str | None, migration_operation: str, filename: str, migration_type: str = 'versioned', db_name: str | None = None, perf: bool = False, connection: Any | None = None, namespace: str = 'default', fencing_token: int = 0, progress_callback: Any | None = None, migration_path: str | None = None, reapply_data: bool = False) -> None
 ```
 
 ### `run_repeatable_migration`
 
 ```text
-run_repeatable_migration(sql_statements: list[str], filename: str, migration_type: str, db_name: str | None = None, perf: bool = False, connection: typing.Any | None = None) -> None
+run_repeatable_migration(sql_statements: list[str], filename: str, migration_type: str, db_name: str | None = None, perf: bool = False, connection: Any | None = None) -> None
 ```
 
 ### `acquire_lock`

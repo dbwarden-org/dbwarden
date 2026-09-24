@@ -283,7 +283,6 @@ Show structural differences between models and database (read-only, no files wri
 | --verbose, -v | boolean | False | Enable verbose logging |
 | --database, -d | str | None | Target database name |
 | --offline | boolean | False | Use model state file instead of live database snapshot |
-| --data | boolean | False | Also compare live declared data values. |
 
 `--help` displays command help.
 
@@ -513,7 +512,6 @@ List installed dbwarden plugins.
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
 | --format, -f | str | 'table' | Output format: table (default) or json |
-| --load | boolean | False | Load trusted plugins to inspect registered handlers and migration categories. |
 
 `--help` displays command help.
 
@@ -525,7 +523,6 @@ Show plugin metadata.
 |---|---|---|---|
 | dist_name | str | required | Plugin distribution name |
 | --format, -f | str | 'table' | Output format: table (default) or json |
-| --load | boolean | False | Load trusted plugins to inspect registered handlers and migration categories. |
 
 `--help` displays command help.
 
