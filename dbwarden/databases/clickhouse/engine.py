@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, TypedDict
-from typing_extensions import Unpack
 
 
 class KafkaSettings(TypedDict, total=False):
@@ -161,6 +160,8 @@ def _render_settings(s: dict[str, str] | MergeTreeSettings | None) -> dict[str, 
 
 @dataclass
 class ChEngineSpec:
+    """Engine declaration; args contain SQL fragments, not unquoted values."""
+
     name: str
     args: tuple[str, ...] = ()
     zookeeper_path: str | None = None
@@ -279,7 +280,8 @@ def summing_merge_tree(
     *columns: str,
     settings: MergeTreeSettings | None = None,
 ) -> ChEngineSpec:
-    return ChEngineSpec("SummingMergeTree", args=columns, settings=_render_settings(settings))
+    args = ("(" + ", ".join(columns) + ")",) if len(columns) > 1 else columns
+    return ChEngineSpec("SummingMergeTree", args=args, settings=_render_settings(settings))
 
 
 def aggregating_merge_tree(
@@ -316,7 +318,7 @@ def graphite_merge_tree(
     settings: MergeTreeSettings | None = None,
 ) -> ChEngineSpec:
     """``GraphiteMergeTree(config_section)``: for graphite rollup data."""
-    return ChEngineSpec("GraphiteMergeTree", args=(config_section,), settings=_render_settings(settings))
+    return ChEngineSpec("GraphiteMergeTree", args=(_sql_string(config_section),), settings=_render_settings(settings))
 
 
 def distributed(
@@ -335,12 +337,28 @@ def distributed(
        propagation cluster managed by ``ClusterContext``.  They are distinct
        concepts and should not be conflated.
     """
-    args: list[str] = [cluster, database, table]
+    if policy_name is not None and sharding_key is None:
+        raise ValueError("policy_name requires an explicit sharding_key")
+    args: list[str] = list(map(_sql_string, (cluster, database, table)))
     if sharding_key is not None:
         args.append(sharding_key)
     if policy_name is not None:
-        args.append(policy_name)
+        args.append(_sql_string(policy_name))
     return ChEngineSpec("Distributed", args=tuple(args), settings=_render_settings(settings))
+
+
+def _sql_string(value: str) -> str:
+    return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
+
+
+def _integration_engine(name: str, collection: str | None, **values: str | int | None) -> ChEngineSpec:
+    settings = {key: _sql_string(value) if isinstance(value, str) else str(value)
+                for key, value in values.items() if value is not None}
+    if collection is not None:
+        if not collection or not all(c.isalnum() or c == "_" for c in collection) or collection[0].isdigit():
+            raise ValueError("named_collection must be a non-empty SQL identifier")
+        return ChEngineSpec(name, args=(collection, *(f"{key}={value}" for key, value in settings.items())))
+    return ChEngineSpec(name, settings=settings or None)
 
 
 def kafka(
@@ -352,13 +370,14 @@ def kafka(
     format: str | None = None,
     num_consumers: int | None = None,
 ) -> ChEngineSpec:
-    """ENGINE = Kafka.
-
-    PREFER named_collection for credentials. Inline creds are declare-only.
-    """
+    """Build Kafka arguments or settings; named collections stay server-side."""
     if named_collection is None and broker_list is None:
         raise ValueError("kafka() requires named_collection or broker_list")
-    return ChEngineSpec("Kafka")
+    if num_consumers is not None and num_consumers < 1:
+        raise ValueError("num_consumers must be positive")
+    return _integration_engine("Kafka", named_collection, kafka_broker_list=broker_list,
+                               kafka_topic_list=topic_list, kafka_group_name=group_name,
+                               kafka_format=format, kafka_num_consumers=num_consumers)
 
 
 def s3(
@@ -370,8 +389,22 @@ def s3(
     access_key_id: str | None = None,
     secret_access_key: str | None = None,
 ) -> ChEngineSpec:
-    """ENGINE = S3.  PREFER named_collection for credentials."""
-    return ChEngineSpec("S3")
+    """Build S3 arguments. Inline credentials appear in SQL and snapshots."""
+    if (access_key_id is None) != (secret_access_key is None):
+        raise ValueError("access_key_id and secret_access_key must be supplied together")
+    if named_collection is not None:
+        return _integration_engine("S3", named_collection, url=path, format=format,
+                                   compression_method=compression, access_key_id=access_key_id,
+                                   secret_access_key=secret_access_key)
+    if not path:
+        raise ValueError("s3() requires named_collection or path")
+    args = [path]
+    if access_key_id is not None and secret_access_key is not None:
+        args.extend((access_key_id, secret_access_key))
+    args.append(format or "auto")
+    if compression is not None:
+        args.append(compression)
+    return ChEngineSpec("S3", args=tuple(_sql_string(value) for value in args))
 
 
 def s3_queue(
@@ -381,8 +414,10 @@ def s3_queue(
     format: str | None = None,
     compression: str | None = None,
 ) -> ChEngineSpec:
-    """ENGINE = S3Queue.  PREFER named_collection for credentials."""
-    return ChEngineSpec("S3Queue")
+    """Build S3Queue arguments using the S3 connection syntax."""
+    spec = s3(named_collection=named_collection, path=path, format=format, compression=compression)
+    spec.name = "S3Queue"
+    return spec
 
 
 def rabbitmq(
@@ -393,8 +428,12 @@ def rabbitmq(
     exchange_name: str | None = None,
     routing_key: str | None = None,
 ) -> ChEngineSpec:
-    """ENGINE = RabbitMQ.  PREFER named_collection for credentials."""
-    return ChEngineSpec("RabbitMQ")
+    """Build RabbitMQ arguments or settings."""
+    if named_collection is None and host is None:
+        raise ValueError("rabbitmq() requires named_collection or host")
+    return _integration_engine("RabbitMQ", named_collection, rabbitmq_host_port=host,
+                               rabbitmq_format=format, rabbitmq_exchange_name=exchange_name,
+                               rabbitmq_routing_key_list=routing_key)
 
 
 def nats(
@@ -404,8 +443,11 @@ def nats(
     subjects: str | None = None,
     format: str | None = None,
 ) -> ChEngineSpec:
-    """ENGINE = NATS.  PREFER named_collection for credentials."""
-    return ChEngineSpec("NATS")
+    """Build NATS arguments or settings."""
+    if named_collection is None and url is None:
+        raise ValueError("nats() requires named_collection or url")
+    return _integration_engine("NATS", named_collection, nats_url=url,
+                               nats_subjects=subjects, nats_format=format)
 
 
 def mysql_engine(
@@ -417,7 +459,7 @@ def mysql_engine(
     password: str,
 ) -> ChEngineSpec:
     """ENGINE = MySQL(host:port, database, table, user, password)."""
-    return ChEngineSpec("MySQL", args=(f"{host}:{port}", database, table, user, password))
+    return ChEngineSpec("MySQL", args=tuple(map(_sql_string, (f"{host}:{port}", database, table, user, password))))
 
 
 def postgresql_engine(
@@ -429,7 +471,7 @@ def postgresql_engine(
     password: str,
 ) -> ChEngineSpec:
     """ENGINE = PostgreSQL(host:port, database, table, user, password)."""
-    return ChEngineSpec("PostgreSQL", args=(f"{host}:{port}", database, table, user, password))
+    return ChEngineSpec("PostgreSQL", args=tuple(map(_sql_string, (f"{host}:{port}", database, table, user, password))))
 
 
 def mongodb(
@@ -441,33 +483,35 @@ def mongodb(
     password: str,
 ) -> ChEngineSpec:
     """ENGINE = MongoDB(host:port, database, table, user, password)."""
-    return ChEngineSpec("MongoDB", args=(f"{host}:{port}", database, table, user, password))
+    return ChEngineSpec("MongoDB", args=tuple(map(_sql_string, (f"{host}:{port}", database, table, user, password))))
 
 
 def redis(
     host: str,
     port: int,
     password: str,
-    storage: str,
+    storage: str | int,
 ) -> ChEngineSpec:
-    """ENGINE = Redis(host:port, password, storage)."""
-    return ChEngineSpec("Redis", args=(f"{host}:{port}", password, storage))
+    """Build Redis(host:port, db_index, password); storage is the database index."""
+    if not str(storage).isascii() or not str(storage).isdigit():
+        raise ValueError("storage must be a non-negative Redis database index")
+    return ChEngineSpec("Redis", args=(_sql_string(f"{host}:{port}"), str(storage), _sql_string(password)))
 
 
 def url_engine(url: str, format: str) -> ChEngineSpec:
     """ENGINE = URL(url, format)."""
-    return ChEngineSpec("URL", args=(url, format))
+    return ChEngineSpec("URL", args=(_sql_string(url), _sql_string(format)))
 
 
 def file_engine(format: str, path: str | None = None) -> ChEngineSpec:
     """ENGINE = File(format[, path])."""
     args = (format,) if path is None else (format, path)
-    return ChEngineSpec("File", args=args)
+    return ChEngineSpec("File", args=tuple(map(_sql_string, args)))
 
 
 def hdfs(uri: str, format: str) -> ChEngineSpec:
     """ENGINE = HDFS(uri, format)."""
-    return ChEngineSpec("HDFS", args=(uri, format))
+    return ChEngineSpec("HDFS", args=(_sql_string(uri), _sql_string(format)))
 
 
 def null() -> ChEngineSpec:
@@ -482,7 +526,7 @@ def memory() -> ChEngineSpec:
 
 def merge(db_regex: str, table_regex: str) -> ChEngineSpec:
     """ENGINE = Merge(db, tables_regexp): read-only union over matching tables."""
-    return ChEngineSpec("Merge", args=(db_regex, table_regex))
+    return ChEngineSpec("Merge", args=(_sql_string(db_regex), _sql_string(table_regex)))
 
 
 def set_engine() -> ChEngineSpec:
@@ -497,7 +541,7 @@ def join_engine(strictness: str, kind: str, *key_cols: str) -> ChEngineSpec:
 
 def dictionary_engine(dict_name: str) -> ChEngineSpec:
     """ENGINE = Dictionary(name): exposes a dictionary as a table."""
-    return ChEngineSpec("Dictionary", args=(dict_name,))
+    return ChEngineSpec("Dictionary", args=(_sql_string(dict_name),))
 
 
 def log() -> ChEngineSpec:
