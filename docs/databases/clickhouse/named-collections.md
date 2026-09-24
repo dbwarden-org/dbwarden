@@ -41,7 +41,7 @@ Named collections are diffed on their **key set**: what keys are declared and wh
 - `named_collection("kafka_prod", keys={"sasl_username": "kafka_user"})` declares that a collection named `kafka_prod` should have the key `sasl_username`.
 - The value `"kafka_user"` is metadata for dbwarden's diff output but is **never compared** to the server state. Secret values (`password`, `sasl_password`, `secret_access_key`) are not declared at all: they come from ClickHouse's secret store.
 
-This means dbwarden will detect that a key exists in a model but is missing from the server, and emit `CREATE NAMED COLLECTION ...`. But it will never emit `ALTER NAMED COLLECTION` with a changed password value: it can't know the real value.
+This means dbwarden will detect that a key exists in a model but is missing from the server, and emit `CREATE NAMED COLLECTION ...`. But it will never emit `ALTER NAMED COLLECTION` with a changed password value: it can't know the real value. The descriptor stores entries verbatim in `.entries`, and `.to_dict()` includes them, so do not put credentials in it if they must stay out of serialized artifacts.
 
 ## Additional model examples
 
