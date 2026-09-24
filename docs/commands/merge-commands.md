@@ -104,8 +104,8 @@ Recovers a persistent environment after a dirty merge.
 ### Usage
 
 ```bash
-$ dbwarden reconcile --environment staging
-$ dbwarden reconcile --environment staging --dry-run
+$ dbwarden reconcile staging
+$ dbwarden reconcile staging --dry-run
 ```
 
 ### Options
@@ -127,7 +127,7 @@ $ dbwarden reconcile --environment staging --dry-run
 ### Example
 
 ```bash
-$ dbwarden reconcile --environment staging
+$ dbwarden reconcile staging
 Reconciling environment: staging
 Environment: staging (persistent: true)
 Snapshotting live environment...

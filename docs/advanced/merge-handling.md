@@ -66,7 +66,7 @@ dbwarden rebase --database local
 Recovers a persistent environment after a dirty merge.
 
 ```bash
-dbwarden reconcile --environment staging
+dbwarden reconcile staging
 ```
 
 **Flags:**
@@ -175,7 +175,7 @@ When detected, `make-migrations` refuses generation and `status` shows `MERGE_PE
 
 4. **Recover persistent environments (if dirty):**
    ```bash
-   dbwarden reconcile --environment staging
+   dbwarden reconcile staging
    ```
 
 5. **Commit and push:**

@@ -355,7 +355,7 @@ $ dbwarden rebase --database primary
 ### `reconcile`
 
 ```bash
-$ dbwarden reconcile --environment staging
+$ dbwarden reconcile staging
 ```
 
 ## Plugin management
