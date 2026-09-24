@@ -31,7 +31,7 @@ def route_path_from_file(filepath: Path) -> str:
             return "/"
         return "/" + "/".join(parts) + "/"
     stem = Path(*parts).with_suffix("")
-    return "/" + str(stem) + "/"
+    return "/" + stem.as_posix() + "/"
 
 
 def strip_frontmatter(text: str) -> str:
