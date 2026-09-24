@@ -69,7 +69,7 @@ Every aggregate must have an alias (`.as_(name)`):
 aggregates=[
     agg.count().as_("event_count"),
     agg.sum("amount", "Float64").as_("total_amount"),
-    agg.uniq("user_id").as_("unique_users"),
+    agg.uniq("user_id", "String").as_("unique_users"),
 ]
 ```
 
@@ -112,7 +112,7 @@ class EventStats(AggregatingView):
             ],
             aggregates=[
                 agg.count().as_("views"),
-                agg.uniq(PageView.session_id).as_("unique_sessions"),
+                agg.uniq(PageView.session_id, "String").as_("unique_sessions"),
                 agg.sum(PageView.duration).as_("total_duration"),
             ],
             order_by=["url", "day"],
