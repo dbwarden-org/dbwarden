@@ -277,7 +277,7 @@ Op(
     upgrade_attrs={
         "table": "users",
         "column": "display_name",
-        "model_column": <ModelColumn: display_name VARCHAR(255) nullable>,
+        "model_column": model_col,  # ModelColumn("display_name", "VARCHAR(255)", ...)
     },
     rollback_attrs={"table": "users", "column": "display_name"},
 )
@@ -285,11 +285,7 @@ Op(
 # Rollback op
 Op(
     object_type="drop_column",
-    upgrade_attrs={
-        "table": "users",
-        "column": "display_name",
-        "definition": {"type": "VARCHAR(255)", "nullable": True},
-    },
+    upgrade_attrs={"table": "users", "column": "display_name"},
     rollback_attrs={"table": "users", "column": "display_name"},
 )
 ```
