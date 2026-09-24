@@ -401,7 +401,7 @@ class KafkaEvents(Base):
         ch = ch_table(
             engine=kafka(
                 named_collection="kafka_prod",
-                topic="raw_events",
+                topic_list="raw_events",
                 format="JSONEachRow",
                 group_name="dbwarden",
             ),
@@ -442,8 +442,8 @@ class Analytics(DbwardenDatabase):
     ch_users = [
         ChUserSpec(
             name="bob",
-            named_collection="ldap_auth",
-            default_role="analyst",
+            auth="ldap BY 'ldap.example.com'",
+            default_roles=("analyst",),
         ),
     ]
     ch_grants = [
