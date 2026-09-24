@@ -149,6 +149,12 @@ def _format_clickhouse_engine(
     if replica_name is not None and not has_replica_name:
         extra_args.insert(replica_index, replica_name)
 
+    if str(engine_name).startswith("Replicated"):
+        from dbwarden.databases.clickhouse.engine import _sql_string
+        for index in range(min(2, len(extra_args))):
+            if not extra_args[index].startswith(("'", '"')):
+                extra_args[index] = _sql_string(extra_args[index])
+
     if extra_args:
         return f"{engine_name}({', '.join(extra_args)})"
     return f"{engine_name}()"
