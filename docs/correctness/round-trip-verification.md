@@ -175,14 +175,14 @@ class Event(Base):
             projections=[
                 ProjectionSpec(
                     name="by_date",
-                    select="SELECT event_date, count() GROUP BY event_date",
+                    query="SELECT event_date, count() GROUP BY event_date",
                 ),
             ],
             indexes=[
                 ChIndexSpec(
                     name="idx_path",
-                    expr="path",
-                    clickhouse_type="bloom_filter(0.01)",
+                    columns=["path"],
+                    type="bloom_filter(0.01)",
                     granularity=64,
                 ),
             ],
