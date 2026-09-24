@@ -160,7 +160,7 @@ class TestEngineFactories:
     def test_summing_merge_tree(self):
         spec = summing_merge_tree("col1", "col2")
         assert spec.name == "SummingMergeTree"
-        assert spec.args == ("col1", "col2")
+        assert spec.args == ("(col1, col2)",)
 
     def test_aggregating_merge_tree(self):
         spec = aggregating_merge_tree()
@@ -179,20 +179,20 @@ class TestEngineFactories:
     def test_graphite_merge_tree(self):
         spec = graphite_merge_tree("rollup")
         assert spec.name == "GraphiteMergeTree"
-        assert spec.args == ("rollup",)
+        assert spec.args == ("'rollup'",)
 
     def test_distributed(self):
         spec = distributed("cluster_1", "db", "events")
         assert spec.name == "Distributed"
-        assert spec.args == ("cluster_1", "db", "events")
+        assert spec.args == ("'cluster_1'", "'db'", "'events'")
 
     def test_distributed_with_sharding_key(self):
         spec = distributed("cluster_1", "db", "events", sharding_key="rand()")
-        assert spec.args == ("cluster_1", "db", "events", "rand()")
+        assert spec.args == ("'cluster_1'", "'db'", "'events'", "rand()")
 
     def test_distributed_with_policy(self):
-        spec = distributed("c", "d", "t", policy_name="p1")
-        assert spec.args == ("c", "d", "t", "p1")
+        spec = distributed("c", "d", "t", "rand()", policy_name="p1")
+        assert spec.args == ("'c'", "'d'", "'t'", "rand()", "'p1'")
 
     def test_buffer(self):
         spec = buffer("db", "target", 1, 10, 60, 100, 1000, 10000, 100000)
@@ -210,7 +210,7 @@ class TestEngineFactories:
     def test_merge(self):
         spec = merge("db", ".*")
         assert spec.name == "Merge"
-        assert spec.args == ("db", ".*")
+        assert spec.args == ("'db'", "'.*'")
 
     def test_set_engine(self):
         spec = set_engine()
@@ -224,7 +224,7 @@ class TestEngineFactories:
     def test_dictionary_engine(self):
         spec = dictionary_engine("my_dict")
         assert spec.name == "Dictionary"
-        assert spec.args == ("my_dict",)
+        assert spec.args == ("'my_dict'",)
 
     def test_log_family(self):
         assert log().name == "Log"
@@ -259,7 +259,7 @@ class TestEngineFactories:
     def test_mysql_engine(self):
         spec = mysql_engine("localhost", 3306, "db", "tbl", "user", "pass")
         assert spec.name == "MySQL"
-        assert spec.args[0] == "localhost:3306"
+        assert spec.args[0] == "'localhost:3306'"
 
     def test_postgresql_engine(self):
         spec = postgresql_engine("localhost", 5432, "db", "tbl", "user", "pass")
@@ -270,27 +270,27 @@ class TestEngineFactories:
         assert spec.name == "MongoDB"
 
     def test_redis_engine(self):
-        spec = redis("localhost", 6379, "pass", "string")
+        spec = redis("localhost", 6379, "pass", "0")
         assert spec.name == "Redis"
 
     def test_url_engine(self):
         spec = url_engine("http://example.com/data", "JSONEachRow")
         assert spec.name == "URL"
-        assert spec.args == ("http://example.com/data", "JSONEachRow")
+        assert spec.args == ("'http://example.com/data'", "'JSONEachRow'")
 
     def test_file_engine(self):
         spec = file_engine("CSV")
         assert spec.name == "File"
-        assert spec.args == ("CSV",)
+        assert spec.args == ("'CSV'",)
 
     def test_file_engine_with_path(self):
         spec = file_engine("CSV", "data.csv")
-        assert spec.args == ("CSV", "data.csv")
+        assert spec.args == ("'CSV'", "'data.csv'")
 
     def test_hdfs(self):
         spec = hdfs("hdfs://namenode:8020/data", "Parquet")
         assert spec.name == "HDFS"
-        assert spec.args == ("hdfs://namenode:8020/data", "Parquet")
+        assert spec.args == ("'hdfs://namenode:8020/data'", "'Parquet'")
 
 
 class TestSettingsRendering:

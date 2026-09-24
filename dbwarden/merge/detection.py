@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Optional
 
 from dbwarden.logging import get_component_logger
+from dbwarden.merge.marker import is_superseded
 
 logger = get_component_logger("merge")
 
@@ -89,7 +90,16 @@ def check_divergent_base(db_name: str | None = None) -> bool:
         if hasattr(header, 'base_checksum') and header.base_checksum:
             import json
             state = json.loads(state_path.read_text())
-            current_checksum = _compute_state_checksum(state)
+            from dbwarden.engine.generation_state import state_checksum
+            from dbwarden.engine.safety.plans import read_trusted_plan
+            current_checksum = state_checksum(state)
+            plan, _ = read_trusted_plan(latest_file)
+            if plan and plan.get("target_checksum") == current_checksum:
+                return False
+            if "generation_base" in state:
+                from dbwarden.engine.generation_state import effective_state
+                effective_state(state, filepaths, applied=set(state.get("generation_applied", [])))
+                return False
 
             if header.base_checksum != current_checksum:
                 # Check git ancestry: is current model state a descendant of the base?
@@ -206,43 +216,31 @@ def check_version_collisions(db_name: str | None = None) -> list[str]:
 
 
 def check_snapshot_discontinuity(db_name: str | None = None) -> bool:
-    """Check if the latest snapshot doesn't match the model state implied by the runnable chain.
+    import json
 
-    This detects the case where migrations were applied but the snapshot
-    wasn't updated, or where the snapshot is stale.
-    """
-    from dbwarden.engine.core.snapshot_io import find_latest_snapshot, compute_checksum
-    from dbwarden.commands.make_migrations.pipeline import get_model_state_path
+    from dbwarden.commands.make_migrations.pipeline import get_current_model_state_path
+    from dbwarden.engine.core.snapshot_io import find_latest_snapshot
+    from dbwarden.engine.generation_state import effective_state, state_checksum
+    from dbwarden.engine.safety.plans import read_trusted_plan
+    from dbwarden.engine.version import get_migration_filepaths_by_version, get_migrations_directory
 
+    snapshot = find_latest_snapshot(db_name)
+    state_path = get_current_model_state_path(db_name)
+    if snapshot is None or not state_path.exists():
+        return False
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    files = get_migration_filepaths_by_version(get_migrations_directory(db_name))
+    applied = set(snapshot.get("applied_versions", state.get("generation_applied", [])))
+    if any(version not in applied and not is_superseded(path) and read_trusted_plan(path)[0] is None for version, path in files.items()):
+        return False
+    baseline = snapshot.get("model_state", state.get("generation_base", snapshot))
     try:
-        # Get latest snapshot
-        snapshot = find_latest_snapshot(db_name)
-        if snapshot is None:
-            return False
-
-        # Get current model state
-        state_path = get_model_state_path(db_name)
-        if not state_path.exists():
-            return False
-
-        # Compare checksums
-        snapshot_checksum = compute_checksum(snapshot)
-
-        import json
-        state = json.loads(state_path.read_text())
-        state_checksum = _compute_state_checksum(state)
-
-        if snapshot_checksum != state_checksum:
-            logger.info(
-                "Snapshot discontinuity: snapshot checksum %s != model state checksum %s",
-                snapshot_checksum[:8], state_checksum[:8],
-            )
-            return True
-
-    except Exception as e:
-        logger.debug("Error checking snapshot discontinuity: %s", e)
-
-    return False
+        composed, _ = effective_state(baseline, files, applied=applied, strict=True)
+    except ValueError:
+        return True
+    if "generation_base" in state:
+        return False
+    return state_checksum(composed) != state_checksum(state)
 
 
 def _compute_state_checksum(state: dict) -> str:
@@ -290,59 +288,28 @@ def get_diagnostic_message(signals: list[MergeSignal]) -> str:
 
 
 def check_dirty_environment(db_name: str | None = None) -> bool:
-    """Check if the environment has unreconciled merge changes.
+    from dbwarden.config import get_database
+    from dbwarden.engine.version import MIGRATION_PATTERN, get_migrations_directory
+    from dbwarden.merge.environments import load_environments
+    from dbwarden.merge.reconciliation import load_merge_record
+    from dbwarden.repositories import get_migrated_versions, migrations_table_exists
 
-    R8.2: Environments that were unknown at merge time (unreachable) are
-    probed on the next status/migrate run; if found dirty, migrate refuses
-    to run the normal chain and directs the operator to reconcile.
-
-    Returns True if the environment is dirty and needs reconciliation.
-    """
-    from dbwarden.merge.marker import is_superseded
-    from dbwarden.engine.version import get_migrations_directory, get_migration_filepaths_by_version
-
-    superseded_files: list[str] = []
-    # Check if there are any superseded migrations that might indicate a dirty environment
-    try:
-        migrations_dir = get_migrations_directory(db_name)
-        filepaths = get_migration_filepaths_by_version(migrations_dir)
-
-        # If there are superseded files, check if any have been applied
-        for version, filepath in filepaths.items():
-            if is_superseded(Path(filepath)):
-                superseded_files.append(version)
-
-        if not superseded_files:
-            return False
-
-        # Check if any superseded versions are in the merge records as dirty
-        from dbwarden.merge.reconciliation import load_merge_record
-
-        merges_dir = Path(migrations_dir).parent / ".dbwarden" / "merges"
-        if not merges_dir.exists():
-            return False
-
-        for merge_file in merges_dir.glob("*.json"):
-            record = load_merge_record(merge_file)
-            if record.get("status") == "dirty":
-                # Check if any superseded file in this merge is relevant
-                merge_superseded = record.get("superseded_files", [])
-                for sf in merge_superseded:
-                    # Extract version from filename
-                    parts = sf.split("__")
-                    if len(parts) > 1:
-                        version_part = parts[1].split("_")[0]
-                        if version_part in superseded_files:
-                            return True
-
+    directory = Path(get_migrations_directory(db_name))
+    superseded = {match.group(1) for path in directory.glob("*.sql")
+                  if (match := MIGRATION_PATTERN.match(path.name)) and is_superseded(path)}
+    if not superseded:
         return False
-
-    except Exception as e:
-        logger.debug("Could not check dirty environment: %s", e)
-        # Section 7.2: Fail-closed on merge-record parsing failures.
-        # Once superseded migrations are present, an unreadable record is unsafe.
-        if superseded_files:
-            return True
-        # If no superseded files found but we hit an error during discovery,
-        # fail closed to prevent silent passage of a dirty environment.
-        raise
+    directories = {Path(".dbwarden/merges").resolve(), (directory.parent / ".dbwarden/merges").resolve()}
+    try:
+        records = [load_merge_record(path) for root in directories for path in root.glob("*.json")]
+    except (OSError, ValueError):
+        return True
+    if not migrations_table_exists(db_name):
+        return False
+    dirty = set(get_migrated_versions(db_name)) & superseded
+    config = get_database(db_name)
+    current_envs = {env.name for env in load_environments(db_name) if os.environ.get(env.url_env) == config.sqlalchemy_url}
+    for record in records:
+        if any(record.get("probe_results", {}).get(env) == "reconciled" for env in current_envs):
+            dirty -= set(record.get("superseded_versions", []))
+    return bool(dirty)
