@@ -360,13 +360,11 @@ if TYPE_CHECKING:
 primary = database_config(
     database_name="primary",
     model_paths=["app.models.primary"],  #  Add this
-    ...
 )
 
 analytics = database_config(
     database_name="analytics",
     model_paths=["app.models.analytics"],  #  Add this
-    ...
 )
 ```
 
@@ -382,13 +380,11 @@ analytics = database_config(
 primary = database_config(
     database_name="primary",
     model_paths=["app.models.primary"],  # Different path
-    ...
 )
 
 analytics = database_config(
     database_name="analytics",
     model_paths=["app.models.analytics"],  # Different path
-    ...
 )
 ```
 
@@ -399,14 +395,12 @@ primary = database_config(
     database_name="primary",
     model_paths=["app.shared"],
     overlap_models=True,  #  Allow overlap
-    ...
 )
 
 analytics = database_config(
     database_name="analytics",
     model_paths=["app.shared"],
     overlap_models=True,  #  Allow overlap
-    ...
 )
 ```
 
