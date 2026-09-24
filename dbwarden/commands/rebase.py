@@ -5,14 +5,18 @@ Implements the merge spec §7.
 """
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Optional
 
+from sqlalchemy import text
+
 from dbwarden.logging import get_logger
+from dbwarden.merge.environments import is_persistent
+from dbwarden.merge.marker import is_superseded
 from dbwarden.output import error, info, success, warning
 
-from dbwarden.merge.marker import is_superseded, parse_superseded_marker
-from dbwarden.merge.environments import is_persistent
+logger = get_logger()
 
 
 def rebase_cmd(
@@ -74,6 +78,9 @@ def rebase_cmd(
         info("To recover, run: dbwarden rebase --database <name>")
         return
 
+    if not yes and not sys.stdin.isatty():
+        raise ValueError("Non-interactive rebase requires --yes. hint: inspect --dry-run first")
+
     # Step 3: Check if target is persistent (R7.4)
     # Use the actual target environment name, not hardcoded "local"
     target_env = database or "default"
@@ -124,23 +131,28 @@ def rebase_cmd(
     from dbwarden.commands.migrate import migrate_cmd
 
     try:
-        migrate_cmd(database=database, verbose=verbose)
+        migrate_cmd(database=database, verbose=verbose, force=force)
         info("Migrations re-applied successfully.")
     except Exception as e:
-        error(f"Failed to re-apply migrations: {e}")
-        return
+        raise RuntimeError(f"Failed to re-apply migrations: {e}") from e
 
     # Step 6: Verify convergence (R7.6)
     info("Verifying convergence...")
-    from dbwarden.commands.diff import diff_cmd
+    from dbwarden.commands.merge import _rebuild_current_state
+    from dbwarden.config import get_database
+    from dbwarden.engine.generation_state import configuration_state
+    from dbwarden.engine.offline import diff_model_states
+    from dbwarden.engine.snapshot import extract_full_schema_snapshot
 
     try:
-        diff_cmd(database=database, verbose=verbose)
+        actual = configuration_state(extract_full_schema_snapshot(database=database), get_database(database))
+        remaining, _ = diff_model_states(actual, _rebuild_current_state(database), db_name=database)
+        if remaining:
+            raise RuntimeError(f"{len(remaining)} schema operations remain after rebase")
         info("Convergence verified.")
     except Exception as e:
         warning(f"Convergence check failed: {e}")
         # Non-zero exit on convergence failure (R7.6)
-        import sys
         sys.exit(1)
 
     success("Rebase complete.")
@@ -148,13 +160,12 @@ def rebase_cmd(
 
 def _find_merge_base_version(migrations_dir: str, superseded_versions: list[str]) -> Optional[str]:
     """Find the merge-base version from superseded markers."""
-    from dbwarden.merge.marker import parse_superseded_marker
+    from dbwarden.merge.reconciliation import load_merge_record
 
-    for version in superseded_versions:
-        for f in Path(migrations_dir).glob(f"*__{version}_*.sql"):
-            marker = parse_superseded_marker(f)
-            if marker:
-                return marker.merge_base
+    for path in sorted(Path(".dbwarden/merges").glob("*.json"), reverse=True):
+        record = load_merge_record(path)
+        if set(record.get("superseded_versions", [])) & set(superseded_versions):
+            return record.get("merge_base_version")
 
     return None
 
@@ -172,12 +183,12 @@ def _check_irreversible_superseded(migrations_dir: str, superseded_versions: lis
             try:
                 # Check for irreversible marker in the file
                 content = f.read_text()
-                if "dbwarden:irreversible" in content:
+                if "dbwarden:irreversible" in content or "dbwarden: irreversible" in content:
                     logger.warning("Found irreversible declaration in %s", f.name)
                     return True
 
                 # Also check if rollback section is empty or contains placeholder
-                rollback_statements = parse_rollback_statements(f)
+                rollback_statements = parse_rollback_statements(str(f))
                 if not rollback_statements:
                     # No rollback section means it's effectively irreversible
                     logger.warning("No rollback section in %s (effectively irreversible)", f.name)
@@ -253,8 +264,7 @@ def _reset_database(database: str | None, yes: bool, verbose: bool) -> None:
         info("Consider dumping fixtures or using the seeds plugin before reset.")
         response = input("Are you sure? (yes/no): ")
         if response.lower() != "yes":
-            info("Aborted.")
-            return
+            raise RuntimeError("Reset cancelled; rebase stopped")
 
     info("Resetting database...")
 
@@ -300,10 +310,10 @@ def _reset_database(database: str | None, yes: bool, verbose: bool) -> None:
                     conn.execute(text(f"DROP TABLE IF EXISTS {table}"))
                     info(f"  Dropped table: {table}")
             else:
-                error(f"Database reset not supported for {config.database_type}")
-                return
+                raise ValueError(f"Database reset not supported for {config.database_type}")
+            conn.commit()
 
         info(f"Database reset complete. {len(tables)} table(s) dropped.")
 
     except Exception as e:
-        error(f"Failed to reset database: {e}")
+        raise RuntimeError(f"Failed to reset database: {e}") from e
