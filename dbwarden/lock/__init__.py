@@ -18,6 +18,8 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
+from sqlalchemy import text
+
 from dbwarden.lock.state import LockState, compute_health, describe_holder, validate_transition
 from dbwarden.lock.strategy import (
     AcquireResult,
