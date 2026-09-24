@@ -144,7 +144,7 @@ def rollback_cmd(
         reverted = 0
         missing = 0
         for version, filepath in reversed(list(versions_to_rollback.items())):
-            filename = filepath.split("/")[-1]
+            filename = Path(filepath).name
             if not os.path.exists(filepath):
                 error(f"Migration file not found: {filename}")
                 missing += 1
