@@ -54,6 +54,25 @@ There are no migration scripts to write or maintain. There is no migration runti
 - Extensible plugin system with official plugins for seeds, RBAC, FastAPI, sandbox testing, and PostgreSQL/ClickHouse extensions
 - Reverse-engineer live databases into models with `generate-models` (supports `--base` for custom imports)
 
+## Features and limits
+
+- **Migration authoring:** SQLAlchemy models, backend metadata, rename detection,
+  reverse engineering, explicit SQL files, and rollback generation.
+- **Safety:** operation classification, expand-contract type changes, severity
+  splits, execution ceilings, pending-plan checks, and impact reports.
+- **State and history:** offline model-state JSON, schema snapshots, checksums,
+  repeatable migrations, merge reconciliation, and rebase support.
+- **Operation:** multiple database configurations, optional database skipping,
+  locks, sandbox providers, SQLite dev translation, JSON output, and tracing.
+- **Extensions:** plugin configuration, handlers, hooks, CLI commands, and named
+  migration groups. FastAPI, seed extensions, and backend object plugins have
+  separate installation and compatibility requirements.
+
+Use the [feature map](https://docs.dbwarden.org/reference/feature-map/) to find each workflow and
+its implementation boundary. The [CLI inventory](https://docs.dbwarden.org/reference/cli-options/)
+lists every built-in option; the [Python inventory](https://docs.dbwarden.org/reference/python-api/)
+lists exports, signatures, declared fields, and methods.
+
 ## Why dbwarden
 
 Schema management tools fall into two camps. Imperative tools have you author *changes*: revision scripts that describe how to get from one schema version to the next. Declarative tools have you author the *desired state* and derive the changes for you. dbwarden is declarative: your SQLAlchemy models are the single definition of what the schema should be.
