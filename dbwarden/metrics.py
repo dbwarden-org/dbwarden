@@ -29,6 +29,23 @@ except ImportError:
 if _HAS_PROMETHEUS:
     _REGISTRY = prometheus_client.CollectorRegistry()
 
+    _migrations_deferred = prometheus_client.Counter(
+        "dbwarden_migrations_deferred_total", "Migration runs stopped by severity",
+        labelnames=["database", "severity"],
+    )
+    _deferred_age = prometheus_client.Gauge(
+        "dbwarden_migration_deferred_age_seconds", "Age of pending deferred migrations",
+        labelnames=["database", "version"],
+    )
+
+    def increment_migrations_deferred(database: str, severity: str) -> None:
+        if metrics_enabled():
+            _migrations_deferred.labels(database=database, severity=severity).inc()
+
+    def set_deferred_age(database: str, version: str, age: float) -> None:
+        if metrics_enabled():
+            _deferred_age.labels(database=database, version=version).set(max(0, age))
+
     _migrations_total = prometheus_client.Counter(
         "dbwarden_migrations_total",
         "Total number of migrations applied",
@@ -159,6 +176,8 @@ if _HAS_PROMETHEUS:
         )
 
 else:
+    increment_migrations_deferred = _noop
+    set_deferred_age = _noop
     increment_migrations_total = _noop
     observe_migration_duration = _noop
     set_schema_version = _noop
