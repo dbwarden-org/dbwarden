@@ -9,7 +9,7 @@ def classify_pg_type_change(from_type: dict[str, Any], to_type: dict[str, Any]) 
 
     if from_kind == "varchar" and to_kind == "varchar":
         fl, tl = from_type.get("length"), to_type.get("length")
-        if fl is None or tl is None or tl >= fl:
+        if tl is None or (fl is not None and tl >= fl):
             return "SAFE"
         return "CRITICAL"
     if from_kind == "integer" and to_kind == "biginteger":
@@ -23,7 +23,8 @@ def classify_pg_type_change(from_type: dict[str, Any], to_type: dict[str, Any]) 
     if from_kind == "numeric":
         fp = from_type.get("precision")
         tp = to_type.get("precision")
-        if fp and tp and tp < fp:
+        fs, ts = from_type.get("scale") or 0, to_type.get("scale") or 0
+        if tp is not None and (fp is None or tp - ts < fp - fs or ts < fs):
             return "CRITICAL"
     if from_kind != to_kind:
         return "CRITICAL"
