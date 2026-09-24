@@ -112,8 +112,8 @@ The Redis lock uses `SET NX EX` with a configurable TTL (default 60 seconds). Th
 
 ## Per-backend details
 
-- [PostgreSQL, MySQL, SQLite](../../advanced/migration-locking.md): General locking guide covering lock acquisition, heartbeat, stuck lock recovery, and CI/CD patterns
-- [ClickHouse](../../advanced/clickhouse-locking.md): Coordination profiles (CH-0 through CH-4), why ClickHouse needs custom locking, idempotency enforcement, and production setup
+- [PostgreSQL, MySQL, SQLite](../advanced/migration-locking.md): General locking guide covering lock acquisition, heartbeat, stuck lock recovery, and CI/CD patterns
+- [ClickHouse](../advanced/clickhouse-locking.md): Coordination profiles (CH-0 through CH-4), why ClickHouse needs custom locking, idempotency enforcement, and production setup
 
 ## Configuration
 
