@@ -6,15 +6,18 @@ Implements the merge spec §8.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+import os
 from pathlib import Path
-from typing import Optional
 
 from dbwarden import __version__
-from dbwarden.logging import get_logger
-from dbwarden.output import error, info, success, warning
-
+from dbwarden.config import get_database, get_multi_db_config
+from dbwarden.files import atomic_write_text
+from dbwarden.logging import get_component_logger
 from dbwarden.merge.environments import is_persistent, load_environments
+from dbwarden.merge.reconciliation import load_merge_record
+from dbwarden.output import info, success, warning
+
+logger = get_component_logger("merge")
 
 
 def reconcile_cmd(
@@ -23,6 +26,8 @@ def reconcile_cmd(
     rename_columns: list[str] | None = None,
     dry_run: bool = False,
     verbose: bool = False,
+    force: bool = False,
+    split_at_severity: str | None = None,
 ) -> None:
     """Recover a persistent environment after a dirty merge.
 
@@ -36,268 +41,235 @@ def reconcile_cmd(
         rename_columns: Column renames to confirm.
         dry_run: Only show what would happen, don't apply.
         verbose: Enable verbose logging.
+        force: Acknowledge operation risks in reconciliation.
+        split_at_severity: Split reconciliation by severity.
     """
-    logger = get_logger(verbose=verbose)
+    from sqlalchemy.engine import make_url
 
-    info(f"Reconciling environment: {environment}")
-
-    # Check if environment is persistent
-    if not is_persistent(environment, database):
-        warning(f"Environment '{environment}' is not registered as persistent.")
-        info("Reconcile is intended for persistent environments. Use 'dbwarden rebase' for disposable ones.")
-        return
-
-    # Get environment config
-    envs = load_environments(database)
-    env_config = next((e for e in envs if e.name == environment), None)
-    if env_config is None:
-        error(f"Environment '{environment}' not found in configuration.")
-        return
-
-    info(f"Environment: {environment} (persistent: {env_config.persistent})")
-
-    if dry_run:
-        info("Dry-run mode. No changes will be made.")
-        info("To reconcile, run: dbwarden reconcile --environment <name>")
-        return
-
-    # Step 1: Snapshot live environment
-    info("Step 1: Snapshotting live environment...")
-    snapshot = _snapshot_environment(environment, database)
-    if snapshot is None:
-        error("Could not snapshot live environment.")
-        return
-
-    # Step 2: Diff against merged models
-    info("Step 2: Computing diff against merged models...")
-    diff_ops = _diff_against_models(snapshot, database)
-    if not diff_ops:
-        info("No differences found. Environment is already reconciled.")
-        return
-
-    info(f"Found {len(diff_ops)} operations to reconcile.")
-
-    # Step 3: Generate environment-specific reconciliation
-    info("Step 3: Generating environment-specific reconciliation...")
-    reconciliation_dir = _get_reconciliation_dir(environment)
-    reconciliation_file = _generate_reconciliation(
-        reconciliation_dir,
-        environment,
-        diff_ops,
-        database,
+    from dbwarden.commands.make_migrations.generation import (
+        append_data_contract,
+        data_expansion_state,
+        diff_states,
+        generate_files,
+        include_data_operations,
     )
+    from dbwarden.commands.make_migrations.pipeline import get_current_model_state_path
+    from dbwarden.connection.connection import sandbox_override
+    from dbwarden.engine.offline import diff_model_states
 
-    # Step 4: Apply with lock discipline
-    info("Step 4: Applying reconciliation...")
-    _apply_reconciliation(reconciliation_file, database)
+    if not is_persistent(environment, database):
+        warning(
+            f"Environment '{environment}' is not registered as persistent. hint: use rebase for disposable environments"
+        )
+        return
+    env = next(
+        (item for item in load_environments(database) if item.name == environment), None
+    )
+    url = os.environ.get(env.url_env) if env else None
+    if not url:
+        raise ValueError(
+            f"No URL configured for environment {environment}. hint: set its url_env variable"
+        )
+    config = get_database(database)
+    backend = make_url(url).get_backend_name()
+    if backend not in (
+        config.database_type,
+        "clickhousedb"
+        if config.database_type == "clickhouse"
+        else config.database_type,
+    ):
+        raise ValueError("Environment backend differs from database configuration")
+    db_name = database or get_multi_db_config().default
+    state_path = get_current_model_state_path(db_name)
+    if not state_path.exists():
+        raise ValueError(
+            "No merged model state. hint: run merge or export-models first"
+        )
+    target = json.loads(state_path.read_text(encoding="utf-8"))
+    with sandbox_override(url, config.database_type):
+        snapshot = _snapshot_environment(environment, database)
+        if snapshot is None:
+            raise ValueError(
+                "Could not snapshot environment. hint: verify its connection settings"
+            )
+        from dbwarden.engine.generation_state import configuration_state
 
-    # Step 5: Update merge record
-    info("Step 5: Updating merge record...")
-    _update_merge_record(environment, reconciliation_file)
+        snapshot = configuration_state(snapshot, config)
+        target = configuration_state(target, config, desired=True)
+        upgrade, rollback = diff_states(
+            snapshot,
+            target,
+            db_name=db_name,
+            rename_columns=[
+                value.replace("=", ":", 1) for value in rename_columns or []
+            ],
+        )
+        directory = _get_reconciliation_dir(environment)
+        from dbwarden.connection import get_db_connection
+        from dbwarden.data.integration import applied_data_spec, load_data_plan
+        from dbwarden.data.planning import plan_data, previous_data_spec
+        from dbwarden.engine.version import get_migrations_directory
 
+        normal_paths = sorted(Path(get_migrations_directory(db_name)).glob("*.sql"))
+        history_paths = [*normal_paths, *sorted(directory.glob("*.sql"))]
+        data_spec = previous_data_spec(
+            {path.name: path for path in normal_paths},
+            database=db_name,
+            backend=config.database_type,
+        )
+        with get_db_connection(db_name) as connection:
+            previous_data = applied_data_spec(
+                connection,
+                history_paths,
+                database=db_name,
+                backend=config.database_type,
+            )
+        data_ops = plan_data(data_spec, previous_data)
+        expanded = data_expansion_state(snapshot, target, data_ops)
+        if expanded != target:
+            upgrade, rollback = diff_states(
+                snapshot,
+                expanded,
+                db_name=db_name,
+                rename_columns=[
+                    value.replace("=", ":", 1) for value in rename_columns or []
+                ],
+            )
+        upgrade = include_data_operations(upgrade, data_ops)
+        append_data_contract(upgrade, snapshot, expanded, target, db_name=db_name)
+        artifacts = generate_files(
+            upgrade,
+            rollback,
+            migrations_dir=str(directory),
+            database=database,
+            db_name=db_name,
+            description=f"reconcile {environment}",
+            baseline=snapshot,
+            target=target,
+            threshold=split_at_severity
+            if split_at_severity is not None
+            else config.split_at_severity,
+            header=f"-- Generated by: dbwarden reconcile (dbwarden {__version__})\n",
+            write=not dry_run,
+            data_spec=data_spec,
+        )
+        for artifact in artifacts:
+            info(
+                f"{'Would generate' if dry_run else 'Generated'} {artifact['filename']} [{artifact['plan']['severity']['file']}]"
+            )
+        if dry_run:
+            return
+        from dbwarden.commands.migrate import migrate_single
+
+        def complete(connection):
+            from dbwarden.engine.snapshot import extract_full_schema_snapshot
+
+            actual_snapshot = extract_full_schema_snapshot(database=db_name)
+            actual = configuration_state(actual_snapshot, config)
+            remaining, _ = diff_model_states(actual, target, db_name=db_name)
+            if remaining:
+                raise RuntimeError(
+                    f"Reconciliation did not converge: {len(remaining)} operations remain. hint: inspect dbwarden diff"
+                )
+            from dbwarden.data.convergence import check_convergence
+
+            data_plans = [
+                plan
+                for path in [*normal_paths, *sorted(directory.glob("*.sql"))]
+                if (plan := load_data_plan(path, db_name)) is not None
+            ]
+            findings = check_convergence(connection, data_spec, plans=data_plans)
+            if findings:
+                raise RuntimeError(
+                    f"Data reconciliation did not converge: {len(findings)} findings. hint: inspect dbwarden check --data"
+                )
+            _update_merge_record(
+                environment, str(directory), database=db_name, connection=connection
+            )
+            from dbwarden.engine.core.snapshot_io import write_snapshot
+            from dbwarden.repositories import get_migrated_versions
+
+            applied = get_migrated_versions(db_name)
+            actual_snapshot.update(
+                source="applied", model_state=target, applied_versions=applied
+            )
+            write_snapshot(
+                actual_snapshot,
+                database=db_name,
+                migration_id=max(applied, default="0000"),
+            )
+
+        migrate_single(
+            db_name=db_name,
+            reconciliation_dir=str(directory),
+            reconciliation_complete=complete,
+            force=force,
+            max_severity="CRITICAL",
+        )
     success(f"Reconciliation for environment '{environment}' complete.")
 
 
-def _snapshot_environment(environment: str, database: str | None) -> Optional[dict]:
-    """Snapshot the live environment.
+def _snapshot_environment(environment: str, database: str | None) -> dict | None:
+    from dbwarden.engine.snapshot import extract_full_schema_snapshot
 
-    Connects to the environment's database and takes a schema snapshot.
-    """
-    import os
-
-    envs = load_environments(database)
-    env_config = next((e for e in envs if e.name == environment), None)
-    if env_config is None or not env_config.url_env:
+    env = next(
+        (item for item in load_environments(database) if item.name == environment), None
+    )
+    url = os.environ.get(env.url_env) if env else None
+    if not url:
         return None
-
-    env_url = os.environ.get(env_config.url_env)
-    if not env_url:
-        warning(f"Environment variable {env_config.url_env} not set.")
-        return None
-
-    try:
-        from dbwarden.engine.snapshot import extract_full_schema_snapshot
-
-        # Connect to the environment's database
-        from sqlalchemy import create_engine
-        engine = create_engine(env_url)
-
-        # Extract snapshot
-        snapshot = extract_full_schema_snapshot(
-            sqlalchemy_url=env_url,
-            database_type=env_config.url_env.split(":")[0] if ":" in env_config.url_env else "sqlite",
-        )
-
-        engine.dispose()
-        return snapshot
-
-    except Exception as e:
-        logger.warning("Failed to snapshot environment %s: %s", environment, e)
-        return None
-
-
-def _diff_against_models(snapshot: dict, database: str | None) -> list[dict]:
-    """Diff the environment snapshot against merged models."""
-    try:
-        from dbwarden.commands.make_migrations.pipeline import get_model_state_path
-        from dbwarden.engine.snapshot.diff import diff_models_against_snapshot
-        from dbwarden.engine.core.model_state import reconstruct_model_table
-
-        # Load current model state
-        state_path = get_model_state_path(database)
-        if not state_path.exists():
-            return []
-
-        import json
-        model_state = json.loads(state_path.read_text())
-
-        # Convert model state to model tables
-        model_tables = []
-        for table_name, table_data in model_state.get("tables", {}).items():
-            try:
-                model_table = reconstruct_model_table(table_data)
-                model_table.name = table_name
-                model_tables.append(model_table)
-            except Exception as e:
-                logger.warning("Failed to reconstruct model table %s: %s", table_name, e)
-
-        # Diff snapshot against models
-        upgrade_ops, rollback_ops = diff_models_against_snapshot(
-            model_tables,
-            snapshot,
-            database=database,
-            db_name=database,
-        )
-
-        # Convert ops to dict format
-        diff_ops = []
-        for op in upgrade_ops:
-            diff_ops.append({
-                "type": op.get("type", "unknown"),
-                "table": op.get("table", ""),
-                "description": op.get("description", str(op)),
-            })
-
-        return diff_ops
-
-    except Exception as e:
-        logger.warning("Failed to diff against models: %s", e)
-        return []
+    return extract_full_schema_snapshot(
+        sqlalchemy_url=url, database_type=get_database(database).database_type
+    )
 
 
 def _get_reconciliation_dir(environment: str) -> Path:
-    """Get the directory for environment-specific reconciliation migrations."""
-    dir_path = Path(".dbwarden") / "reconciliations" / environment
-    dir_path.mkdir(parents=True, exist_ok=True)
-    return dir_path
+    base = Path(".dbwarden") / "reconciliations"
+    path = base / environment
+    if (
+        not environment
+        or not path.resolve().is_relative_to(base.resolve())
+        or path.resolve() == base.resolve()
+    ):
+        raise ValueError("Invalid environment path")
+    return path
 
 
-def _generate_reconciliation(
-    reconciliation_dir: Path,
-    environment: str,
-    diff_ops: list[dict],
-    database: str | None,
-) -> str:
-    """Generate an environment-specific reconciliation migration."""
-    from dbwarden.engine.version import get_next_migration_number
-    from dbwarden.files import atomic_write_text
-
-    # Generate version number
-    version = get_next_migration_number(str(reconciliation_dir))
-
-    # Generate filename
-    description = f"reconcile {environment}"
-    filename = f"{database or 'default'}__{version}_{description.replace(' ', '_')}.sql"
-    filepath = reconciliation_dir / filename
-
-    # Build upgrade SQL from diff ops
-    upgrade_sql = "-- upgrade\n"
-    upgrade_sql += f"-- Environment: {environment}\n"
-    upgrade_sql += f"-- Generated by: dbwarden reconcile (dbwarden {__version__})\n\n"
-
-    for op in diff_ops:
-        upgrade_sql += f"-- {op.get('description', 'no-op')}\n"
-
-    if not diff_ops:
-        upgrade_sql += "-- No schema changes required\n"
-
-    # Build rollback SQL
-    rollback_sql = "\n-- rollback\n-- No rollback required for environment reconciliation\n"
-
-    # Write the migration file
-    content = upgrade_sql + rollback_sql
-    atomic_write_text(filepath, content)
-
-    return filename
-
-
-def _apply_reconciliation(reconciliation_file: str, database: str | None) -> None:
-    """Apply the reconciliation migration with lock discipline.
-
-    §8 Step 4: Apply it (with the same lock discipline as migrate),
-    record the application in E's metadata table as a reconciliation
-    entry linked to the merge record (§6.2), then verify convergence.
-    """
-    from dbwarden.lock import acquire_lock, release_lock
+def _update_merge_record(
+    environment: str, reconciliation_file: str, *, database=None, connection=None
+) -> None:
     from dbwarden.engine.file_parser import parse_upgrade_statements
-    from dbwarden.repositories import run_migration
+    from dbwarden.engine.version import get_migrations_directory
+    from dbwarden.repositories import get_migrated_versions
+    from dbwarden.repositories.migrations_repo import _record_upgrade
 
-    # Read the SQL from the reconciliation file
-    filepath = Path(reconciliation_file)
-    if not filepath.exists():
-        error(f"Reconciliation file not found: {reconciliation_file}")
-        return
-
-    sql_statements = parse_upgrade_statements(str(filepath))
-    if not sql_statements:
-        warning("No SQL statements found in reconciliation file.")
-        return
-
-    # Acquire lock
-    lock_result = acquire_lock(database)
-    if not lock_result.acquired:
-        error(f"Could not acquire migration lock: {lock_result.holder_description}")
-        return
-
-    try:
-        # Execute the SQL
-        version = filepath.stem.split("__")[1].split("_")[0] if "__" in filepath.stem else None
-        run_migration(
-            sql_statements=sql_statements,
-            version=version,
-            migration_operation="upgrade",
-            filename=filepath.name,
-            db_name=database,
-        )
-
-        # Verify convergence
-        info("Verifying convergence...")
-        from dbwarden.commands.diff import diff_cmd
-        diff_cmd(database=database, verbose=False)
-
-    finally:
-        release_lock(database, strategy=lock_result.strategy)
-
-
-def _update_merge_record(environment: str, reconciliation_file: str) -> None:
-    """Update the merge record to mark environment as reconciled."""
-    merges_dir = Path(".dbwarden") / "merges"
-    if not merges_dir.exists():
-        return
-
-    # Find the most recent merge record
-    for record_file in sorted(merges_dir.glob("*.json"), reverse=True):
-        try:
-            record = json.loads(record_file.read_text())
-            if "probe_results" in record:
-                # Update probe results for this environment
-                record["probe_results"][environment] = "reconciled"
-                record["reconciliation_files"] = record.get("reconciliation_files", {})
-                record["reconciliation_files"][environment] = reconciliation_file
-
-                from dbwarden.files import atomic_write_text
-                atomic_write_text(record_file, json.dumps(record, indent=2))
-                info(f"  Updated merge record: {record_file.name}")
-                break
-        except Exception as e:
-            logger.debug("Failed to update merge record %s: %s", record_file.name, e)
+    applied = set(get_migrated_versions(database))
+    directory = Path(get_migrations_directory(database))
+    for path in sorted(Path(".dbwarden/merges").glob("*.json"), reverse=True):
+        record = load_merge_record(path)
+        if record.get("database", database) == database and environment in record.get(
+            "probe_results", {}
+        ):
+            for version in record.get("reconciliation_versions", []):
+                if version not in applied:
+                    candidates = list(directory.glob(f"*__{version}_*.sql"))
+                    if len(candidates) != 1:
+                        raise ValueError(
+                            f"Cannot record reconciled version {version}: expected one migration"
+                        )
+                    _record_upgrade(
+                        version=version,
+                        filename=candidates[0].name,
+                        migration_type="reconciliation",
+                        sql_statements=parse_upgrade_statements(str(candidates[0])),
+                        db_name=database,
+                        connection=connection,
+                    )
+                    applied.add(version)
+            if connection is not None:
+                connection.commit()
+            record["probe_results"][environment] = "reconciled"
+            record.setdefault("environment_reconciliations", {})[environment] = (
+                reconciliation_file
+            )
+            atomic_write_text(path, json.dumps(record, sort_keys=True, indent=2) + "\n")
