@@ -4,6 +4,7 @@ import sqlite3
 import stat
 import tempfile
 import uuid
+from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 
@@ -28,7 +29,7 @@ def create_backup(sqlalchemy_url: str, backup_dir: str) -> str:
     backup_dir_path = Path(backup_dir)
     try:
         mode = backup_dir_path.stat().st_mode
-        if mode & stat.S_IWOTH:
+        if os.name != "nt" and mode & stat.S_IWOTH:
             raise ValueError(
                 f"Backup directory '{backup_dir}' is world-writable. "
                 "Use a secure directory with restricted permissions."
@@ -64,7 +65,9 @@ def create_backup(sqlalchemy_url: str, backup_dir: str) -> str:
             f"Backups are currently supported only for SQLite, got {parsed.get_backend_name()!r}."
         )
     if not parsed.database or parsed.database == ":memory:":
-        raise ValueError("Cannot create a file backup for an in-memory SQLite database.")
+        raise ValueError(
+            "Cannot create a file backup for an in-memory SQLite database."
+        )
 
     source_path = Path(parsed.database).expanduser()
     if not source_path.is_file():
@@ -72,21 +75,27 @@ def create_backup(sqlalchemy_url: str, backup_dir: str) -> str:
 
     temp_path: str | None = None
     try:
-        fd, temp_path = tempfile.mkstemp(prefix=".backup-", suffix=".db", dir=backup_dir)
+        fd, temp_path = tempfile.mkstemp(
+            prefix=".backup-", suffix=".db", dir=backup_dir
+        )
         os.close(fd)
         os.chmod(temp_path, 0o600)
-        with sqlite3.connect(source_path) as source, sqlite3.connect(temp_path) as target:
+        with (
+            closing(sqlite3.connect(source_path)) as source,
+            closing(sqlite3.connect(temp_path)) as target,
+        ):
             source.backup(target)
-        with open(temp_path, "rb") as backup_file:
+        with open(temp_path, "rb+") as backup_file:
             os.fsync(backup_file.fileno())
         os.replace(temp_path, backup_path)
         temp_path = None
         os.chmod(backup_path, 0o600)
-        directory_fd = os.open(backup_dir, os.O_RDONLY)
-        try:
-            os.fsync(directory_fd)
-        finally:
-            os.close(directory_fd)
+        if os.name != "nt":
+            directory_fd = os.open(backup_dir, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
         return backup_path
     finally:
         if temp_path is not None:
