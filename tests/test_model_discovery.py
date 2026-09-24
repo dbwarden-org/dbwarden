@@ -848,7 +848,7 @@ class TestSQLGeneration:
 
         sql = generate_create_table_sql(table)
 
-        assert "ENGINE = ReplicatedMergeTree(/zk/path, replica_1)" in sql
+        assert "ENGINE = ReplicatedMergeTree('/zk/path', 'replica_1')" in sql
 
     def test_generate_dictionary_sql(self, monkeypatch):
         monkeypatch.setattr(model_discovery.type_mapping, "_get_backend_name", lambda db_name=None: "clickhouse")

@@ -65,13 +65,16 @@ class TestDatabaseOperations:
                     "    database_name='primary',\n"
                     "    default=True,\n"
                     "    database_type='sqlite',\n"
-                    f"    database_url_sync='sqlite:///{temp_db}',\n"
+                    f"    database_url_sync={'sqlite:///' + temp_db!r},\n"
                     ")\n"
                 )
 
-            yield {"db_path": temp_db}
-
-            os.chdir(old_cwd)
+            try:
+                yield {"db_path": temp_db}
+            finally:
+                from dbwarden.connection.connection import dispose_engine
+                dispose_engine(f"sqlite:///{temp_db}", "sqlite")
+                os.chdir(old_cwd)
 
     def test_create_migrations_table(self, setup_env):
         """Test creating the migrations tracking table."""

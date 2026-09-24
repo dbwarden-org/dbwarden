@@ -55,7 +55,7 @@ class TestDryRun:
                 Path("dbwarden.py").write_text(
                     "from dbwarden import database_config\n\n"
                     "database_config(database_name='primary', default=True, "
-                    "database_type='sqlite', database_url_sync='sqlite:///" + db_path + "')\n",
+                    f"database_type='sqlite', database_url_sync={'sqlite:///' + db_path!r})\n",
                     encoding="utf-8",
                 )
                 migrations_dir = Path("migrations/primary")
@@ -98,7 +98,7 @@ class TestDryRun:
                 Path("dbwarden.py").write_text(
                     "from dbwarden import database_config\n\n"
                     "database_config(database_name='primary', default=True, "
-                    "database_type='sqlite', database_url_sync='sqlite:///" + db_path + "')\n",
+                    f"database_type='sqlite', database_url_sync={'sqlite:///' + db_path!r})\n",
                     encoding="utf-8",
                 )
                 migrations_dir = Path("migrations/primary")
@@ -130,7 +130,7 @@ class TestSandbox:
                 Path("dbwarden.py").write_text(
                     "from dbwarden import database_config\n\n"
                     "database_config(database_name='primary', default=True, "
-                    "database_type='sqlite', database_url_sync='sqlite:///" + db_path + "')\n",
+                    f"database_type='sqlite', database_url_sync={'sqlite:///' + db_path!r})\n",
                     encoding="utf-8",
                 )
                 migrations_dir = Path("migrations/primary")
@@ -172,7 +172,7 @@ class TestSandbox:
                 Path("dbwarden.py").write_text(
                     "from dbwarden import database_config\n\n"
                     "database_config(database_name='primary', default=True, "
-                    "database_type='sqlite', database_url_sync='sqlite:///" + db_path + "')\n",
+                    f"database_type='sqlite', database_url_sync={'sqlite:///' + db_path!r})\n",
                     encoding="utf-8",
                 )
                 migrations_dir = Path("migrations/primary")
@@ -204,7 +204,7 @@ class TestSandbox:
                 Path("dbwarden.py").write_text(
                     "from dbwarden import database_config\n\n"
                     "database_config(database_name='primary', default=True, "
-                    "database_type='sqlite', database_url_sync='sqlite:///" + db_path + "')\n",
+                    f"database_type='sqlite', database_url_sync={'sqlite:///' + db_path!r})\n",
                     encoding="utf-8",
                 )
                 migrations_dir = Path("migrations/primary")
