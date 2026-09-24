@@ -187,8 +187,11 @@ def plugin_list(
     output_format: str = typer.Option(
         "table", "--format", "-f", help="Output format: table (default) or json"
     ),
+    load: bool = typer.Option(False, "--load", help="Load trusted plugins to inspect registered handlers and migration categories."),
 ) -> None:
     """List installed dbwarden plugins."""
+    if load:
+        load_plugins(interactive=False)
     handle_plugin_list(output_format=output_format)
 
 
@@ -198,8 +201,11 @@ def plugin_info(
     output_format: str = typer.Option(
         "table", "--format", "-f", help="Output format: table (default) or json"
     ),
+    load: bool = typer.Option(False, "--load", help="Load trusted plugins to inspect registered handlers and migration categories."),
 ) -> None:
     """Show plugin metadata."""
+    if load:
+        load_plugins(interactive=False)
     handle_plugin_info(dist_name, output_format=output_format)
 
 
@@ -756,11 +762,12 @@ def diff(
         "--offline",
         help="Use model state file instead of live database snapshot",
     ),
+    data: bool = typer.Option(False, "--data", help="Also compare live declared data values."),
 ):
     """Show structural differences between models and database (read-only, no files written)."""
     validate_directory()
     handle_diff(
-        output_format=output, verbose=verbose, database=database, offline=offline
+        output_format=output, verbose=verbose, database=database, offline=offline, data=data
     )
 
 
