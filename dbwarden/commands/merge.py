@@ -7,44 +7,157 @@ from __future__ import annotations
 
 import json
 import os
-import sys
+import subprocess
 from pathlib import Path
-from typing import Optional
 
 from dbwarden import __version__
-from dbwarden.config import get_database
-from dbwarden.engine.version import get_migrations_directory, get_next_migration_number
-from dbwarden.logging import get_logger
-from dbwarden.output import error, info, success, warning
-
-from dbwarden.merge.marker import (
-    SupersededMarker,
-    get_file_checksum,
-    is_superseded,
-    mark_file_superseded,
-    parse_superseded_marker,
+from dbwarden.commands.make_migrations.generation import (
+    _artifact_paths,
+    _write_artifacts,
+    diff_states,
+    generate_files,
 )
+from dbwarden.commands.make_migrations.pipeline import get_model_state_path
+from dbwarden.config import get_database, get_multi_db_config
+from dbwarden.engine.generation_state import (
+    configuration_state,
+    schema_state,
+    state_checksum,
+)
+from dbwarden.engine.safety.plans import read_trusted_plan
+from dbwarden.engine.version import (
+    MIGRATION_PATTERN,
+    get_migrations_directory,
+    get_next_migration_number,
+)
+from dbwarden.files import atomic_write_text, preserve_files_on_error
+from dbwarden.merge.git_utils import (
+    _run_git,
+    get_file_at_commit,
+    get_merge_base,
+    has_conflict_markers,
+    is_clean_working_tree,
+)
+from dbwarden.merge.marker import is_superseded, mark_file_superseded
 from dbwarden.merge.reconciliation import (
     ReconciliationHeader,
-    write_reconciliation_header,
+    format_reconciliation_header,
+    is_reconciliation,
 )
-from dbwarden.merge.detection import (
-    MergeSignal,
-    detect_merge_signals,
-    get_diagnostic_message,
-)
-from dbwarden.merge.environments import get_persistent_environments
-from dbwarden.merge.git_utils import (
-    get_merge_base,
-    get_file_at_commit,
-    is_clean_working_tree,
-    has_conflict_markers,
-)
-from dbwarden.merge.rename_capture import harvest_rename_intents
-from dbwarden.files import atomic_write_text
+from dbwarden.output import emit_json, error, info, success
 
 
-logger = None
+def _repo_path(path: Path) -> str:
+    rc, root, _ = _run_git(["rev-parse", "--show-toplevel"])
+    if rc:
+        raise ValueError(
+            "Cannot find Git root. hint: run merge from the project repository"
+        )
+    return path.resolve().relative_to(Path(root).resolve()).as_posix()
+
+
+def _check_preconditions(database: str | None) -> bool:
+    if not is_clean_working_tree():
+        error("Working tree is not clean. hint: commit or stash changes before merge")
+        return False
+    for path in [
+        *Path(get_migrations_directory(database)).glob("*.sql"),
+        get_model_state_path(database),
+    ]:
+        if path.exists() and has_conflict_markers(str(path)):
+            error(f"Conflict markers in {path}. hint: resolve them first")
+            return False
+    if get_merge_base() is None:
+        error("Cannot resolve merge base. hint: run after committing the Git merge")
+        return False
+    return True
+
+
+def _find_superseded_files(migrations_dir: str, merge_base: str) -> list[str]:
+    candidates = []
+    for path in sorted(Path(migrations_dir).glob("*.sql")):
+        if (
+            not MIGRATION_PATTERN.match(path.name)
+            or is_superseded(path)
+            or is_reconciliation(path)
+        ):
+            continue
+        if get_file_at_commit(merge_base, _repo_path(path)) is None:
+            candidates.append(path.name)
+    return candidates
+
+
+def _get_merge_base_state(merge_base: str, database: str | None) -> dict:
+    for path in (
+        get_model_state_path(database),
+        get_model_state_path(database, legacy=True),
+    ):
+        content = get_file_at_commit(merge_base, _repo_path(path))
+        if content is not None:
+            value = json.loads(content)
+            if not isinstance(value, dict) or not isinstance(value.get("tables"), dict):
+                raise ValueError(
+                    "Malformed merge-base model state. hint: restore it in Git"
+                )
+            return value
+    raise ValueError(
+        "No model state at merge base. hint: export and commit model state before branching"
+    )
+
+
+def _rebuild_current_state(database: str | None) -> dict:
+    from dbwarden.engine.core.model_state import model_state_to_dict
+    from dbwarden.engine.discovery import (
+        auto_discover_model_paths,
+        filter_model_tables_by_name,
+        get_all_model_tables,
+        validate_model_tables_exist,
+    )
+
+    config = get_database(database)
+    paths = config.model_paths or auto_discover_model_paths()
+    if not paths:
+        raise ValueError("No model paths. hint: configure model_paths before merging")
+    tables = get_all_model_tables(paths, db_name=database)
+    validate_model_tables_exist(
+        tables, config.model_tables, database or get_multi_db_config().default
+    )
+    return configuration_state(
+        model_state_to_dict(filter_model_tables_by_name(tables, config.model_tables)),
+        config,
+        desired=True,
+    )
+
+
+def _probe_persistent_environments(
+    database: str | None, superseded_versions: set[str]
+) -> dict[str, str]:
+    from sqlalchemy.exc import SQLAlchemyError
+
+    from dbwarden.connection.connection import sandbox_override
+    from dbwarden.merge.environments import load_environments
+    from dbwarden.repositories import get_migrated_versions, migrations_table_exists
+
+    results = {}
+    for env in load_environments(database):
+        if not env.persistent:
+            continue
+        url = os.environ.get(env.url_env or "")
+        results[env.name] = "unknown"
+        if url:
+            try:
+                with sandbox_override(url, get_database(database).database_type):
+                    applied = (
+                        set(get_migrated_versions(database))
+                        if migrations_table_exists(database)
+                        else set()
+                    )
+                    results[env.name] = (
+                        "dirty" if applied & superseded_versions else "clean"
+                    )
+            except (SQLAlchemyError, OSError, ValueError):
+                pass
+    return results
 
 
 def merge_cmd(
@@ -55,955 +168,245 @@ def merge_cmd(
     commit: bool = False,
     json_output: bool = False,
     verbose: bool = False,
+    dry_run: bool = False,
+    split_at_severity: str | None = None,
 ) -> None:
-    """Merge divergent migration histories.
-
-    This command reconciles migration histories after a branch merge by:
-    1. Resolving the merge-base state
-    2. Rebuilding the current model state
-    3. Computing the reconciliation diff
-    4. Probing persistent environments
-    5. Generating a reconciliation migration
-    6. Marking branch migrations as superseded
-    7. Atomic commit of outputs
-
-    Args:
-        database: Target database name.
-        rename_columns: Column renames to confirm (format: "table.old=new").
-        rename_tables: Table renames to confirm (format: "old=new").
-        force: Force marking hand-edited migrations.
-        commit: Create a git commit with the changes.
-        json_output: Output results as JSON.
-        verbose: Enable verbose logging.
-    """
-    global logger
-    from dbwarden.logging import get_logger as _get_logger
-    logger = _get_logger(verbose=verbose)
-
-    from dbwarden.engine.version import get_migrations_directory
-    from dbwarden.merge.detection import detect_merge_signals
-
-    # Step 0: Preconditions
-    info("Checking preconditions...")
-
-    if not _check_preconditions(database):
-        return
-
-    # Step 1: Resolve merge-base state
-    info("Resolving merge-base state...")
-    merge_base = get_merge_base()
-    if merge_base is None:
-        error("Not in a merge state. Cannot determine merge-base.")
-        return
-
-    merge_base_state = _get_merge_base_state(merge_base, database)
-    if merge_base_state is None:
-        error("Could not read merge-base state from git.")
-        return
-
-    # Step 2: Rebuild current model state
-    info("Rebuilding current model state...")
-    current_state = _rebuild_current_state(database)
-    if current_state is None:
-        error("Could not rebuild current model state.")
-        return
-
-    # Step 3: Compute reconciliation diff
-    info("Computing reconciliation diff...")
-    upgrade_ops, rollback_ops = _compute_diff(merge_base_state, current_state, database)
-
-    # Step 3a: Detect semantic conflicts (R9.2)
-    semantic_conflicts = _detect_semantic_conflicts(merge_base_state, current_state, database)
-    if semantic_conflicts:
-        warning("Semantic conflicts detected (merged state differs from both branches):")
-        for conflict in semantic_conflicts:
-            info(f"  {conflict['description']}")
-
-    # Step 3b: Check for stale plans (R9.11)
-    migrations_dir = get_migrations_directory(database)
-    stale_plans = _check_stale_plans(migrations_dir, current_state)
-    if stale_plans:
-        warning("Stale migration plans detected (base checksum mismatch):")
-        for plan in stale_plans:
-            info(f"  {plan}")
-        info("These plans will be invalidated and regenerated.")
-
-    # Step 3c: Harvest rename intents from superseded files (R9.1.4)
-    migrations_dir = get_migrations_directory(database)
-    superseded_files = _find_superseded_files(migrations_dir, merge_base)
-    harvested_renames = _harvest_rename_intents(migrations_dir, superseded_files)
-    if harvested_renames:
-        info(f"Harvested {len(harvested_renames)} rename intent(s) from superseded files.")
-        # Apply harvested renames to diff ops
-        _apply_harvested_renames(harvested_renames, upgrade_ops)
-
-    # Step 3b: Check for rename candidates (R9.1.1)
-    confirmed_renames = []
-    if rename_columns or rename_tables:
-        info("Processing rename confirmations...")
-        confirmed_renames = _process_rename_confirmations(rename_columns, rename_tables, upgrade_ops)
-    else:
-        # Check if there are any rename candidates that need confirmation
-        rename_candidates = _detect_rename_candidates(upgrade_ops)
-        if rename_candidates:
-            # R9.1.5: Ranked-candidate wizard
-            if sys.stdin.isatty():
-                info("Rename candidates detected. Starting confirmation wizard...")
-                confirmed = _prompt_rename_wizard(rename_candidates)
-                if not confirmed:
-                    error("No renames confirmed. Aborting merge.")
-                    return
-                confirmed_renames = [{"type": "column", "mapping": r} for r in confirmed]
-            else:
-                # R9.1.6: CI contract - fail with JSON error
-                error("Rename candidates detected in non-interactive mode.")
-                info("Use --rename-column or --rename-table to confirm renames.")
-                if json_output:
-                    import json
-                    error_json = {
-                        "error": "rename_candidates_detected",
-                        "candidates": rename_candidates,
-                        "message": "Use --rename-column or --rename-table to confirm renames.",
-                    }
-                    print(json.dumps(error_json, indent=2))
-                return
-
-    # Step 4: Probe persistent environments
-    info("Probing persistent environments...")
-    probe_results = _probe_persistent_environments(database)
-
-    # Step 5: Generate reconciliation migration
-    migrations_dir = get_migrations_directory(database)
-    superseded_files = _find_superseded_files(migrations_dir, merge_base)
-
-    if not upgrade_ops and not superseded_files:
-        info("No-op merge: no changes to reconcile.")
-        _mark_only(migrations_dir, merge_base, probe_results)
-        return
-
-    info("Generating reconciliation migration...")
-    reconciliation_version = get_next_migration_number(migrations_dir)
-    reconciliation_file = _generate_reconciliation(
-        migrations_dir,
-        reconciliation_version,
-        merge_base,
-        merge_base_state,
-        superseded_files,
-        probe_results,
-        upgrade_ops,
-        rollback_ops,
-        database,
-        confirmed_renames,
-    )
-
-    # Step 6: Mark branch migrations
-    info("Marking branch migrations as superseded...")
-    marked_files = _mark_branch_migrations(
-        migrations_dir,
-        merge_base,
-        reconciliation_version,
-        "merge",
-        probe_results,
-        force,
-    )
-
-    # Step 7: Report
-    if json_output:
-        _print_json_report(
-            merge_base=merge_base,
-            marked_files=marked_files,
-            reconciliation_file=reconciliation_file,
-            probe_results=probe_results,
-        )
-    else:
-        _print_report(
-            merge_base=merge_base,
-            marked_files=marked_files,
-            reconciliation_file=reconciliation_file,
-            probe_results=probe_results,
-        )
-
-    # Step 8: Write merge record
-    _write_merge_record(
-        reconciliation_version=reconciliation_version,
-        merge_base=merge_base,
-        marked_files=marked_files,
-        probe_results=probe_results,
-        force=force,
-    )
-
-    success("Merge reconciliation complete.")
-
-    # Step 7: Atomic commit of outputs (§5 Step 7)
-    if commit:
-        import subprocess
-        try:
-            # Stage all changes
-            subprocess.run(["git", "add", "-A"], check=True, capture_output=True)
-            # Create commit
-            commit_msg = f"dbwarden merge: reconcile {database or 'default'}"
-            subprocess.run(["git", "commit", "-m", commit_msg], check=True, capture_output=True)
-            success(f"Created git commit: {commit_msg}")
-        except subprocess.CalledProcessError as exc:
-            error(f"Failed to create git commit: {exc}")
-            warning("Changes are staged but not committed.")
-
-
-def _check_preconditions(database: str | None) -> bool:
-    """Check preconditions for merge (§5 P1-P3)."""
-    from dbwarden.merge.git_utils import is_clean_working_tree, has_conflict_markers
-    from dbwarden.merge.detection import detect_merge_signals
-
-    # P1: Clean working tree
-    if not is_clean_working_tree():
-        error("Working tree is not clean. Commit or stash changes before merging.")
-        return False
-
-    # P2: No conflict markers in any file dbwarden reads
-    from dbwarden.engine.version import get_migrations_directory
-    try:
-        migrations_dir = get_migrations_directory(database)
-        # Check migration SQL files
-        for f in Path(migrations_dir).glob("*.sql"):
-            if has_conflict_markers(str(f)):
-                error(f"Conflict markers found in {f.name}. Resolve conflicts first.")
-                return False
-        # Check model_state.json
-        state_path = Path(migrations_dir).parent / ".dbwarden" / "model_state.json"
-        if state_path.exists() and has_conflict_markers(str(state_path)):
-            error("Conflict markers found in model_state.json. Resolve conflicts first.")
-            return False
-    except Exception:
-        pass
-
-    # P3: Merge-base resolvable
-    from dbwarden.merge.git_utils import get_merge_base
-    merge_base = get_merge_base()
-    if merge_base is None:
-        error("Not in a merge state. Cannot determine merge-base.")
-        return False
-
-    return True
-
-
-def _get_merge_base_state(merge_base: str, database: str | None) -> Optional[dict]:
-    """Get the model state at the merge-base commit."""
-    from dbwarden.commands.make_migrations.pipeline import get_model_state_path
-    from dbwarden.merge.git_utils import get_file_at_commit
-
-    # Try to read model_state.json at the merge-base commit
-    state_path = get_model_state_path(database)
-    state_filename = state_path.name
-
-    content = get_file_at_commit(merge_base, state_filename)
-    if content is None:
-        # Try legacy path
-        content = get_file_at_commit(merge_base, ".dbwarden/model_state.json")
-
-    if content is None:
-        logger.warning("Could not read model_state.json at merge-base %s", merge_base[:8])
-        return None
-
-    try:
-        import json
-        state = json.loads(content)
-
-        # P3: Validate checksum if present (R4.5)
-        if "checksum" in state:
-            from dbwarden.merge.detection import _compute_state_checksum
-            computed = _compute_state_checksum(state)
-            if computed != state["checksum"]:
-                logger.warning(
-                    "Merge-base state checksum mismatch: expected %s, got %s",
-                    state["checksum"][:8], computed[:8]
-                )
-                # Continue anyway but log the warning
-
-        return state
-    except json.JSONDecodeError as e:
-        logger.error("Invalid model_state.json at merge-base: %s", e)
-        return None
-
-
-def _rebuild_current_state(database: str | None) -> Optional[dict]:
-    """Rebuild current model state from merged models.
-
-    §5 Step 2: The merged model_state.json may be conflicted, stale,
-    or hand-merged (untrusted). Discard it and regenerate from the
-    merged models: the equivalent of export-models, computed offline
-    from the model definitions.
-    """
-    try:
-        from dbwarden.engine.discovery import get_all_model_tables, auto_discover_model_paths
-        from dbwarden.engine.offline import model_state_to_dict
-        from dbwarden.config import get_database
-
-        config = get_database(database)
-        model_paths = config.model_paths
-
-        if model_paths is None:
-            model_paths = auto_discover_model_paths()
-
-        if not model_paths:
-            logger.warning("No model paths found for state rebuild")
-            return None
-
-        # Discover model tables from merged models
-        tables = get_all_model_tables(model_paths, db_name=database)
-
-        if not tables:
-            logger.warning("No tables found in models for state rebuild")
-            return None
-
-        # Convert to model state dict (equivalent of export-models)
-        state = model_state_to_dict(tables)
-
-        logger.info("Rebuilt current model state from %d tables", len(tables))
-        return state
-
-    except Exception as e:
-        logger.error("Failed to rebuild current model state: %s", e)
-        return None
-
-
-def _compute_state_checksum(state: dict) -> str:
-    """Compute a checksum for a model state dict."""
-    import hashlib
-    import json
-
-    state_copy = {k: v for k, v in state.items() if k != "checksum"}
-    content = json.dumps(state_copy, sort_keys=True, default=str)
-    return hashlib.sha256(content.encode()).hexdigest()
-
-
-def _compute_diff(
-    base_state: dict,
-    current_state: dict,
-    database: str | None,
-) -> tuple[list[dict], list[dict]]:
-    """Compute the diff between merge-base and current state.
-
-    Uses the snapshot diff engine to compare the merge-base state
-    against the current model state.
-
-    Returns:
-        Tuple of (upgrade_ops, rollback_ops) in full op dict format.
-    """
-    try:
-        from dbwarden.engine.snapshot.diff import diff_models_against_snapshot
-        from dbwarden.engine.core.model_state import reconstruct_model_table
-
-        # Convert current state dict to model tables
-        current_tables = []
-        for table_name, table_data in current_state.get("tables", {}).items():
-            try:
-                model_table = reconstruct_model_table(table_data)
-                model_table.name = table_name
-                current_tables.append(model_table)
-            except Exception as e:
-                logger.warning("Failed to reconstruct model table %s: %s", table_name, e)
-
-        # Use base_state as the snapshot (it's already in snapshot format)
-        snapshot = base_state
-
-        # Compute diff
-        upgrade_ops, rollback_ops = diff_models_against_snapshot(
-            current_tables,
-            snapshot,
-            database=database,
-            db_name=database,
-        )
-
-        return upgrade_ops, rollback_ops
-
-    except Exception as e:
-        logger.warning("Failed to compute diff: %s", e)
-        return [], []
-
-
-def _detect_rename_candidates(diff_ops: list[dict]) -> list[str]:
-    """Detect rename candidates from diff operations.
-
-    R9.1.1: Every rename candidate detected during a merge reconciliation
-    requires explicit confirmation.
-    """
-    candidates = []
-    for op in diff_ops:
-        op_type = op.get("type", "")
-        # Look for drop+add patterns that might be renames
-        if "drop" in op_type.lower() and "add" in op_type.lower():
-            table = op.get("table", "")
-            if table:
-                candidates.append(f"{table} (possible rename)")
-    return candidates
-
-
-def _process_rename_confirmations(
-    rename_columns: list[str] | None,
-    rename_tables: list[str] | None,
-    diff_ops: list[dict],
-) -> list[dict]:
-    """Process rename confirmations from CLI flags.
-
-    R9.1.1: The confirmed rename mapping is written into the
-    reconciliation migration header.
-
-    Returns list of confirmed renames for audit trail.
-    """
-    confirmed_renames = []
-
-    if rename_columns:
-        for rename in rename_columns:
-            if "=" not in rename:
-                warning(f"Invalid rename format: {rename}. Expected format: table.old=new")
-                continue
-        info(f"Confirmed column renames: {', '.join(rename_columns)}")
-        confirmed_renames.extend([{"type": "column", "mapping": r} for r in rename_columns])
-
-    if rename_tables:
-        for rename in rename_tables:
-            if "=" not in rename:
-                warning(f"Invalid rename format: {rename}. Expected format: old=new")
-                continue
-        info(f"Confirmed table renames: {', '.join(rename_tables)}")
-        confirmed_renames.extend([{"type": "table", "mapping": r} for r in rename_tables])
-
-    return confirmed_renames
-
-
-def _prompt_rename_wizard(candidates: list[str]) -> list[str]:
-    """Interactive wizard for confirming renames (R9.1.5).
-
-    Presents candidates ranked by confidence with evidence shown,
-    one decision per screen, with batch acceptance.
-    """
-    import sys
-
-    confirmed = []
-    for candidate in candidates:
-        info(f"\nRename candidate: {candidate}")
-        info("Evidence: Possible drop+add pattern detected")
-
-        while True:
-            try:
-                response = input("[a]ccept / [r]eject / [d]rop+create: ").strip().lower()
-            except (EOFError, KeyboardInterrupt):
-                # Non-interactive mode
-                return []
-
-            if response == "a":
-                confirmed.append(candidate)
-                info(f"  Confirmed: {candidate}")
-                break
-            elif response == "r":
-                info(f"  Rejected: {candidate}")
-                break
-            elif response == "d":
-                info(f"  Marked as drop+create: {candidate}")
-                break
-            else:
-                info("  Please enter 'a', 'r', or 'd'")
-
-    return confirmed
-
-
-def _harvest_rename_intents(migrations_dir: str, superseded_files: list[str]) -> list[dict]:
-    """Harvest rename intents from superseded migration files (R9.1.4).
-
-    When make-migrations --rename-column/--rename-table is used on a branch,
-    the mapping is recorded in that migration's header. dbwarden merge
-    harvests these declarations automatically.
-    """
+    from dbwarden.engine.core.model_state import model_state_json_dumps
     from dbwarden.merge.rename_capture import harvest_rename_intents
 
-    migration_files = []
-    for filename in superseded_files:
-        filepath = Path(migrations_dir) / filename
-        if filepath.exists():
-            migration_files.append(filepath)
+    if not _check_preconditions(database):
+        raise ValueError("Merge preconditions failed")
+    db_name = database or get_multi_db_config().default
+    config = get_database(db_name)
+    merge_base = get_merge_base()
+    if merge_base is None:
+        raise ValueError(
+            "No merge base. hint: merge branches before running dbwarden merge"
+        )
+    directory = Path(get_migrations_directory(db_name))
+    recorded_base = _get_merge_base_state(merge_base, db_name)
+    baseline = configuration_state(recorded_base, config)
+    target = _rebuild_current_state(db_name)
+    names = _find_superseded_files(str(directory), merge_base)
+    edited = [name for name in names if read_trusted_plan(directory / name)[0] is None]
+    if edited and not force:
+        raise ValueError(
+            f"Hand-edited or untrusted migrations: {', '.join(edited)}. hint: review them and pass --force"
+        )
+    columns = [value.replace("=", ":", 1) for value in rename_columns or []]
+    tables = [value.replace("=", ":", 1) for value in rename_tables or []]
+    for intent in harvest_rename_intents([directory / name for name in names]):
+        old, new = intent.get("from"), intent.get("to")
+        if not isinstance(old, str) or not isinstance(new, str):
+            raise TypeError(
+                "Malformed recorded rename. hint: repair the branch migration"
+            )
+        if intent.get("type") == "table":
+            tables.append(f"{old}:{new}")
+        else:
+            table, column = old.rsplit(".", 1)
+            new_table, new_column = new.rsplit(".", 1)
+            if table != new_table:
+                raise ValueError("Cross-table column rename is unsupported")
+            columns.append(f"{table}.{column}:{new_column}")
+    upgrade, rollback = diff_states(
+        baseline,
+        target,
+        db_name=db_name,
+        rename_columns=sorted(set(columns)),
+        rename_tables=sorted(set(tables)),
+    )
+    from dbwarden.data.compiler import compile_data, discover_data
+    from dbwarden.data.planning import plan_data, previous_data_spec
+    from dbwarden.engine.discovery import auto_discover_model_paths
 
-    return harvest_rename_intents(migration_files)
+    paths = config.model_paths or auto_discover_model_paths()
+    data_spec = compile_data(
+        discover_data(paths, config.data_paths, model_tables=config.model_tables),
+        database=db_name,
+        backend=config.database_type,
+        registry_path=config.snapshot_registry,
+    )
+    previous_data = previous_data_spec(
+        {
+            path.name: path
+            for path in directory.glob("*.sql")
+            if MIGRATION_PATTERN.match(path.name) and path.name not in names
+        },
+        database=db_name,
+        backend=config.database_type,
+    )
+    data_ops = plan_data(data_spec, previous_data)
+    from dbwarden.commands.make_migrations.generation import (
+        append_data_contract,
+        data_expansion_state,
+        include_data_operations,
+    )
 
-
-def _apply_harvested_renames(renames: list[dict], diff_ops: list[dict]) -> None:
-    """Apply harvested rename intents to diff operations.
-
-    This modifies diff_ops in place to reflect the confirmed renames.
-    """
-    for rename in renames:
-        old_name = rename.get("from", "")
-        new_name = rename.get("to", "")
-        if old_name and new_name:
-            # Mark the diff op as a confirmed rename
-            for op in diff_ops:
-                if old_name in op.get("description", ""):
-                    op["rename_confirmed"] = True
-                    op["rename_from"] = old_name
-                    op["rename_to"] = new_name
-
-
-def _detect_semantic_conflicts(
-    base_state: dict,
-    current_state: dict,
-    database: str | None,
-) -> list[dict]:
-    """Detect semantic conflicts where merged state differs from both branches.
-
-    R9.2: When both branches change the same column's type differently,
-    and git auto-merges them, the merged state may differ from both
-    branches' versions. This function detects such cases.
-
-    Returns a list of conflict descriptions for display.
-    """
-    conflicts = []
-
-    try:
-        # Compare tables in base vs current
-        base_tables = base_state.get("tables", {})
-        current_tables = current_state.get("tables", {})
-
-        for table_name, current_table in current_tables.items():
-            if table_name not in base_tables:
-                continue
-
-            base_table = base_tables[table_name]
-            base_columns = base_table.get("columns", {})
-            current_columns = current_table.get("columns", {})
-
-            # Check for columns that changed type in both directions
-            for col_name, current_col in current_columns.items():
-                if col_name not in base_columns:
-                    continue
-
-                base_col = base_columns[col_name]
-                base_type = base_col.get("type", "")
-                current_type = current_col.get("type", "")
-
-                if base_type != current_type:
-                    # Column type changed - this could be a semantic conflict
-                    # if both branches changed it differently
-                    conflicts.append({
-                        "table": table_name,
-                        "column": col_name,
-                        "base_type": base_type,
-                        "current_type": current_type,
-                        "description": f"{table_name}.{col_name}: {base_type} -> {current_type}",
-                    })
-
-    except Exception as e:
-        logger.debug("Failed to detect semantic conflicts: %s", e)
-
-    return conflicts
-
-
-def _probe_persistent_environments(database: str | None) -> dict[str, str]:
-    """Probe persistent environments to check if they applied branch migrations.
-
-    R8.2: Environments that were unknown at merge time (unreachable) are
-    probed on the next status/migrate run against them; if found dirty,
-    migrate refuses to run the normal chain and directs the operator
-    to reconcile.
-
-    For each persistent environment, reads its applied-migration metadata table
-    and checks whether any to-be-superseded migration version appears there.
-    """
-    from dbwarden.merge.environments import get_persistent_environments
-
-    persistent_envs = get_persistent_environments(database)
-    results = {}
-
-    for env in persistent_envs:
-        try:
-            # Get the environment's database URL from the registry
-            from dbwarden.merge.environments import load_environments
-            envs = load_environments(database)
-            env_config = next((e for e in envs if e.name == env), None)
-
-            if env_config is None or not env_config.url_env:
-                results[env] = "unknown"
-                continue
-
-            # Check if the environment variable is set
-            import os
-            env_url = os.environ.get(env_config.url_env)
-            if not env_url:
-                results[env] = "unknown"
-                continue
-
-            # Connect to the environment and check its migration table
-            try:
-                from sqlalchemy import create_engine, text, inspect
-                from dbwarden.connection.queries import get_migration_table_name
-
-                engine = create_engine(env_url)
-                migration_table = get_migration_table_name(database)
-
-                with engine.connect() as conn:
-                    # Check if migration table exists using dialect-aware introspection
-                    inspector = inspect(engine)
-                    if migration_table not in inspector.get_table_names():
-                        results[env] = "clean"
-                        continue
-
-                    # Get applied versions
-                    result = conn.execute(
-                        text(f"SELECT version FROM {migration_table} WHERE version IS NOT NULL")
-                    )
-                    applied_versions = {row[0] for row in result.fetchall()}
-
-                    # Check for superseded versions
-                    superseded = _find_superseded_versions(database)
-                    dirty_versions = applied_versions.intersection(superseded)
-
-                    if dirty_versions:
-                        results[env] = "dirty"
-                        logger.info("Environment %s has dirty migrations: %s", env, dirty_versions)
-                        # R5 Failure modes: Warn loudly for dirty merges
-                        warning(
-                            f"WARNING: Environment '{env}' has applied superseded migrations: "
-                            f"{', '.join(sorted(dirty_versions))}. "
-                            f"Reconciliation will be required for this environment."
-                        )
-                    else:
-                        results[env] = "clean"
-
-                engine.dispose()
-
-            except Exception as e:
-                logger.debug("Failed to probe environment %s: %s", env, e)
-                results[env] = "unknown"
-
-        except Exception as e:
-            logger.debug("Failed to probe environment %s: %s", env, e)
-            results[env] = "unknown"
-
-    return results
-
-
-def _find_superseded_versions(database: str | None) -> set[str]:
-    """Find all superseded migration versions."""
-    from dbwarden.merge.marker import is_superseded
-    from dbwarden.engine.version import get_migrations_directory, get_migration_filepaths_by_version
-
-    migrations_dir = get_migrations_directory(database)
-    all_migrations = get_migration_filepaths_by_version(migrations_dir)
-
-    superseded = set()
-    for version, filepath in all_migrations.items():
-        if is_superseded(filepath):
-            superseded.add(version)
-
-    return superseded
-
-
-def _find_superseded_files(migrations_dir: str, merge_base: str) -> list[str]:
-    """Find migration files that should be superseded."""
-    from dbwarden.merge.git_utils import get_file_at_commit
-    from dbwarden.engine.version import get_migration_filepaths_by_version
-
-    # Get all migrations
-    all_migrations = get_migration_filepaths_by_version(migrations_dir)
-
-    # Get migrations at merge-base
-    merge_base_migrations = {}
-    for version, filepath in all_migrations.items():
-        filename = filepath.split("/")[-1]
-        content = get_file_at_commit(merge_base, filename)
-        if content is not None:
-            merge_base_migrations[version] = filename
-
-    # Migrations after merge-base are candidates for superseding
-    superseded = []
-    for version in sorted(all_migrations.keys()):
-        if version > max(merge_base_migrations.keys(), default="0000"):
-            filename = all_migrations[version].split("/")[-1]
-            if not is_superseded(Path(migrations_dir) / filename):
-                superseded.append(filename)
-
-    return superseded
-
-
-def _check_stale_plans(migrations_dir: str, current_state: dict) -> list[str]:
-    """Check for stale migration plans (R9.11).
-
-    Every generated migration/plan is pinned to a base model-state checksum.
-    When that base no longer matches the current model state, the plan is stale.
-
-    Returns a list of stale migration filenames.
-    """
-    import json
-    from dbwarden.engine.version import get_migration_filepaths_by_version
-
-    all_migrations = get_migration_filepaths_by_version(migrations_dir)
-    stale_files = []
-
-    # Compute current model state checksum
-    current_checksum = _compute_state_checksum(current_state)
-
-    for version, filepath in all_migrations.items():
-        plan_file = Path(filepath).with_suffix(".plan.json")
-        if not plan_file.exists():
-            continue
-
-        try:
-            plan_data = json.loads(plan_file.read_text())
-            plan_checksum = plan_data.get("base_checksum", "")
-
-            if plan_checksum and plan_checksum != current_checksum:
-                stale_files.append(filepath.split("/")[-1])
-                logger.info("Stale plan detected: %s (base checksum mismatch)", filepath.split("/")[-1])
-        except Exception as e:
-            logger.debug("Failed to check plan for %s: %s", filepath, e)
-
-    return stale_files
-
-
-def _mark_only(
-    migrations_dir: str,
-    merge_base: str,
-    probe_results: dict[str, str],
-) -> None:
-    """Mark branch migrations without generating a reconciliation (no-op merge)."""
-    superseded_files = _find_superseded_files(migrations_dir, merge_base)
-    if superseded_files:
-        for filename in superseded_files:
-            filepath = Path(migrations_dir) / filename
+    expanded = data_expansion_state(baseline, target, data_ops)
+    if expanded != target:
+        upgrade, rollback = diff_states(baseline, expanded, db_name=db_name, rename_columns=sorted(set(columns)), rename_tables=sorted(set(tables)))
+    upgrade = include_data_operations(upgrade, data_ops)
+    append_data_contract(upgrade, baseline, expanded, target, db_name=db_name)
+    versions = {
+        match.group(1) for name in names if (match := MIGRATION_PATTERN.match(name))
+    }
+    probes = _probe_persistent_environments(db_name, versions)
+    rc, base_files, detail = _run_git(
+        ["ls-tree", "-r", "--name-only", merge_base, "--", _repo_path(directory)]
+    )
+    if rc:
+        raise ValueError(f"Cannot list merge-base migrations: {detail}")
+    base_version = max(
+        (
+            match.group(1)
+            for line in base_files.splitlines()
+            if (match := MIGRATION_PATTERN.match(Path(line).name))
+        ),
+        default="0000",
+    )
+    header = ReconciliationHeader(
+        merge_base,
+        state_checksum(baseline),
+        names,
+        probes,
+        f"dbwarden merge (dbwarden {__version__})",
+    )
+    artifacts = generate_files(
+        upgrade,
+        rollback,
+        migrations_dir=str(directory),
+        database=db_name,
+        db_name=db_name,
+        description=f"merge reconciliation {merge_base[:8]}",
+        baseline=baseline,
+        target=target,
+        threshold=split_at_severity
+        if split_at_severity is not None
+        else config.split_at_severity,
+        header=format_reconciliation_header(header),
+        write=False,
+        data_spec=data_spec,
+    )
+    reconciliation_versions = [artifact["version"] for artifact in artifacts]
+    record_id = (
+        reconciliation_versions[0]
+        if reconciliation_versions
+        else get_next_migration_number(str(directory))
+    )
+    report = {
+        "version": record_id,
+        "database": db_name,
+        "merge_base": merge_base,
+        "merge_base_version": base_version,
+        "merge_base_checksum": state_checksum(baseline),
+        "superseded_files": names,
+        "superseded_versions": sorted(versions),
+        "reconciliation_version": reconciliation_versions[0]
+        if reconciliation_versions
+        else None,
+        "reconciliation_versions": reconciliation_versions,
+        "reconciliation_files": [artifact["filename"] for artifact in artifacts],
+        "probe_results": probes,
+        "forced": force,
+        "generated_by": f"dbwarden {__version__}",
+        "no_op": not artifacts,
+    }
+    if json_output:
+        emit_json(
+            {
+                **report,
+                "dry_run": dry_run,
+                "plans": [artifact["plan"] for artifact in artifacts],
+            }
+        )
+    else:
+        info(
+            f"{'Would supersede' if dry_run else 'Superseding'}: {', '.join(names) or 'none'}"
+        )
+        for artifact in artifacts:
+            info(
+                f"{artifact['filename']}: {len(artifact['plan']['upgrade_ops'])} operations, severity {artifact['plan']['severity']['file']}"
+            )
+        info(
+            "Environment status: "
+            + (
+                ", ".join(f"{name}={status}" for name, status in probes.items())
+                or "none registered"
+            )
+        )
+    if dry_run:
+        return
+    record_path = (
+        Path(".dbwarden/merges") / f"{db_name}__{record_id}_{merge_base[:8]}.json"
+    )
+    state = {
+        **target,
+        "generation_base": schema_state(
+            recorded_base.get("generation_base", recorded_base)
+        ),
+        "generation_applied": recorded_base.get("generation_applied", []),
+        "generation_versions": sorted(
+            set(recorded_base.get("generation_versions", []))
+            | set(reconciliation_versions)
+        ),
+    }
+    state_paths = {
+        get_model_state_path(db_name),
+        get_model_state_path(db_name, legacy=True),
+    }
+    changed = [
+        *[directory / name for name in names],
+        *[
+            (directory / name).with_suffix(".superseded.json")
+            for name in names
+            if _is_data_bundle(directory / name)
+        ],
+        record_path,
+        *state_paths,
+        *_artifact_paths(artifacts, directory),
+    ]
+    with preserve_files_on_error(changed):
+        _write_artifacts(artifacts, directory)
+        for name in names:
             mark_file_superseded(
-                filepath,
-                merged_into="none",
+                directory / name,
+                merged_into=record_id if artifacts else "none",
                 merge_base=merge_base,
                 branch="merge",
-                applied_persistent=_format_probe_results(probe_results),
+                applied_persistent=",".join(
+                    name for name, status in probes.items() if status != "clean"
+                )
+                or "none",
             )
-        info(f"Marked {len(superseded_files)} migration(s) as superseded.")
-    else:
-        info("No branch migrations to mark.")
-
-
-def _generate_reconciliation(
-    migrations_dir: str,
-    version: str,
-    merge_base: str,
-    merge_base_state: dict,
-    superseded_files: list[str],
-    probe_results: dict[str, str],
-    upgrade_ops: list[dict],
-    rollback_ops: list[dict],
-    database: str | None,
-    confirmed_renames: list[dict] | None = None,
-) -> str:
-    """Generate the reconciliation migration file."""
-    from dbwarden.engine.version import generate_migration_filename
-    from dbwarden.engine.snapshot.sql_gen import snapshot_diff_to_sql
-
-    # Generate filename
-    description = f"merge reconciliation from {merge_base}"
-    filename = generate_migration_filename(database or "default", description, version)
-    filepath = Path(migrations_dir) / filename
-
-    # Generate actual SQL from ops using the snapshot diff pipeline
-    try:
-        upgrade_sql, rollback_sql, _warnings = snapshot_diff_to_sql(
-            upgrade_ops,
-            rollback_ops,
-            database=database,
-            db_name=database,
+        atomic_write_text(
+            record_path, json.dumps(report, sort_keys=True, indent=2) + "\n"
         )
-    except Exception as e:
-        logger.warning("Failed to generate SQL from ops: %s", e)
-        # Fallback to comment-only SQL
-        upgrade_sql = "-- upgrade\n"
-        for op in upgrade_ops:
-            upgrade_sql += f"-- {op.get('description', 'no-op')}\n"
-        if not upgrade_ops:
-            upgrade_sql += "-- No schema changes required\n"
-        rollback_sql = "-- rollback\n-- No rollback required for merge reconciliation\n"
-
-    # Write the migration file
-    content = upgrade_sql + "\n" + rollback_sql
-    atomic_write_text(filepath, content)
-
-    # Write reconciliation header (R9.1.2: include confirmed renames)
-    merge_base_checksum = _compute_state_checksum(merge_base_state)
-    header = ReconciliationHeader(
-        merge_base=merge_base,
-        merge_base_checksum=merge_base_checksum[:16],
-        supersedes=superseded_files,
-        probe_results=probe_results,
-        generated_by=f"dbwarden merge (dbwarden {__version__})",
-        renames=confirmed_renames or [],
+        for state_path in state_paths:
+            atomic_write_text(state_path, model_state_json_dumps(state))
+    if commit:
+        subprocess.run(
+            ["git", "add", "--", *[str(path) for path in changed]],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "commit", "-m", f"dbwarden merge: reconcile {db_name}"],
+            check=True,
+            capture_output=True,
+        )
+    success(
+        "Merge reconciliation written. Dirty persistent environments require dbwarden reconcile."
     )
-    write_reconciliation_header(filepath, header)
-
-    return filename
 
 
-def _mark_branch_migrations(
-    migrations_dir: str,
-    merge_base: str,
-    reconciliation_version: str,
-    branch_name: str,
-    probe_results: dict[str, str],
-    force: bool = False,
-) -> list[str]:
-    """Mark branch migrations as superseded."""
-    from dbwarden.merge.marker import mark_file_superseded
-    from dbwarden.merge.git_utils import get_file_at_commit
-    from dbwarden.engine.version import get_migration_filepaths_by_version
-
-    all_migrations = get_migration_filepaths_by_version(migrations_dir)
-
-    # Get migrations at merge-base
-    merge_base_versions = set()
-    for version in all_migrations.keys():
-        filename = all_migrations[version].split("/")[-1]
-        content = get_file_at_commit(merge_base, filename)
-        if content is not None:
-            merge_base_versions.add(version)
-
-    # Mark migrations after merge-base
-    marked = []
-    for version in sorted(all_migrations.keys()):
-        if version > max(merge_base_versions, default="0000"):
-            filename = all_migrations[version].split("/")[-1]
-            filepath = Path(migrations_dir) / filename
-
-            if is_superseded(filepath):
-                continue
-
-            # Check if file was hand-edited (R9.4)
-            if not force and _is_hand_edited(filepath):
-                warning(f"Refusing to mark hand-edited migration {filename}. Use --force to override.")
-                continue
-
-            mark_file_superseded(
-                filepath,
-                merged_into=reconciliation_version,
-                merge_base=merge_base,
-                branch=branch_name,
-                applied_persistent=_format_probe_results(probe_results),
-            )
-            marked.append(filename)
-
-    return marked
-
-
-def _is_hand_edited(filepath: Path) -> bool:
-    """Check if a migration file was hand-edited after generation.
-
-    Compares the file's content checksum against the checksum recorded
-    in the migration plan (.plan.json file).
-    """
-    from dbwarden.merge.marker import get_file_checksum
-
-    # Check for plan file
-    plan_file = filepath.with_suffix(".plan.json")
-    if not plan_file.exists():
-        # No plan file means it was hand-written, not generated
-        return True
-
+def _is_data_bundle(path: Path) -> bool:
     try:
-        import json
-        plan_data = json.loads(plan_file.read_text())
-        plan_checksum = plan_data.get("content_hash", "")
-
-        # Get current file checksum
-        current_checksum = get_file_checksum(filepath)
-
-        # Compare (strip "sha256:" prefix if present)
-        plan_hash = plan_checksum.replace("sha256:", "") if plan_checksum else ""
-        current_hash = current_checksum.replace("sha256:", "") if current_checksum else ""
-
-        if plan_hash and current_hash and plan_hash != current_hash:
-            logger.warning("Migration %s has been hand-edited (checksum mismatch)", filepath.name)
-            return True
-
+        return isinstance(
+            json.loads(path.with_suffix(".plan.json").read_text(encoding="utf-8")).get(
+                "data_bundle"
+            ),
+            dict,
+        )
+    except (OSError, UnicodeError, json.JSONDecodeError):
         return False
-
-    except Exception as e:
-        logger.debug("Failed to check hand-edit status for %s: %s", filepath.name, e)
-        return False
-
-
-def _format_probe_results(probe_results: dict[str, str]) -> str:
-    """Format probe results for the applied_persistent field."""
-    if not probe_results:
-        return "none"
-
-    parts = []
-    for env, result in probe_results.items():
-        if result == "unknown":
-            parts.append(f"unknown:{env}")
-        elif result == "dirty":
-            parts.append(env)
-
-    return ",".join(parts) if parts else "none"
-
-
-def _print_report(
-    merge_base: str,
-    marked_files: list[str],
-    reconciliation_file: str,
-    probe_results: dict[str, str],
-) -> None:
-    """Print the merge reconciliation report."""
-    from dbwarden.output import section, info
-
-    section("Merge reconciliation summary")
-    info(f"  Merge base:      {merge_base[:8]}")
-    info(f"  Superseded:      {', '.join(marked_files) if marked_files else 'none'}")
-    info(f"  Reconciliation:  {reconciliation_file}")
-    info(f"  Environments:    {_format_probe_results(probe_results)}")
-    info("  Next steps:      commit; developers on feature branches: dbwarden rebase")
-
-
-def _print_json_report(
-    merge_base: str,
-    marked_files: list[str],
-    reconciliation_file: str,
-    probe_results: dict[str, str],
-) -> None:
-    """Print the merge reconciliation report as JSON."""
-    from dbwarden.output import emit_json
-
-    report = {
-        "merge_base": merge_base,
-        "superseded_files": marked_files,
-        "reconciliation_file": reconciliation_file,
-        "probe_results": probe_results,
-        "next_steps": "commit; developers on feature branches: dbwarden rebase",
-    }
-    emit_json(report)
-
-
-def _write_merge_record(
-    reconciliation_version: str,
-    merge_base: str,
-    marked_files: list[str],
-    probe_results: dict[str, str],
-    force: bool,
-) -> None:
-    """Write a durable merge record to .dbwarden/merges/."""
-    from datetime import datetime, timezone
-    from dbwarden import __version__
-    from dbwarden.files import atomic_write_text
-
-    # Create merges directory
-    merges_dir = Path(".dbwarden") / "merges"
-    merges_dir.mkdir(parents=True, exist_ok=True)
-
-    # Build merge record
-    record = {
-        "version": reconciliation_version,
-        "merge_base": merge_base,
-        "superseded_files": marked_files,
-        "probe_results": probe_results,
-        "generated_by": f"dbwarden merge (dbwarden {__version__})",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-        "force_used": force,
-    }
-
-    # Write record file
-    record_file = merges_dir / f"{reconciliation_version}.json"
-    import json
-    atomic_write_text(record_file, json.dumps(record, indent=2))
