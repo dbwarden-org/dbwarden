@@ -7,8 +7,10 @@ _CLASS_METADATA = {
     "__annotations__",
     "__classcell__",
     "__doc__",
+    "__firstlineno__",
     "__module__",
     "__qualname__",
+    "__static_attributes__",
 }
 
 
