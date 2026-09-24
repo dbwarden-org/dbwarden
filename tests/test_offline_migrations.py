@@ -760,7 +760,7 @@ def test_offline_make_migrations_end_to_end():
             os.chdir(old_cwd)
 
 
-def test_offline_missing_state_file_does_not_crash():
+def test_offline_missing_state_file_fails_clearly():
     """Running make-migrations --offline without a state file should give a clear error."""
     set_dev_mode(False)
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -789,8 +789,9 @@ def test_offline_missing_state_file_does_not_crash():
             Path("migrations/primary").mkdir(parents=True)
             Path(".dbwarden").mkdir(parents=True)
 
-            # Run offline WITHOUT state file: should not crash
-            make_migrations_cmd("should fail gracefully", offline=True, database="primary")
+            import pytest
+            with pytest.raises(ValueError, match="No model state found"):
+                make_migrations_cmd("missing state", offline=True, database="primary")
 
             # No SQL file should be created
             sql_files = sorted(Path("migrations/primary").glob("*.sql"))
@@ -1114,8 +1115,9 @@ def test_offline_corrupted_state_file():
             # Write invalid JSON
             Path(".dbwarden/model_state.json").write_text("NOT JSON\n", encoding="utf-8")
 
-            # Should not crash with JSONDecodeError
-            make_migrations_cmd("corrupted state", offline=True, database="primary")
+            import pytest
+            with pytest.raises(ValueError, match="Invalid model state"):
+                make_migrations_cmd("corrupted state", offline=True, database="primary")
 
             # No SQL file should be created
             sql_files = sorted(Path("migrations/primary").glob("*.sql"))
@@ -1169,7 +1171,7 @@ def test_offline_empty_tables_in_state():
 
 
 def test_offline_no_model_paths():
-    """If model_paths is empty/list with missing dir, should not crash."""
+    """Missing configured inputs must not become an empty desired schema."""
     set_dev_mode(False)
     with tempfile.TemporaryDirectory() as tmpdir:
         old_cwd = os.getcwd()
@@ -1190,8 +1192,9 @@ def test_offline_no_model_paths():
                 encoding="utf-8",
             )
 
-            # Should produce a warning, not crash
-            make_migrations_cmd("no models", offline=True, database="primary")
+            with pytest.raises(FileNotFoundError, match="nonexistent"):
+                make_migrations_cmd("no models", offline=True, database="primary")
+            assert not list(Path("migrations/primary").glob("*.sql"))
         finally:
             os.chdir(old_cwd)
 
@@ -1474,6 +1477,16 @@ def test_offline_clickhouse_engine_recreate_end_to_end():
                 "ch_engine": "ReplicatedMergeTree('/clickhouse/tables/events', '{replica}')",
                 "ch_order_by": ["id"],
             }
+            Path(".dbwarden/model_state.json").write_text(
+                json.dumps(updated_state, indent=2) + "\n", encoding="utf-8"
+            )
+
+            from copy import deepcopy
+            updated_state["generation_base"] = deepcopy(updated_state)
+            updated_state["generation_applied"] = [path.name.split("__", 1)[1].split("_", 1)[0] for path in sql_files]
+            Path(".dbwarden/model_state.primary.json").write_text(
+                json.dumps(updated_state, indent=2) + "\n", encoding="utf-8"
+            )
             Path(".dbwarden/model_state.json").write_text(
                 json.dumps(updated_state, indent=2) + "\n", encoding="utf-8"
             )
