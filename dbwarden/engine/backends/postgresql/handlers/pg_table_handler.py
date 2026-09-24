@@ -2,14 +2,18 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
 
+from dbwarden.engine.core.ordering import OrderingConstraint
 from dbwarden.engine.core.protocol import ObjectHandler, Op, RunPhase
 from dbwarden.engine.snapshot import MigrationStatement, StatementOrder
 
 
 class PgTableHandler(ObjectHandler):
+    ordering = OrderingConstraint()
     object_type: str = "pg_table"
     op_types: tuple[str, ...] = (
         "alter_pg_table",
+        "alter_pg_storage_param",
+        "alter_pg_rls",
         "add_exclude_constraint",
         "drop_exclude_constraint",
     )
@@ -74,7 +78,7 @@ class PgTableHandler(ObjectHandler):
             all_keys = set(snap_pg_table.keys()) | set(model_pg_table.keys())
             scalar_keys = {
                 k for k in all_keys
-                if k not in ("pg_excludes", "pg_rls", "pg_policies", "pg_storage_params", "backend")
+                if k not in ("pg_excludes", "pg_policies", "backend")
                 and not (k.startswith("pg_") and k[3:] in _combined_storage_ks)
             }
             for key in sorted(scalar_keys):
@@ -146,7 +150,7 @@ class PgTableHandler(ObjectHandler):
                         },
                     ))
             for name, ex in model_excludes.items():
-                if name not in snap_excludes:
+                if name not in snap_excludes or snap_excludes[name] != ex:
                     upgrade_ops.append(Op(
                         object_type="add_exclude_constraint",
                         upgrade_attrs={
@@ -182,16 +186,40 @@ class PgTableHandler(ObjectHandler):
 
         ot = op.object_type
         table = op.upgrade_attrs["table"]
+        attrs = op.upgrade_attrs
+        if ot == "alter_pg_storage_param":
+            attrs = {**attrs, "key": "pg_storage_params",
+                     "from_value": {attrs["param"]: attrs.get("from_value")},
+                     "to_value": {attrs["param"]: attrs.get("to_value")}}
+            ot = "alter_pg_table"
+        elif ot == "alter_pg_rls":
+            attrs = {**attrs, "key": "pg_rls", "to_value": attrs["enabled"],
+                     "from_value": attrs.get("from_value", op.rollback_attrs.get("enabled", not attrs["enabled"]))}
+            ot = "alter_pg_table"
 
         if ot == "alter_pg_table":
             if backend != "postgresql":
                 return stmts
-            key = op.upgrade_attrs["key"]
-            to_val = op.upgrade_attrs.get("to_value")
-            from_val = op.upgrade_attrs.get("from_value")
+            key = attrs["key"]
+            to_val = attrs.get("to_value")
+            from_val = attrs.get("from_value")
             up: str
             rb: str
-            if key == "pg_fillfactor":
+            if key in ("pg_rls", "pg_rls_force"):
+                def rls(value):
+                    action = ("FORCE" if value else "NO FORCE") if key == "pg_rls_force" else ("ENABLE" if value else "DISABLE")
+                    return f"ALTER TABLE {table} {action} ROW LEVEL SECURITY;"
+                up, rb = rls(to_val), rls(from_val)
+            elif key == "pg_storage_params":
+                def storage(before, after):
+                    before, after = before or {}, after or {}
+                    return "\n".join(
+                        f"ALTER TABLE {table} SET ({param} = {after[param]});" if after.get(param) is not None
+                        else f"ALTER TABLE {table} RESET ({param});"
+                        for param in sorted(before.keys() | after.keys()) if before.get(param) != after.get(param)
+                    )
+                up, rb = storage(from_val, to_val), storage(to_val, from_val)
+            elif key in ("pg_fillfactor", "fillfactor"):
                 if to_val is not None:
                     up = f"ALTER TABLE {table} SET (fillfactor = {to_val});"
                 else:
