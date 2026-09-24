@@ -8,6 +8,7 @@ Implements the superseded marker format from the merge spec (§6.1):
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -69,6 +70,36 @@ def parse_superseded_marker(file_path: str | Path) -> Optional[SupersededMarker]
     Raises:
         ValueError: If marker is present but corrupt (R6.1.1: fail closed).
     """
+    path = Path(file_path)
+    sidecar = path.with_suffix(".superseded.json")
+    if sidecar.exists():
+        try:
+            payload = json.loads(sidecar.read_text(encoding="utf-8"))
+            required = {
+                "merged_into", "merged_at", "merge_base", "branch",
+                "applied_persistent", "file_checksum", "original_sql_checksum",
+            }
+            checksum = "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+            if (
+                not isinstance(payload, dict)
+                or not required <= payload.keys()
+                or payload["original_sql_checksum"] != checksum
+            ):
+                raise ValueError(f"Corrupt superseded sidecar for {file_path}")
+            return SupersededMarker(
+                **{
+                    key: payload[key]
+                    for key in (
+                        "merged_into", "merged_at", "merge_base", "branch",
+                        "applied_persistent", "file_checksum",
+                    )
+                }
+            )
+        except (
+            OSError, UnicodeError, json.JSONDecodeError, TypeError, KeyError,
+            AttributeError,
+        ) as exc:
+            raise ValueError(f"Corrupt superseded sidecar for {file_path}") from exc
     try:
         lines = Path(file_path).read_text().splitlines()
     except Exception as e:
@@ -136,7 +167,8 @@ def write_superseded_marker(
 
     # Insert marker at the beginning
     new_content = marker_block + content
-    path.write_text(new_content)
+    from dbwarden.files import atomic_write_text
+    atomic_write_text(path, new_content)
 
 
 def is_superseded(file_path: str | Path) -> bool:
@@ -184,5 +216,29 @@ def mark_file_superseded(
         applied_persistent=applied_persistent,
         file_checksum=checksum,
     )
-    write_superseded_marker(file_path, marker)
+    path = Path(file_path)
+    plan_path = path.with_suffix(".plan.json")
+    try:
+        is_data = "-- dbwarden: data-bundle" in path.read_text(
+            encoding="utf-8"
+        ).splitlines()[:20] or isinstance(
+            json.loads(plan_path.read_text(encoding="utf-8")).get("data_bundle"),
+            dict,
+        )
+    except (OSError, UnicodeError, json.JSONDecodeError, AttributeError):
+        is_data = False
+    if is_data:
+        payload = {
+            **marker.__dict__,
+            "original_sql_checksum": "sha256:"
+            + hashlib.sha256(path.read_bytes()).hexdigest(),
+        }
+        from dbwarden.files import atomic_write_text
+
+        atomic_write_text(
+            path.with_suffix(".superseded.json"),
+            json.dumps(payload, sort_keys=True, indent=2) + "\n",
+        )
+    else:
+        write_superseded_marker(path, marker)
     return marker
