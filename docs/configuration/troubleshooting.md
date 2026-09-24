@@ -585,3 +585,11 @@ $ dbwarden check-db --database primary
 
 - **[Configuration API Reference](../reference/configuration-api.md)** - Complete parameter docs
 - **[Quick Start](quick-start.md)** - Start fresh with correct setup
+- **[CLI option inventory](../reference/cli-options.md)** - Every built-in flag, including `--disable-skip`
+
+## Exit code 3
+
+Exit code `3` can report a skipped database or a safety ceiling stop; inspect the
+accompanying result before treating it as success. See
+[safety-scoped migrations](../correctness/safety-scoped-migrations.md) for the
+severity ceiling semantics.
