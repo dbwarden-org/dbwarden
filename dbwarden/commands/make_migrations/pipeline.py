@@ -1,63 +1,34 @@
 import json
 import os
-import re
-import sys
 from pathlib import Path
 from typing import Any
 
-from dbwarden import __version__
-from dbwarden.config import get_database, get_multi_db_config
-from dbwarden.constants import RUNS_ALWAYS_FILE_PREFIX, RUNS_ON_CHANGE_FILE_PREFIX
-from dbwarden.engine.file_parser import parse_upgrade_statements
-from dbwarden.engine.backends.postgresql.render import _quote_pg
-from dbwarden.files import atomic_write_text
-from dbwarden.engine.discovery import (
-    get_all_model_tables,
-    auto_discover_model_paths,
-    filter_model_tables_by_name,
-    validate_model_tables_exist,
-    generate_create_table_sql,
-    generate_drop_object_sql,
-    generate_add_column_sql,
-    extract_tables_from_migrations,
-    extract_tables_from_database,
-    _extract_create_table_columns,
-    _qualified_name,
-)
-from dbwarden.engine.discovery import _get_backend_name as _get_backend_name_md
-from dbwarden.engine.migration_name import Change
-from dbwarden.engine.offline import model_state_to_dict
-from dbwarden.engine.version import (
-    get_migrations_directory,
-    get_next_migration_number,
-    generate_migration_filename,
-    generate_repeatable_filename,
-)
-from dbwarden.logging import get_logger
-from dbwarden.output import error, info, success, warning
 from dbwarden.commands.make_migrations.ch_ops import (
     _check_recreate_rename_conflict,
     _resolve_clickhouse_recreate_ops,
 )
-from dbwarden.commands.make_migrations.cli_parsing import (
-    RenameIntent,
-    _parse_rename_flags,
-    _parse_rename_table_flags,
-)
 from dbwarden.commands.make_migrations.migrate_plan import (
     _build_table_rename_ops,
-    _check_migration_scope,
-    build_migration_plan,
 )
-from dbwarden.commands.make_migrations.snapshot_merge import _merge_pending_migrations_into_snapshot
-
+from dbwarden.commands.make_migrations.snapshot_merge import (
+    _merge_pending_migrations_into_snapshot,
+)
+from dbwarden.config import ConfigurationError, get_database, get_multi_db_config
+from dbwarden.engine.discovery import (
+    _qualified_name,
+    extract_tables_from_database,
+)
+from dbwarden.engine.file_parser import parse_upgrade_statements
+from dbwarden.engine.migration_name import Change
+from dbwarden.logging import get_logger
+from dbwarden.output import warning
 
 logger = get_logger()
 
 
 def get_pending_migration_statements(migrations_dir: str) -> set[str]:
     """Get all SQL statements from all migration files (for deduplication)."""
-    all_statements = set()
+    all_statements: set[str] = set()
 
     if not os.path.exists(migrations_dir):
         return all_statements
@@ -66,6 +37,10 @@ def get_pending_migration_statements(migrations_dir: str) -> set[str]:
         if not filename.endswith(".sql"):
             continue
         filepath = os.path.join(migrations_dir, filename)
+        from dbwarden.merge.marker import is_superseded
+        from dbwarden.merge.reconciliation import is_reconciliation
+        if is_superseded(filepath) or is_reconciliation(filepath):
+            continue
         statements = parse_upgrade_statements(filepath)
         for stmt in statements:
             normalized = stmt.strip()
@@ -116,191 +91,15 @@ def _legacy_state_should_override(
 
 def _run_offline_migrations(
     description: str | None = None, database: str | None = None, migration_type: str = "versioned",
-    clickhouse_engine_recreate: bool = False,
-    drop_preserved_clickhouse_table: bool | None = None,
-    rename_flags: list[str] | None = None,
-    rename_table_flags: list[str] | None = None,
+    clickhouse_engine_recreate: bool = False, drop_preserved_clickhouse_table: bool | None = None,
+    rename_flags: list[str] | None = None, rename_table_flags: list[str] | None = None,
 ) -> None:
-    from dbwarden.engine.offline import diff_model_states, model_state_to_dict, normalize_model_state
-    from dbwarden.engine.snapshot import snapshot_diff_to_sql, _apply_rename_intents
+    from dbwarden.commands.make_migrations.generation import run_generation
 
-    config = get_database(database)
-    multi_config = get_multi_db_config()
-    db_name = database or multi_config.default
-    model_paths = config.model_paths
-
-    if not model_paths:
-        model_paths = auto_discover_model_paths()
-
-    if not model_paths:
-        logger.warning("No model paths found. Please set model_paths in dbwarden config")
-        warning(
-            "No SQLAlchemy models found. Please:\n"
-            "1. Create models/ directory with your SQLAlchemy models\n"
-            "2. Or set model_paths in dbwarden config"
-        )
-        return
-
-    state_path = get_model_state_path(db_name)
-    legacy_state_path = get_model_state_path(db_name, legacy=True)
-    read_state_path = get_current_model_state_path(db_name)
-
-    if not read_state_path.exists():
-        error(f"Error: {get_model_state_path(db_name)} not found.")
-        warning("Run 'dbwarden export-models' first to establish a baseline.")
-        return
-
-    try:
-        prev_state = normalize_model_state(json.loads(read_state_path.read_text()))
-    except json.JSONDecodeError:
-        error(f"Error: {read_state_path} contains invalid JSON.")
-        warning("Run 'dbwarden export-models' again to regenerate the state file.")
-        return
-    from dbwarden import __version__ as _dw_version
-
-    try:
-        _migrations_dir = get_migrations_directory(database)
-    except Exception:
-        _migrations_dir = str(Path.cwd() / config.migrations_dir)
-    if not list(Path(_migrations_dir).glob("*.sql")):
-        prev_state["tables"] = {}
-        prev_state["indexes"] = {}
-        prev_state["constraints"] = {}
-        prev_state["enums"] = {}
-
-    current_tables = get_all_model_tables(model_paths, db_name=db_name)
-    validate_model_tables_exist(current_tables, config.model_tables, db_name)
-    current_tables = filter_model_tables_by_name(current_tables, config.model_tables)
-    current_state = model_state_to_dict(current_tables, dbwarden_version=_dw_version)
-
-    upgrade_ops, rollback_ops = diff_model_states(prev_state, current_state, db_name=db_name)
-
-    rename_intents: list[RenameIntent] = []
-    if rename_flags:
-        rename_intents = _parse_rename_flags(rename_flags)
-
-    confirmed_renames: set[tuple[str, str, str]] = set()
-    resolved_from_map: dict[tuple[str, str, str], str] = {}
-
-    for intent in rename_intents:
-        key = (intent.table, intent.old_name, intent.new_name)
-        confirmed_renames.add(key)
-        resolved_from_map[key] = "rename_flag"
-
-    if confirmed_renames:
-        upgrade_ops, rollback_ops = _apply_rename_intents(
-            upgrade_ops, rollback_ops, confirmed_renames, resolved_from_map
-        )
-
-    confirmed_table_intents: set[tuple[str, str]] = set()
-    table_resolved_from_map: dict[tuple[str, str], str] = {}
-
-    if rename_table_flags:
-        table_intents = _parse_rename_table_flags(rename_table_flags)
-        for intent in table_intents:
-            key = (intent["old_table"], intent["new_table"])
-            confirmed_table_intents.add(key)
-            table_resolved_from_map[key] = "rename_flag"
-
-    _check_recreate_rename_conflict(upgrade_ops, confirmed_table_intents)
-
-    if confirmed_table_intents:
-        table_rename_ops = _build_table_rename_ops(confirmed_table_intents, table_resolved_from_map)
-        upgrade_ops = table_rename_ops["upgrade"] + upgrade_ops
-        rollback_ops = table_rename_ops["rollback"] + rollback_ops
-
-    _resolve_clickhouse_recreate_ops(
-        upgrade_ops,
-        rollback_ops,
-        clickhouse_engine_recreate=clickhouse_engine_recreate,
-        drop_preserved_clickhouse_table=drop_preserved_clickhouse_table,
-    )
-
-    if not upgrade_ops:
-        info("No offline schema changes detected between model state and current models.")
-        return
-
-    from dbwarden.engine.version import get_migration_filepaths_by_version
-
-    upgrade_sql, rollback_sql, changes = snapshot_diff_to_sql(
-        upgrade_ops, rollback_ops, database=database, db_name=db_name,
-        enforce_rollback_contract=True,
-    )
-
-    upgrade_sql, rollback_sql, changes = _prepend_pg_preamble(
-        upgrade_sql, rollback_sql, changes, database,
-    )
-
-    upgrade_sql, rollback_sql, changes = _prepend_ch_preamble(
-        upgrade_sql, rollback_sql, changes, database,
-    )
-
-    if not upgrade_sql.strip():
-        info("No offline schema changes detected between model state and current models.")
-        return
-
-    from dbwarden.engine.version import get_migrations_directory as _get_migrations_dir
-    try:
-        migrations_dir = _get_migrations_dir(database)
-    except Exception:
-        config = get_database(database)
-        migrations_dir = str(Path.cwd() / config.migrations_dir)
-        Path(migrations_dir).mkdir(parents=True, exist_ok=True)
-    existing_statements = get_pending_migration_statements(migrations_dir)
-
-    filtered_statements = []
-    filtered_rollback = []
-    for u_sql, r_sql in zip(upgrade_sql.strip().split("\n\n"), rollback_sql.strip().split("\n\n")):
-        if u_sql.strip() and u_sql.strip() not in existing_statements:
-            filtered_statements.append(u_sql.strip())
-            filtered_rollback.append(r_sql.strip())
-
-    if not filtered_statements:
-        info("No new migrations to generate - all models already covered by existing migrations.")
-        return
-
-    safe_desc = re.sub(r"[^a-zA-Z0-9]", "_", (description or "offline_migration")).lower()
-    safe_desc = re.sub(r"_+", "_", safe_desc).strip("_")[:60]
-    if not safe_desc:
-        safe_desc = "offline_migration"
-    if migration_type in ("runs_always", "ra"):
-        filename = generate_repeatable_filename(db_name, safe_desc, RUNS_ALWAYS_FILE_PREFIX)
-    elif migration_type in ("runs_on_change", "roc"):
-        filename = generate_repeatable_filename(db_name, safe_desc, RUNS_ON_CHANGE_FILE_PREFIX)
-    else:
-        existing_versions = get_migration_filepaths_by_version(migrations_dir)
-        next_version = f"{int(max(existing_versions.keys(), default='0000')) + 1:04d}"
-        filename = generate_migration_filename(db_name, safe_desc, next_version)
-
-    header = "-- upgrade\n\n"
-    header += "\n\n".join(filtered_statements)
-    header += "\n\n-- rollback\n\n"
-    header += "\n\n".join(filtered_rollback)
-    header += "\n"
-
-    filepath = os.path.join(migrations_dir, filename)
-    with open(filepath, "w") as f:
-        f.write(header)
-
-    migration_id = Path(filename).stem
-    plan = build_migration_plan(migration_id, changes, "\n\n".join(filtered_statements))
-    plan_path = filepath.replace(".sql", ".plan.json")
-    atomic_write_text(Path(plan_path), json.dumps(plan, indent=2, default=str) + "\n")
-
-    success(f"Created migration file: {filepath}")
-    success(f"Created migration plan: {plan_path}")
-    info(f"Tables included: {', '.join(sorted(set(c.table for c in changes if hasattr(c, 'table') and c.table)))}")
-
-    from dbwarden.engine.core.model_state import model_state_json_dumps
-    file_state = dict(current_state)
-    file_state["database"] = db_name or "default"
-    state_payload = model_state_json_dumps(file_state)
-    state_path.parent.mkdir(parents=True, exist_ok=True)
-    atomic_write_text(state_path, state_payload)
-    if legacy_state_path != state_path:
-        legacy_state_path.parent.mkdir(parents=True, exist_ok=True)
-        atomic_write_text(legacy_state_path, state_payload)
-    logger.info(f"Updated model state: {state_path}")
+    run_generation(description=description, database=database, migration_type=migration_type,
+                   clickhouse_engine_recreate=clickhouse_engine_recreate,
+                   drop_preserved_clickhouse_table=drop_preserved_clickhouse_table,
+                   rename_flags=rename_flags, rename_table_flags=rename_table_flags, offline=True)
 
 
 # Kept for backward compatibility. Referenced by tests.
@@ -393,8 +192,8 @@ def _prepend_pg_preamble(
         if config.database_type != "postgresql":
             return upgrade_sql, rollback_sql, changes
 
-        from dbwarden.plugin import ObjectPluginRegistry
         from dbwarden.engine.core.registry import RegistryDriver
+        from dbwarden.plugin import ObjectPluginRegistry
 
         has_pg_preamble = any(getattr(config, attr, None) for attr in (
             "pg_sequences", "pg_domains", "pg_functions", "pg_triggers",
@@ -538,360 +337,72 @@ def generate_migration_sql(
     drop_preserved_clickhouse_table: bool | None = None,
     postgres_auto_using: bool = False,
 ) -> tuple[str, str, list[Change]]:
-    upgrade_sql: str = ""
-    rollback_sql: str = ""
-    changes: list[Change] = []
-    snapshot: Any = None
-    confirmed_renames = confirmed_renames or set()
-    confirmed_table_intents = confirmed_table_intents or set()
+    from dbwarden.engine.generation_state import effective_state
+    from dbwarden.engine.safety.plans import read_trusted_plan
+    from dbwarden.engine.snapshot import (
+        _apply_rename_intents,
+        diff_models_against_snapshot,
+        extract_full_schema_snapshot,
+        find_latest_snapshot,
+        snapshot_diff_to_sql,
+    )
+    from dbwarden.engine.version import get_migration_filepaths_by_version
 
-    try:
-        from dbwarden.engine.snapshot import (
-            RollbackContractError,
-            find_latest_snapshot,
-            extract_full_schema_snapshot,
-            diff_models_against_snapshot,
-            snapshot_diff_to_sql,
-            _apply_rename_intents,
-            _rename_table_sql,
-            TableRenameIntent,
-            StatementOrder,
-            MigrationStatement,
-        )
-
-        snapshot = find_latest_snapshot(db_name)
-    except Exception:
-        snapshot = None
-
+    snapshot = find_latest_snapshot(db_name)
+    incomplete = False
     if snapshot is None:
+        config = None
         try:
             config = get_database(database)
             snapshot = extract_full_schema_snapshot(
-                database=db_name,
-                sqlalchemy_url=config.sqlalchemy_url,
+                database=db_name, sqlalchemy_url=config.sqlalchemy_url,
                 database_type=config.database_type,
             )
-        except Exception:
-            snapshot = None
-
-    if snapshot is not None and migrations_dir:
-        _merge_pending_migrations_into_snapshot(snapshot, migrations_dir)
-
-    if snapshot is not None:
-        try:
-            upgrade_ops, rollback_ops = diff_models_against_snapshot(
-                tables, snapshot, database=database, db_name=db_name,
-                clickhouse_engine_recreate=clickhouse_engine_recreate,
-            )
-            if confirmed_renames:
-                upgrade_ops, rollback_ops = _apply_rename_intents(
-                    upgrade_ops, rollback_ops, confirmed_renames, resolved_from_map
-                )
-
-            _check_recreate_rename_conflict(upgrade_ops, confirmed_table_intents)
-
-            for warn in _check_migration_scope(upgrade_ops, database=database):
-                logger.warning(warn)
-
-            table_rename_ops = _build_table_rename_ops(confirmed_table_intents, table_resolved_from_map)
-            upgrade_ops = table_rename_ops["upgrade"] + upgrade_ops
-            rollback_ops = table_rename_ops["rollback"] + rollback_ops
-            _resolve_clickhouse_recreate_ops(
-                upgrade_ops,
-                rollback_ops,
-                clickhouse_engine_recreate=clickhouse_engine_recreate,
-                drop_preserved_clickhouse_table=drop_preserved_clickhouse_table,
-            )
-
-            upgrade_sql, rollback_sql, changes = snapshot_diff_to_sql(
-                upgrade_ops, rollback_ops, database=database, db_name=db_name,
-                safe_type_change=safe_type_change,
-                concurrent=concurrent,
-                postgres_auto_using=postgres_auto_using,
-                enforce_rollback_contract=True,
-            )
-        except RollbackContractError:
-            raise
-        except Exception:
-            # Falling back means generating from the models alone, which cannot
-            # see the database and so cannot diff. Say why: this used to be
-            # silent, and the degraded migration is hard to tell apart from a
-            # correct one.
-            logger.exception(
-                "Snapshot diff failed; falling back to generating from models only. "
-                "The generated migration may not reflect the current database."
-            )
-            warning(
-                "Could not diff against the schema snapshot; generating from models "
-                "only. Review the generated SQL before applying it."
-            )
-            snapshot = None
-
-    if snapshot is None:
-        table_rename_ops = _build_table_rename_ops(confirmed_table_intents, table_resolved_from_map)
-        try:
-            config = get_database(database)
-            existing_tables = extract_tables_from_database(config.sqlalchemy_url)
-        except Exception:
-            existing_tables = {}
-
-        migration_tables = {}
-        if migrations_dir:
-            migration_tables = extract_tables_from_migrations(migrations_dir)
-
-        known_tables: dict[str, set[str]] = {
-            table_name: {col.lower() for col in columns}
-            for table_name, columns in existing_tables.items()
-        }
-        for table_name, columns in migration_tables.items():
-            if table_name in known_tables:
-                known_tables[table_name].update({col.lower() for col in columns})
-            else:
-                known_tables[table_name] = {col.lower() for col in columns}
-
-        upgrade_parts: list[str] = []
-        rollback_parts: list[str] = []
-        changes: list[Change] = []
-        backend = _get_backend_name_md(database)
-
-        tables = _order_tables_for_creation(tables)
-        enum_types: dict[str, list[str]] = {}
-        for table in tables:
-            for col in table.columns:
-                pg_type = col.pg_meta.get("pg_type", {})
-                if pg_type.get("kind") == "enum":
-                    type_name = pg_type.get("type_name", "")
-                    if type_name and type_name not in enum_types:
-                        enum_types[type_name] = pg_type.get("values", [])
-        for enum_name, values in enum_types.items():
-            values_sql = ", ".join(repr(v) for v in values)
-            upgrade_parts.append(f"CREATE TYPE {enum_name} AS ENUM ({values_sql});")
-            rollback_parts.append(f"DROP TYPE IF EXISTS {enum_name};")
-            changes.append(Change(operation="create_type", table=enum_name))
-
-        created_tables: set[str] = set()
-        for table in tables:
-            existing_columns = known_tables.get(table.name, set())
-
-            if not existing_columns:
-                created_tables.add(table.name)
-                create_sql = generate_create_table_sql(table, db_name)
-                upgrade_parts.append(create_sql)
-                rollback_parts.append(generate_drop_object_sql(table))
-                changes.append(Change(operation="create_table", table=table.name))
-            else:
-                for column in table.columns:
-                    if column.name.lower() not in existing_columns:
-                        alter_sql = generate_add_column_sql(
-                            table.name, column, db_name, schema=table.schema
-                        )
-                        upgrade_parts.append(alter_sql)
-                        if backend == "postgresql":
-                            qtable = _quote_pg(table.name)
-                            qschema = _quote_pg(table.schema) if table.schema else None
-                            col_name_q = _quote_pg(column.name)
-                        else:
-                            qtable = table.name
-                            qschema = table.schema
-                            col_name_q = column.name
-                        qname = _qualified_name(qtable, qschema)
-                        rollback_parts.append(
-                            f"ALTER TABLE {qname} DROP COLUMN {col_name_q}"
-                        )
-                        changes.append(Change(operation="add_column", table=table.name, target=column.name))
-                        known_tables.setdefault(table.name, set()).add(column.name.lower())
-
-        for table in tables:
-            if table.name not in created_tables:
-                continue
-            if backend == "postgresql":
-                qtable = _quote_pg(table.name)
-                qschema = _quote_pg(table.schema) if table.schema else None
-            else:
-                qtable = table.name
-                qschema = table.schema
-            qname = _qualified_name(qtable, qschema)
-            for idx in table.indexes:
-                idx_cols = idx.expression or ", ".join(idx.columns)
-                if not idx_cols:
-                    continue
-                if backend == "postgresql":
-                    idx_name = _quote_pg(idx.name)
-                    if idx.expression:
-                        idx_cols = idx.expression
-                    else:
-                        idx_cols = ", ".join(_quote_pg(c) for c in idx.columns)
-                else:
-                    idx_name = idx.name
-                if backend == "clickhouse":
-                    ch_type = idx.clickhouse_type or "minmax"
-                    ch_granularity = idx.clickhouse_granularity or 1
-                    upgrade_parts.append(
-                        f"ALTER TABLE {qname} ADD INDEX IF NOT EXISTS {idx_name} "
-                        f"({idx_cols}) "
-                        f"TYPE {ch_type} "
-                        f"GRANULARITY {ch_granularity};"
-                    )
-                    rollback_parts.append(
-                        f"ALTER TABLE {qname} DROP INDEX {idx_name};"
-                    )
-                else:
-                    upgrade_parts.append(f"CREATE INDEX IF NOT EXISTS {idx_name} ON {qname} ({idx_cols});")
-                    rollback_parts.append(f"DROP INDEX IF EXISTS {idx_name};")
-                changes.append(Change(operation="add_index", table=table.name, target=idx.name))
-            # UNIQUE and CHECK constraints are part of the table's definition.
-            # The snapshot path emits them through ConstraintHandler; this path
-            # has no handler, so without these two loops a migration generated
-            # without a snapshot silently creates every table with its
-            # constraints missing - and ON CONFLICT against them then fails.
-            for unique in table.uniques or []:
-                unique_columns = list(unique.get("columns") or [])
-                if not unique_columns:
-                    continue
-                uq_name = unique.get("name") or f"uq_{table.name}_{'_'.join(unique_columns)}"
-                if backend == "postgresql":
-                    uq_name_sql = _quote_pg(uq_name)
-                    uq_cols_sql = ", ".join(_quote_pg(c) for c in unique_columns)
-                else:
-                    uq_name_sql = uq_name
-                    uq_cols_sql = ", ".join(unique_columns)
-                defer_clause = ""
-                if backend == "postgresql" and unique.get("deferrable"):
-                    defer_clause = (
-                        " DEFERRABLE INITIALLY DEFERRED"
-                        if unique.get("initially_deferred")
-                        else " DEFERRABLE INITIALLY IMMEDIATE"
-                    )
-                upgrade_parts.append(
-                    f"ALTER TABLE {qname} ADD CONSTRAINT {uq_name_sql} "
-                    f"UNIQUE ({uq_cols_sql}){defer_clause};"
-                )
-                rollback_parts.append(
-                    f"ALTER TABLE {qname} DROP CONSTRAINT {uq_name_sql};"
-                )
-                changes.append(Change(
-                    operation="add_unique_constraint",
-                    table=table.name,
-                    target=",".join(unique_columns),
-                ))
-
-            for index, check in enumerate(table.checks or []):
-                expression = check.get("expression") or check.get("sql_expression")
-                if not expression:
-                    continue
-                ck_name = check.get("name") or f"ck_{table.name}_{index}"
-                ck_name_sql = _quote_pg(ck_name) if backend == "postgresql" else ck_name
-                no_inherit = (
-                    " NO INHERIT"
-                    if check.get("no_inherit") and backend == "postgresql"
-                    else ""
-                )
-                upgrade_parts.append(
-                    f"ALTER TABLE {qname} ADD CONSTRAINT {ck_name_sql} "
-                    f"CHECK ({expression}){no_inherit};"
-                )
-                rollback_parts.append(
-                    f"ALTER TABLE {qname} DROP CONSTRAINT IF EXISTS {ck_name_sql};"
-                )
-                changes.append(Change(
-                    operation="add_check_constraint",
-                    table=table.name,
-                    target=ck_name,
-                ))
-
-            if backend == "postgresql":
-                pg_excludes = (table.pg_table or {}).get("pg_excludes") or table.excludes or []
-                for exclude in pg_excludes:
-                    expression = exclude.get("expression")
-                    if not expression:
-                        continue
-                    ex_name = exclude.get("name") or f"ex_{table.name}_{len(upgrade_parts)}"
-                    ex_name_sql = _quote_pg(ex_name)
-                    clause = (
-                        expression
-                        if str(expression).lstrip().upper().startswith("EXCLUDE")
-                        else f"EXCLUDE {expression}"
-                    )
-                    upgrade_parts.append(
-                        f"ALTER TABLE {qname} ADD CONSTRAINT {ex_name_sql} {clause};"
-                    )
-                    rollback_parts.append(
-                        f"ALTER TABLE {qname} DROP CONSTRAINT {ex_name_sql};"
-                    )
-                    changes.append(Change(
-                        operation="add_exclude_constraint",
-                        table=table.name,
-                        target=ex_name,
-                    ))
-
-            for fk in table.foreign_keys:
-                local_cols = ", ".join(fk.get("columns", []))
-                ref_table = _quote_pg(fk.get("referred_table", "")) if backend == "postgresql" else fk.get("referred_table", "")
-                ref_cols = ", ".join(_quote_pg(c) if backend == "postgresql" else c for c in fk.get("referred_columns", ["id"]))
-                loc_cols_q = ", ".join(_quote_pg(c) if backend == "postgresql" else c for c in fk.get("columns", []))
-                fk_sql = f"ALTER TABLE {qname} ADD FOREIGN KEY ({loc_cols_q}) REFERENCES {ref_table} ({ref_cols})"
-                on_delete = fk.get("on_delete", "NO ACTION")
-                on_update = fk.get("on_update", "NO ACTION")
-                if on_delete != "NO ACTION":
-                    fk_sql += f" ON DELETE {on_delete}"
-                if on_update != "NO ACTION":
-                    fk_sql += f" ON UPDATE {on_update}"
-                fk_sql += ";"
-                upgrade_parts.append(fk_sql)
-                rollback_parts.append(f"-- DROP FOREIGN KEY ({local_cols}) on {table.name} (name unknown)")
-                changes.append(Change(operation="add_foreign_key", table=table.name, target=local_cols))
-
-        rollback_parts.reverse()
-
-        if migrations_dir:
-            existing_statements = get_pending_migration_statements(migrations_dir)
-            filtered_upgrade_parts = []
-            filtered_rollback_parts = []
-            filtered_changes = []
-
-            for upgrade_sql, rollback_sql in zip(upgrade_parts, rollback_parts):
-                if upgrade_sql.strip() in existing_statements:
-                    continue
-                filtered_upgrade_parts.append(upgrade_sql)
-                filtered_rollback_parts.append(rollback_sql)
-
-            for change, upgrade_sql in zip(changes, upgrade_parts):
-                if upgrade_sql.strip() in existing_statements:
-                    continue
-                filtered_changes.append(change)
-
-            upgrade_parts = filtered_upgrade_parts
-            rollback_parts = filtered_rollback_parts
-            changes = filtered_changes
-
-        upgrade_sql = "\n\n".join(upgrade_parts)
-        rollback_sql = "\n\n".join(rollback_parts)
-
-        if table_rename_ops["upgrade"]:
-            from dbwarden.engine.snapshot import snapshot_diff_to_sql
-            rename_upgrade, rename_rollback, rename_changes = snapshot_diff_to_sql(
-                table_rename_ops["upgrade"], table_rename_ops["rollback"],
-                database=database, db_name=db_name,
-            )
-            if rename_upgrade.strip():
-                upgrade_sql = rename_upgrade + "\n\n" + upgrade_sql
-                rollback_sql = rename_rollback + "\n\n" + rollback_sql
-                changes = rename_changes + changes
-
+        except (OSError, ValueError, ConfigurationError):
+            incomplete = True
+            warning("No snapshot available; compatibility preview uses column names only. Existing column attributes cannot be compared. Review SQL before applying.")
+            try:
+                names = extract_tables_from_database(config.sqlalchemy_url) if config else {}
+            except ConfigurationError:
+                names = {}
+            snapshot = {"tables": {name: {"columns": {column: {"type": "unknown"} for column in columns}} for name, columns in names.items()}}
     if migrations_dir:
-        existing_statements = get_pending_migration_statements(migrations_dir)
-        if upgrade_sql.strip():
-            from dbwarden.engine.snapshot import _filter_duplicates_from_snapshot_diff
-            upgrade_sql, rollback_sql, changes = _filter_duplicates_from_snapshot_diff(
-                upgrade_sql, rollback_sql, changes, existing_statements
-            )
-
-    upgrade_sql, rollback_sql, changes = _prepend_pg_preamble(
-        upgrade_sql, rollback_sql, changes, database, snapshot,
+        files = get_migration_filepaths_by_version(migrations_dir)
+        if any(read_trusted_plan(path)[0] for path in files.values()):
+            snapshot, _ = effective_state(snapshot, files)
+        else:
+            _merge_pending_migrations_into_snapshot(snapshot, migrations_dir)
+    for table in tables:
+        columns = snapshot.get("tables", {}).get(table.name, {}).get("columns", {})
+        for column in table.columns:
+            if columns.get(column.name, {}).get("type") == "unknown":
+                columns[column.name] = column.to_dict()
+    upgrade_ops, rollback_ops = diff_models_against_snapshot(
+        tables, snapshot, database=database, db_name=db_name,
+        clickhouse_engine_recreate=clickhouse_engine_recreate,
     )
-
-    upgrade_sql, rollback_sql, changes = _prepend_ch_preamble(
-        upgrade_sql, rollback_sql, changes, database,
+    if incomplete:
+        existing = set(snapshot.get("tables", {}))
+        constraints = {"add_foreign_key", "add_unique_constraint", "add_check_constraint", "add_exclude_constraint"}
+        upgrade_ops = [op for op in upgrade_ops if not (op.get("table") in existing and op["type"] in constraints)]
+    if confirmed_renames:
+        upgrade_ops, rollback_ops = _apply_rename_intents(upgrade_ops, rollback_ops, confirmed_renames, resolved_from_map)
+    _check_recreate_rename_conflict(upgrade_ops, confirmed_table_intents or set())
+    renames = _build_table_rename_ops(confirmed_table_intents or set(), table_resolved_from_map)
+    upgrade_ops = renames["upgrade"] + upgrade_ops
+    rollback_ops = renames["rollback"] + rollback_ops
+    from dbwarden.engine.model_discovery.type_mapping import _get_backend_name
+    if _get_backend_name(db_name) == "sqlite":
+        created = {op["table"] for op in upgrade_ops if op["type"] == "create_table"}
+        inline = {"add_foreign_key", "add_unique_constraint", "add_check_constraint"}
+        upgrade_ops = [op for op in upgrade_ops if not (op["type"] in inline and op.get("table") in created)]
+    ranks = {table.name: index for index, table in enumerate(_order_tables_for_creation(tables))}
+    upgrade_ops.sort(key=lambda op: ranks.get(op.get("table"), len(ranks)) if op["type"] == "create_table" else len(ranks))
+    _resolve_clickhouse_recreate_ops(upgrade_ops, rollback_ops, clickhouse_engine_recreate, drop_preserved_clickhouse_table)
+    upgrade, rollback, changes = snapshot_diff_to_sql(
+        upgrade_ops, rollback_ops, database=database, db_name=db_name,
+        safe_type_change=safe_type_change, concurrent=concurrent,
+        postgres_auto_using=postgres_auto_using, enforce_rollback_contract=True,
     )
-
-    return upgrade_sql, rollback_sql, changes
+    upgrade, rollback, changes = _prepend_pg_preamble(upgrade, rollback, changes, database, snapshot)
+    return _prepend_ch_preamble(upgrade, rollback, changes, database)
