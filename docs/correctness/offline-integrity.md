@@ -36,7 +36,7 @@ git add .dbwarden/model_state.json
 git commit -m "Update dbwarden model state"
 ```
 
-The model state file records the schema that dbwarden expects the database to be in after the last migration. It is the baseline for offline diffing and can be regenerated at any time from a live database.
+The model state file records the schema that dbwarden expects the database to be in after the last migration. It is the baseline for offline diffing and can be regenerated at any time from a live database. `export-models` reads current model declarations without connecting to a database. Export the intended baseline before changing models; exporting after an unrecorded model edit can hide that edit from the next diff.
 
 ## Offline Migration Generation
 
@@ -70,11 +70,13 @@ dbwarden make-migrations "add profile fields" --offline --database primary
 
 If the state file is missing, dbwarden tells you to run `export-models` first. If the state file is invalid, dbwarden refuses to use it.
 
-> **If accidentally deleted:** restore it from git (`git checkout .dbwarden/model_state.json`) or regenerate it by running `dbwarden export-models --database <db>` against a live database. Offline commands will work again immediately.
+> **If accidentally deleted:** restore it from git (`git checkout .dbwarden/model_state.json`), use `dbwarden recover-model-state --database <db>` to recover from available migration state, or regenerate it by running `dbwarden export-models --database <db>` against a live database. Run `export-models` only when current models represent the intended baseline, and preserve the database-specific and legacy files together. Offline commands will work again immediately.
 
 ## Integrity Check
 
 Model state and schema snapshots are checksummed. Before dbwarden uses a state file, it validates that the file content matches the stored checksum.
+
+Generated migration plans record the SQL content hash and the checksums of the schema before and after their operations. Pending-plan composition checks these values and rejects stale or inconsistent plans. `--strict-pending` also rejects pending files without a composable plan.
 
 The reason is straightforward:
 
@@ -93,6 +95,10 @@ Compare with stored checksum
 ```
 
 This protects against accidental edits, merge corruption, and stale generated files. A modified JSON file should not silently become the baseline for migration generation.
+
+Exported model-state JSON has no independent signature or embedded integrity checksum. Version-control review or an external file manifest is required to detect arbitrary edits to that baseline. Missing or malformed offline state exits with an error and writes no migration.
+
+Generation and merge restore previous SQL, plan, marker, and state-file bytes if a write raises an exception. Both database-specific and legacy state files participate. Restoration attempts every file; if a file cannot be restored, the error lists its path and retains the original error as its cause. This rollback does not guarantee recovery from persistent filesystem errors, process termination or power loss during a multi-file update.
 
 ## CI Workflow Example
 
@@ -197,5 +203,6 @@ With offline state:
 - The same inputs produce the same diff.
 - CI can detect missing migrations without a database service.
 - Tampered state files are rejected by checksum validation.
+- Migration plans validate SQL and state-transition checksums. External manifests or version control detect arbitrary edits to exported baselines.
 
 Offline integrity is not the final proof. The final proof is still a live database convergence gate. Offline integrity ensures the inputs to that gate are deterministic.
