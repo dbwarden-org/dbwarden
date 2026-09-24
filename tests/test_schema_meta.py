@@ -1464,49 +1464,31 @@ class TestCHViewDiscovery:
         rollback verbatim. _assemble_migration already reverses the statement
         list, so a second reversed() in the pipeline put the rollback in
         forward order (creating the MV before its target table)."""
-        import json
         from types import SimpleNamespace
 
-        from dbwarden.commands.make_migrations import pipeline as pipeline_mod
+        from dbwarden.commands.make_migrations import generation
+        from dbwarden.engine.core.statement_order import MigrationStatement, StatementOrder
 
-        monkeypatch.chdir(tmp_path)
-        (tmp_path / ".dbwarden").mkdir()
-        (tmp_path / ".dbwarden" / "model_state.analytics.json").write_text(
-            json.dumps({"format_version": 2, "tables": {}, "indexes": {},
-                        "constraints": {}, "enums": {}})
-        )
-        (tmp_path / "migrations").mkdir()
+        monkeypatch.setattr("dbwarden.config.get_database", lambda db_name=None: SimpleNamespace(database_type="clickhouse"))
 
-        fake_config = SimpleNamespace(
-            model_paths=["/nonexistent/models"],
-            model_tables=None,
-            migrations_dir="migrations",
-            database_type="sqlite",
-        )
-        monkeypatch.setattr(pipeline_mod, "get_database", lambda db_name=None: fake_config)
-        monkeypatch.setattr(pipeline_mod, "get_multi_db_config",
-                            lambda: SimpleNamespace(default="analytics"))
-        monkeypatch.setattr(pipeline_mod, "get_all_model_tables", lambda *a, **k: [])
-        monkeypatch.setattr(pipeline_mod, "validate_model_tables_exist", lambda *a, **k: None)
-        monkeypatch.setattr("dbwarden.engine.offline.diff_model_states", lambda prev, curr, **kwargs: (
-            [{"type": "drop_table", "table": "hourly_mv", "object_type": "materialized_view"},
-             {"type": "drop_table", "table": "hourly"}],
-            [{"type": "drop_table", "table": "hourly"},
-             {"type": "drop_table", "table": "hourly_mv", "object_type": "materialized_view"}],
-        ))
+        def emit(ops, rollback, **kwargs):
+            kwargs["statement_sink"].extend([
+                (ops[0], MigrationStatement(StatementOrder.DROP_VIEW, "DROP VIEW hourly_mv;", "CREATE MATERIALIZED VIEW hourly_mv TO hourly;")),
+                (ops[1], MigrationStatement(StatementOrder.DROP_TABLE, "DROP TABLE hourly;", "CREATE TABLE hourly (id UInt32);")),
+            ])
+            return "", "", []
 
-        # Canonical snapshot_diff_to_sql output: upgrade drops MV first; the
-        # rollback list is already reversed (target recreated before its MV).
-        upgrade_sql = "DROP VIEW IF EXISTS hourly_mv\n\nDROP TABLE hourly"
-        rollback_sql = "CREATE TABLE hourly (id UInt32)\n\nCREATE MATERIALIZED VIEW hourly_mv TO hourly"
         monkeypatch.setattr(
-            "dbwarden.engine.snapshot.snapshot_diff_to_sql",
-            lambda *a, **k: (upgrade_sql, rollback_sql, []),
+            generation, "snapshot_diff_to_sql", emit,
         )
 
-        pipeline_mod._run_offline_migrations(description="drop_hourly")
+        generation.generate_files(
+            [{"type": "drop_table", "table": "hourly_mv", "object_type": "materialized_view"},
+             {"type": "drop_table", "table": "hourly"}], [],
+            migrations_dir=str(tmp_path), database="analytics", db_name="analytics", description="drop_hourly",
+        )
 
-        sql_file = next((tmp_path / "migrations").glob("*.sql"))
+        sql_file = next(tmp_path.glob("*.sql"))
         content = sql_file.read_text()
         rollback_section = content.split("-- rollback", 1)[1]
         lines = [ln.strip() for ln in rollback_section.split("\n\n") if ln.strip()]
@@ -1992,7 +1974,7 @@ class TestChEngineFactories:
         from dbwarden.databases.clickhouse.engine import summing_merge_tree
         spec = summing_merge_tree("col1", "col2")
         assert spec.name == "SummingMergeTree"
-        assert spec.args == ("col1", "col2")
+        assert spec.args == ("(col1, col2)",)
 
     def test_aggregating_merge_tree(self):
         from dbwarden.databases.clickhouse.engine import aggregating_merge_tree
