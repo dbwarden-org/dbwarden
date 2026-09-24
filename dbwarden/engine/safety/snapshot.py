@@ -43,7 +43,9 @@ def extract_schema_snapshot(database: str | None = None) -> dict[str, dict[str, 
                 "ch_options": {},
             }
         return snapshot
-    return _extract_generic_schema_snapshot(database)
+    from dbwarden.data.integration import filter_data_tables
+
+    return filter_data_tables({"tables": _extract_generic_schema_snapshot(database)}, database)["tables"]
 
 
 def _extract_generic_schema_snapshot(database: str | None = None) -> dict[str, dict[str, Any]]:
