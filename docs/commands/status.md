@@ -2,6 +2,8 @@
 
 Show migration status (applied vs pending).
 
+Pending rows include recorded severity and their state under configured `max_severity`: pending, deferred, or blocked by an earlier version. JSON includes trust reasons, blocking versions, and deferred age. Status reads plans without reparsing SQL; applied historical files need no severity plan.
+
 ## Usage
 
 ```bash
