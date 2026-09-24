@@ -55,6 +55,28 @@ def _validate_model_paths_for_list(value: list[str]) -> None:
             )
 
 
+def _validate_data_paths(_self, _attribute, value: list[str]) -> None:
+    try:
+        _validate_model_paths_for_list(value)
+    except ValueError as exc:
+        raise ValueError(str(exc).replace("model_paths", "data_paths").replace("model_path", "data_path")) from exc
+
+
+def _validate_relative_path(field_name: str, value: str) -> None:
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{field_name} must be a non-empty relative path")
+    if len(value) > MAX_PATH_LENGTH or ".." in value or value.startswith("/") or not MODEL_PATH_RE.match(value):
+        raise ValueError(f"Invalid {field_name} '{value}': no absolute paths or traversal")
+
+
+def _validate_data_snapshot_dir(_self, _attribute, value: str) -> None:
+    _validate_relative_path("data_snapshot_dir", value)
+
+
+def _validate_snapshot_registry(_self, _attribute, value: str) -> None:
+    _validate_relative_path("snapshot_registry", value)
+
+
 def _validate_database_type(_self, _attribute, value: str) -> None:
     if value not in VALID_DATABASE_TYPES:
         allowed = ", ".join(sorted(VALID_DATABASE_TYPES))
@@ -116,7 +138,7 @@ def _validate_impact_paths(_self, _attribute, value: list[str]) -> None:
         from pathlib import Path
         resolved = Path(path).resolve()
         cwd_resolved = Path.cwd().resolve()
-        if not str(resolved).startswith(str(cwd_resolved)):
+        if not resolved.is_relative_to(cwd_resolved):
             raise ValueError(
                 f"impact_paths must not escape the project root via symlinks: {path}"
             )
@@ -142,6 +164,9 @@ class DatabaseEntry:
     migration_table: str | None = field(default=None, validator=_validate_migration_table)
     model_paths: list[str] | None = None
     model_tables: list[str] | None = None
+    data_paths: list[str] = field(factory=list, validator=_validate_data_paths)
+    data_snapshot_dir: str = field(default=".dbwarden/data", validator=_validate_data_snapshot_dir)
+    snapshot_registry: str = field(default=".dbwarden/snapshots/registry.json", validator=_validate_snapshot_registry)
     dev_database_type: DatabaseType | None = None
     dev_database_url: str | None = None
     overlap_models: bool = False
@@ -167,6 +192,9 @@ class DatabaseEntry:
     per_statement_history: bool = False
     # Rename policy for merge: strict, prompt, auto-high-confidence (Sec 9 R9.1.7)
     rename_policy: str = "prompt"
+    split_at_severity: str | None = field(default=None, validator=validators.optional(validators.in_(("SAFE", "INFO", "WARN", "CRITICAL"))))
+    max_severity: str = field(default="CRITICAL", validator=validators.in_(("SAFE", "INFO", "WARN", "CRITICAL")))
+    strict_pending: bool = field(default=False, validator=validators.instance_of(bool))
     # Per-database migration lifecycle hooks
     migration_hooks: dict[str, list] | None = None
     # Environment registry for merge handling (persistent vs disposable)
@@ -223,6 +251,16 @@ def structure_database_entry(kwargs: dict) -> DatabaseEntry:
     model_paths = kwargs.get("model_paths")
     if model_paths is not None:
         _validate_model_paths_for_list(model_paths)
+    data_paths = kwargs.get("data_paths")
+    if data_paths is None:
+        data_paths = []
+        kwargs = {**kwargs, "data_paths": data_paths}
+    try:
+        _validate_data_paths(None, None, data_paths)
+        _validate_relative_path("data_snapshot_dir", kwargs.get("data_snapshot_dir", ".dbwarden/data"))
+        _validate_relative_path("snapshot_registry", kwargs.get("snapshot_registry", ".dbwarden/snapshots/registry.json"))
+    except ValueError as exc:
+        raise ConfigurationError(str(exc)) from exc
     model_tables = kwargs.get("model_tables")
     pg_schema = kwargs.get("pg_schema")
     if pg_schema is not None:

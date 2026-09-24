@@ -34,6 +34,10 @@ def _entry_model_paths(entry: DatabaseEntry) -> set[str]:
     return {p for p in (entry.model_paths or [])}
 
 
+def _entry_data_paths(entry: DatabaseEntry) -> set[str]:
+    return set(entry.data_paths)
+
+
 def _finalize_entries(
     entries: list[DatabaseEntry],
     base_dir: Path,
@@ -155,6 +159,9 @@ def _finalize_entries(
             secure_display_values=secure_display_values,
             model_paths=entry.model_paths,
             model_tables=entry.model_tables,
+            data_paths=list(entry.data_paths),
+            data_snapshot_dir=entry.data_snapshot_dir,
+            snapshot_registry=entry.snapshot_registry,
             migrations_dir=migrations_dir,
             migration_table=entry.migration_table or DEFAULT_MIGRATION_TABLE,
             seed_table=entry.seed_table or DEFAULT_SEEDS_TABLE,
@@ -172,6 +179,9 @@ def _finalize_entries(
             sqlite_busy_timeout=entry.sqlite_busy_timeout,
             per_statement_history=entry.per_statement_history,
             rename_policy=entry.rename_policy,
+            split_at_severity=entry.split_at_severity,
+            max_severity=entry.max_severity,
+            strict_pending=entry.strict_pending,
             plugin_config=dict(entry.plugin_config or {}),
         )
 
@@ -191,6 +201,19 @@ def _finalize_entries(
                     "model_paths overlap detected: "
                     f"path '{sorted(overlap)[0]}' from '{left.database_name}' is also defined in '{right.database_name}'; "
                     "set overlap_models=True to allow"
+                )
+
+    for i, left in enumerate(entries):
+        for right in entries[i + 1 :]:
+            overlap = _entry_data_paths(left).intersection(_entry_data_paths(right))
+            if not overlap:
+                continue
+            if not left.overlap_models or not right.overlap_models:
+                raise ConfigurationError(
+                    "data_paths overlap detected: "
+                    f"path '{sorted(overlap)[0]}' is configured by both "
+                    f"'{left.database_name}' and '{right.database_name}'; "
+                    "set overlap_models=True on both databases to allow"
                 )
 
     for i, left in enumerate(entries):
