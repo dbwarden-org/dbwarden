@@ -3,7 +3,7 @@ from dbwarden.constants import (
     RUNS_ON_CHANGE_FILE_PREFIX,
 )
 from dbwarden.exceptions import DirectoryNotFoundError
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 import re
 import os
 from dataclasses import dataclass, field
@@ -88,6 +88,13 @@ def get_migration_filepaths_by_version(
             version = match.group(1)
             filepath = os.path.join(directory, filename)
             _validate_migration_file(Path(filepath), Path(directory))
+            if version in migrations:
+                from dbwarden.merge.marker import is_superseded
+
+                if not is_superseded(filepath) and not is_superseded(migrations[version]):
+                    raise ValueError(f"Version collision {version}: {Path(migrations[version]).name}, {filename}. hint: run dbwarden merge")
+                if is_superseded(filepath):
+                    continue
             migrations[version] = filepath
 
     if version_to_start_from:
@@ -162,6 +169,7 @@ def get_runs_on_change_filepaths(
         if changed_only
         else {}
     )
+    existing_checksums = {PureWindowsPath(name).name: checksum for name, checksum in existing_checksums.items()}
     for filename in sorted(os.listdir(directory)):
         match = RUNS_ON_CHANGE_PATTERN.match(filename)
         if match:
@@ -229,7 +237,10 @@ def get_next_migration_number(directory: str) -> str:
     Returns:
         str: Next migration number as 4-digit string.
     """
-    existing_migrations = get_migration_filepaths_by_version(directory)
+    existing_migrations = {
+        match.group(1): path for path in Path(directory).glob("*.sql")
+        if (match := MIGRATION_PATTERN.match(path.name))
+    }
     if not existing_migrations:
         return "0001"
 

@@ -13,6 +13,10 @@ _auto_discover_cache: dict[str, tuple[float, list[str]]] = {}
 _AUTO_DISCOVER_CACHE_TTL = 1.0
 
 
+def _is_frozen_data_artifact(path: Path) -> bool:
+    return path.name.endswith(".data.py")
+
+
 def load_model_from_path(filepath: str) -> Optional[ModuleType]:
     from dbwarden.plugin import HookRegistry, HookNotRegisteredError
 
@@ -32,7 +36,12 @@ def load_model_from_path(filepath: str) -> Optional[ModuleType]:
             return None
         module = importlib.util.module_from_spec(spec)
         sys.modules[module_name] = module
-        spec.loader.exec_module(module)
+        previous_bytecode = sys.dont_write_bytecode
+        try:
+            sys.dont_write_bytecode = True
+            spec.loader.exec_module(module)
+        finally:
+            sys.dont_write_bytecode = previous_bytecode
         return module
     except FileNotFoundError:
         logger.log_model_file_load_failed(str(filepath), "file not found")
@@ -47,7 +56,7 @@ def discover_models_in_directory(directory: str) -> List[str]:
         return []
 
     for filepath in directory_path.rglob("*.py"):
-        if filepath.name.startswith("_"):
+        if filepath.name.startswith("_") or _is_frozen_data_artifact(filepath):
             continue
         if filepath.is_symlink() or not filepath.is_file():
             logger.log_model_file_load_failed(str(filepath), "symlink or non-regular file")
@@ -67,7 +76,13 @@ def _collect_model_files(model_paths: list[str]) -> list[str]:
         if os.path.isdir(model_path):
             model_files.extend(discover_models_in_directory(model_path))
         else:
-            if Path(model_path).is_symlink() or not Path(model_path).is_file():
+            path = Path(model_path)
+            if _is_frozen_data_artifact(path):
+                raise ValueError(
+                    f"Frozen data artifact cannot be a model path: {model_path}. "
+                    "Configure live declarations with data_paths instead."
+                )
+            if path.is_symlink() or not path.is_file():
                 logger.log_model_file_load_failed(model_path, "symlink or non-regular file")
                 continue
             model_files.append(model_path)
