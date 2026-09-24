@@ -2,6 +2,8 @@
 
 Apply pending migrations.
 
+`--max-severity INFO` applies a strict prefix and exits **3** before the first higher-severity or UNKNOWN file. Later files and repeatables do not execute. Default CRITICAL admits every level, including UNKNOWN, subject to existing preflight checks. `--force` acknowledges risks independently of this ceiling. Dry runs report the stop and return 0; baseline records metadata without SQL. See [Safety-scoped migrations](../correctness/safety-scoped-migrations.md).
+
 ## Usage
 
 ```bash
@@ -20,9 +22,11 @@ $ dbwarden migrate --database primary --baseline --to-version 0005
 - `--count`, `-c`
 - `--to-version`, `-t`
 - `--baseline`
+- `--reapply-data`: explicitly start a new data execution epoch after a completed rollback
 - `--with-backup`, `-b`
 - `--backup-dir`
 - `--dry-run`: preview changes without applying
+- `--data`: include frozen data plans and available read-only probes with `--dry-run`
 - `--sandbox`: apply in a temporary sandbox database
 - `--apply-seeds`: apply pending seeds after migrations
 - `--defer-snapshots`: write one final schema snapshot instead of one after every migration
@@ -35,6 +39,10 @@ $ dbwarden migrate --database primary --baseline --to-version 0005
 - executes versioned + repeatable migrations
 - uses lock protection to prevent concurrent migration mutation
 - refuses to run against dirty unreconciled environments (directs to `dbwarden reconcile`)
+- verifies paired SQL, plan, and frozen artifacts before applying declarative data
+- records explicit data baseline acknowledgement and skipped checks; baseline is not a convergence proof
+
+Rolled-back declarative data requires `--reapply-data` before execution can start a new epoch. `--force` does not authorize data reapply. Successful migrations remain skipped even with `--reapply-data`. See [declarative data migrations](../declarative-data-migrations.md) for journals, ownership, backend limits, and recovery after uncertain effects.
 
 ## Dirty environment detection
 
