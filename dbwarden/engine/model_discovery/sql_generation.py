@@ -19,6 +19,7 @@ from dbwarden.engine.backends.clickhouse.render import (
     generate_create_dictionary_sql,
 )
 from dbwarden.engine.core.models import (
+    ModelColumn,
     ModelTable,
     column_foreign_key_is_table_constraint,
     column_unique_is_table_constraint,
@@ -118,7 +119,7 @@ def _postgres_serial_type(column, col_type: str, *, allow_composite: bool = True
 
 
 def generate_add_column_sql(
-    table_name: str, column: ModelTable, db_name: str | None = None,
+    table_name: str, column: ModelColumn, db_name: str | None = None,
     schema: str | None = None,
 ) -> str:
     _validate_identifier(table_name, "table_name")
