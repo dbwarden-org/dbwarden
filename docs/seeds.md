@@ -426,4 +426,4 @@ The `DBWardenRouter` includes seed status in its `GET /status` response:
 
 FastAPI integration ships separately as the `dbwarden-fastapi` plugin, so its reference lives with the plugin: [dbwarden-fastapi](https://github.com/dbwarden-org/dbwarden-fastapi).
 
-See also: [Cookbook: Seeds](../cookbook/07-seeds.md)
+See also: [Cookbook: Seeds](cookbook/07-seeds.md)
