@@ -9,7 +9,9 @@ class TestGetDbConnection:
     @patch("dbwarden.connection.connection.get_database")
     @patch("dbwarden.connection.connection._get_engine")
     @patch("dbwarden.connection.connection.get_logger")
-    def test_get_db_connection_success(self, mock_get_logger, mock_get_engine, mock_get_db):
+    def test_get_db_connection_success(
+        self, mock_get_logger, mock_get_engine, mock_get_db
+    ):
         mock_config = MagicMock()
         mock_config.sqlalchemy_url = "sqlite:///test.db"
         mock_config.database_type = "sqlite"
@@ -30,7 +32,9 @@ class TestGetDbConnection:
 
     @patch("dbwarden.connection.connection.get_database")
     @patch("dbwarden.connection.connection._get_engine")
-    def test_get_db_connection_rolls_back_on_exception(self, mock_get_engine, mock_get_db):
+    def test_get_db_connection_rolls_back_on_exception(
+        self, mock_get_engine, mock_get_db
+    ):
         mock_config = MagicMock()
         mock_config.sqlalchemy_url = "sqlite:///test.db"
         mock_config.database_type = "sqlite"
@@ -61,7 +65,11 @@ class TestGetDbConnection:
         mock_engine.begin.return_value.__enter__.return_value = mock_connection
         mock_get_engine.return_value = mock_engine
 
-        from dbwarden.connection.connection import get_db_connection, set_sandbox_override, clear_sandbox_override
+        from dbwarden.connection.connection import (
+            clear_sandbox_override,
+            get_db_connection,
+            set_sandbox_override,
+        )
 
         set_sandbox_override("sqlite:///sandbox.db", "sqlite")
         try:
@@ -98,7 +106,8 @@ class TestGetEngine:
 
 class TestSandboxOverride:
     def test_sandbox_override_context_manager(self):
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import MagicMock, patch
+
         import dbwarden.connection.connection as conn_mod
 
         with (
@@ -144,7 +153,9 @@ class TestConvertUrl:
     def test_convert_clickhouse_plain_url(self):
         from dbwarden.connection.connection import _convert_url_to_clickhouse_dialect
 
-        result = _convert_url_to_clickhouse_dialect("clickhousedb://user:pass@host:8443/db")
+        result = _convert_url_to_clickhouse_dialect(
+            "clickhousedb://user:pass@host:8443/db"
+        )
         assert result.startswith("clickhousedb://")
 
 
@@ -155,3 +166,38 @@ class TestResetConnectionLogging:
         conn_mod._connection_init_logged = True
         conn_mod.reset_connection_logging()
         assert conn_mod._connection_init_logged is False
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["sqlite:///app.db", "sqlite:///file:app.db?uri=true", "sqlite+pysqlite:///app.db"],
+)
+def test_relative_sqlite_engines_stay_with_their_project(tmp_path, monkeypatch, url):
+    from sqlalchemy import text
+
+    from dbwarden.connection.connection import _get_engine, dispose_engine
+
+    engines = []
+    for name in ("first", "second"):
+        directory = tmp_path / name
+        directory.mkdir()
+        monkeypatch.chdir(directory)
+        engine = _get_engine(url, "sqlite")
+        engines.append(engine)
+        with engine.begin() as connection:
+            assert (
+                connection.execute(
+                    text("SELECT count(*) FROM sqlite_master WHERE name='owned'")
+                ).scalar_one()
+                == 0
+            )
+            connection.execute(text("CREATE TABLE owned(value TEXT)"))
+            connection.execute(text("INSERT INTO owned VALUES(:name)"), {"name": name})
+    assert engines[0] is not engines[1]
+    for name, engine in zip(("first", "second"), engines):
+        with engine.connect() as connection:
+            assert (
+                connection.execute(text("SELECT value FROM owned")).scalar_one() == name
+            )
+        monkeypatch.chdir(tmp_path / name)
+        dispose_engine(url, "sqlite")
