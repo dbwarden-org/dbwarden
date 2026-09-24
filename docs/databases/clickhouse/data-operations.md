@@ -117,6 +117,8 @@ data_op("ALTER TABLE mv_name POPULATE")
 
 This is a data-op rather than a DDL property because it is a write concern, not structural. See [Materialized views](materialized-views.md).
 
+The `data_ops` module also provides a `populate(materialized_view_spec)` helper (exported as `data_ops_populate`) that derives the populate statement from a materialized or aggregating view spec and returns a `DataOp` whose forward SQL is `INSERT INTO <target> <select>`. It requires a target table and a select query; pass `rollback=` to make it reversible. A plugin or authoring tool can pass the descriptor in an explicit `apply_data_op` operation to `ChDataOpHandler.emit()`. When `requires_confirmation` is set, the emitter comments out the forward SQL for manual review instead of opening an interactive prompt. Deduplication is by migration history, not by the descriptor's name.
+
 ## Secret rotation
 
 Named collection secrets are rotated through ClickHouse's secret store:
