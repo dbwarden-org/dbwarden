@@ -7,6 +7,17 @@ This is a reference page. For step-by-step guides, see
 [Quick Start](../configuration/quick-start.md), [Concepts](../configuration/concepts.md),
 or [Production Patterns](../configuration/production-patterns.md).
 
+Per-database safety scope settings:
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `split_at_severity` | `None` | Optional generation split threshold |
+| `max_severity` | `"CRITICAL"` | Execution ceiling; CRITICAL is uncapped |
+| `strict_pending` | `False` | Refuse generation with uncomposable pending plans |
+
+Thresholds accept SAFE, INFO, WARN, or CRITICAL. CLI values override configuration.
+Both declarative classes and `database_config()` expose the same fields.
+
 ## Declarative API (recommended)
 
 Define a concrete subclass of `DbwardenDatabase`. Every field is available as a
@@ -81,20 +92,31 @@ def database_config(
     auto_apply_seeds: bool = False,
     model_paths: list[str] | None = None,
     model_tables: list[str] | None = None,
+    data_paths: list[str] | None = None,
+    data_snapshot_dir: str = ".dbwarden/data",
+    snapshot_registry: str = ".dbwarden/snapshots/registry.json",
     dev_database_type: str | None = None,
     dev_database_url: str | None = None,
     overlap_models: bool = False,
     secure_values: bool = False,
+    skip_if_missing: bool = False,
     pg_schema: str | None = None,
     pg_migration_lock_timeout: int | None = None,
     ch_cluster: str | None = None,
     ch_replicated_database: bool = False,
     clickhouse_lock_ttl: int | None = None,
     lock_namespace: str | None = None,
+    migration_hooks: dict[str, list[Callable[..., Any]]] | None = None,
+    environments: list[Any] | None = None,
+    split_at_severity: str | None = None,
+    max_severity: str = "CRITICAL",
+    strict_pending: bool = False,
     **plugin_config: Any,
 ) -> DatabaseHandle:
     """Register a database in dbwarden and return a handle with session dependencies."""
 ```
+
+`data_paths` names live modules containing `DataTransition` declarations. `*.data.py` artifacts are frozen migration inputs and are excluded from normal model discovery. `data_snapshot_dir` and `snapshot_registry` must be relative project paths. See [Declarative data migrations](../declarative-data-migrations.md).
 
 ## Required arguments
 
