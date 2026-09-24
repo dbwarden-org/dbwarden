@@ -37,6 +37,9 @@ class DatabaseConfig:
     secure_display_values: dict[str, str] = field(default_factory=dict)
     model_paths: list[str] | None = None
     model_tables: list[str] | None = None
+    data_paths: list[str] = field(default_factory=list)
+    data_snapshot_dir: str = ".dbwarden/data"
+    snapshot_registry: str = ".dbwarden/snapshots/registry.json"
     migrations_dir: str = "migrations"
     migration_table: str = DEFAULT_MIGRATION_TABLE
     seed_table: str = DEFAULT_SEEDS_TABLE
@@ -57,6 +60,9 @@ class DatabaseConfig:
     sqlite_busy_timeout: int | None = None
     per_statement_history: bool = False
     rename_policy: str = "prompt"
+    split_at_severity: str | None = None
+    max_severity: str = "CRITICAL"
+    strict_pending: bool = False
     # Backend object keys contributed by plugins (pg_roles, ch_grants, and so on).
     plugin_config: dict[str, Any] = field(default_factory=dict)
 
