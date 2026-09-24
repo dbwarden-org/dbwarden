@@ -291,6 +291,39 @@ class HookRegistry:
 
 class ObjectPluginRegistry:
     _handlers: ClassVar[dict[str, ObjectHandlerRegistration]] = {}
+    _categories: ClassVar[dict[str, dict[str, Any]]] = {}
+
+    @classmethod
+    def register_category(cls, name: str, *, order: int, plugin: str) -> None:
+        import re
+
+        if not isinstance(name, str) or not re.fullmatch(r"[a-z][a-z0-9_]{0,47}", name) or name in {"base", "deferred", "unsplit"}:
+            raise ValueError(
+                "Category must be a lowercase identifier other than base, deferred, or unsplit"
+            )
+        if type(order) is not int or order <= 0 or order == 100:
+            raise ValueError("Category order must be a positive integer other than 100 (deferred)")
+        definition = {"name": name, "order": order, "plugin": plugin}
+        existing = cls._categories.get(name)
+        if existing and existing != definition:
+            raise ValueError(
+                f"Migration category '{name}' already registered with different ownership or order"
+            )
+        if any(item["order"] == order and item["name"] != name for item in cls._categories.values()):
+            raise ValueError(f"Migration category order {order} already registered")
+        cls._categories[name] = definition
+
+    @classmethod
+    def categories(cls) -> dict[str, dict[str, Any]]:
+        definitions = [
+            {"name": "base", "order": 0, "plugin": None},
+            {"name": "deferred", "order": 100, "plugin": None},
+            *cls._categories.values(),
+        ]
+        return {
+            item["name"]: dict(item)
+            for item in sorted(definitions, key=lambda item: item["order"])
+        }
 
     @classmethod
     def register(cls, handler: Any, *, plugin: str) -> None:
@@ -316,6 +349,7 @@ class ObjectPluginRegistry:
     @classmethod
     def clear(cls) -> None:
         cls._handlers.clear()
+        cls._categories.clear()
         # Whatever was overriding core is gone too, so let the next override be
         # announced again rather than suppressed by a stale dedup entry.
         from dbwarden.engine.core.registry import reset_override_warnings
@@ -342,6 +376,10 @@ class PluginRegistrar:
 
     def register_object_handler(self, handler: Any) -> None:
         ObjectPluginRegistry.register(handler, plugin=self._plugin_name)
+
+    def register_migration_category(self, name: str, *, order: int) -> None:
+        """Register a named migration group; base is 0 and deferred is 100."""
+        ObjectPluginRegistry.register_category(name, order=order, plugin=self._plugin_name)
 
     def register_config_key(self, *keys: str) -> None:
         """Declare ``database_config(...)`` keyword arguments this plugin consumes."""
