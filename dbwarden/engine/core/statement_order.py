@@ -49,6 +49,8 @@ class MigrationStatement:
     rollback_sql: str
     rollback_kind: str = "real"
     rollback_reason: str | None = None
+    category: str | None = None
+    safety: str | None = None
 
 
 def _assemble_migration(
