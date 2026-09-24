@@ -189,7 +189,7 @@ When detected, `make-migrations` refuses generation and `status` shows `MERGE_PE
 
 - **MariaDB:** Snapshot support is incomplete; merge-base resolution uses `model_state.json` only. Rename detection features degrade as they do in the legacy live-fallback path. The mandatory confirmation rule (§9.1.1) becomes the primary safeguard for MariaDB merges.
 - **Git required:** All merge operations require git to be available
-- **No Python data migrations:** Manual migrations are SQL-only
+- **No executable Python callbacks:** Declarative data migrations use verified, frozen `.data.py` artifacts that are parsed without execution. Arbitrary Python migration callbacks are unsupported; handwritten manual migrations remain SQL-only.
 - **No revision branching/merging:** Linear versioned sequence per database
 
 ### MariaDB Specifics
