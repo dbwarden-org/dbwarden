@@ -105,7 +105,7 @@ class TestMakeMigrationsVerboseForwarding:
     def test_make_migrations_cmd_forwards_verbose_to_logger(self):
         from dbwarden.commands.make_migrations import make_migrations_cmd
 
-        with patch("dbwarden.commands.make_migrations._run_offline_migrations"):
+        with patch("dbwarden.commands.make_migrations.generation.run_generation"):
             make_migrations_cmd(verbose=True, offline=True)
 
         assert get_logger().verbosity == Verbosity.VERBOSE
@@ -113,7 +113,7 @@ class TestMakeMigrationsVerboseForwarding:
     def test_make_migrations_cmd_without_verbose_keeps_normal(self):
         from dbwarden.commands.make_migrations import make_migrations_cmd
 
-        with patch("dbwarden.commands.make_migrations._run_offline_migrations"):
+        with patch("dbwarden.commands.make_migrations.generation.run_generation"):
             make_migrations_cmd(verbose=False, offline=True)
 
         assert get_logger().verbosity == Verbosity.NORMAL
