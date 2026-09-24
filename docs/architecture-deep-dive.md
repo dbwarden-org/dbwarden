@@ -50,6 +50,8 @@ Rollback uses the same lock discipline, selecting rollback SQL from applied file
 
 ## Model-to-SQL generation lifecycle
 
+Online, offline, merge, and reconcile generation use the shared generation pipeline in `commands/make_migrations/generation.py`.
+
 `make-migrations` pipeline:
 
 1. discover model paths
@@ -75,8 +77,12 @@ Rollback uses the same lock discipline, selecting rollback SQL from applied file
     - run standard snapshot-diff pipeline against it (type, nullability, default, FK, index changes)
     - only rename detection is unavailable without a cached snapshot
 7. deduplicate against existing migration statements
-8. write migration file
-9. write companion `.plan.json` metadata file (with `resolved_from` on rename ops)
+8. classify operations using canonical safety levels; expand-contract type changes can create ordered stages and a severity split also moves dependent operations
+9. let plugins assign statements to base, deferred, or registered custom groups
+10. write migration file; the base state contains only base operations, and deferred state remains separate until composed or applied
+11. write companion `.plan.json` metadata file (with `resolved_from` on rename ops)
+
+See [safety-scoped migrations](correctness/safety-scoped-migrations.md) for pending-state composition, execution ceilings, and merge integrity rules.
 
 ## PostgreSQL Handler Pipeline
 
