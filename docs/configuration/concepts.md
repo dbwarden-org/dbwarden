@@ -234,11 +234,15 @@ Without `default=True`, dbwarden wouldn't know which database to use for the sec
 ```python
 #  Good
 analytics = database_config(
-analytics = database_config(database_name="analytics", default=False, ...)  # or omit default
+    database_name="analytics",
+    default=False,  # or omit default
+)
 
 #  Bad - two defaults
 analytics = database_config(
-analytics = database_config(database_name="analytics", default=True, ...)  # Error!
+    database_name="analytics",
+    default=True,  # Error!
+)
 ```
 
 ### Default Affects CLI Behavior
@@ -443,7 +447,7 @@ They're completely independent:
 
 ### Model Path Boundaries
 
-```python
+```
 app/
   models/
     primary/
@@ -460,13 +464,11 @@ Configuration:
 primary = database_config(
     database_name="primary",
     model_paths=["app.models.primary"],  #  Only primary models
-    ...
 )
 
 analytics = database_config(
     database_name="analytics",
     model_paths=["app.models.analytics"],  #  Only analytics models
-    ...
 )
 ```
 
