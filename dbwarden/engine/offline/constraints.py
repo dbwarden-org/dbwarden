@@ -28,8 +28,9 @@ def _diff_constraints(
                 continue
             curr_name, curr_entry = curr_match
             if prev_name == curr_name:
-                handled_prev.add(prev_name)
-                handled_curr.add(curr_name)
+                if prev_entry == curr_entry:
+                    handled_prev.add(prev_name)
+                    handled_curr.add(curr_name)
             elif prev_entry.get("columns") == curr_entry.get("columns"):
                 upgrade_ops.append({"type": "rename_unique_constraint", "table": table_name, "old_name": prev_name, "new_name": curr_name, "columns": list(cols_sig)})
                 rollback_ops.insert(0, {"type": "rename_unique_constraint", "table": table_name, "old_name": curr_name, "new_name": prev_name, "columns": list(cols_sig)})
@@ -46,7 +47,7 @@ def _diff_constraints(
         for name, uq in curr_uniques.items():
             if name in handled_curr:
                 continue
-            if name not in prev_uniques:
+            if name not in prev_uniques or prev_uniques[name] != uq:
                 payload = {k: v for k, v in uq.items() if k not in {"type", "table"}}
                 upgrade_ops.append({"type": "add_unique_constraint", "table": table_name, "name": name, **payload})
                 rollback_ops.insert(0, {"type": "drop_unique_constraint", "table": table_name, "name": name, **payload})
@@ -61,7 +62,9 @@ def _diff_constraints(
                 upgrade_ops.append({"type": "drop_check_constraint", "table": table_name, "name": name, **payload})
                 rollback_ops.insert(0, {"type": "add_check_constraint", "table": table_name, "name": name, **payload})
         for name, ck in curr_checks.items():
-            if name not in prev_checks:
+            previous = {k: v for k, v in prev_checks.get(name, {}).items() if k not in {"type", "table", "columns"}}
+            current = {k: v for k, v in ck.items() if k not in {"type", "table", "columns"}}
+            if name not in prev_checks or previous != current:
                 payload = {k: v for k, v in ck.items() if k not in {"type", "table"}}
                 upgrade_ops.append({"type": "add_check_constraint", "table": table_name, "name": name, **payload})
                 rollback_ops.insert(0, {"type": "drop_check_constraint", "table": table_name, "name": name, **payload})
@@ -73,7 +76,7 @@ def _diff_constraints(
                 upgrade_ops.append({"type": "drop_exclude_constraint", "table": table_name, "name": name, "expression": ex.get("expression", "")})
                 rollback_ops.insert(0, {"type": "add_exclude_constraint", "table": table_name, "name": name, "expression": ex.get("expression", "")})
         for name, ex in curr_excludes.items():
-            if name not in prev_excludes:
+            if name not in prev_excludes or prev_excludes[name] != ex:
                 upgrade_ops.append({"type": "add_exclude_constraint", "table": table_name, "name": name, "expression": ex.get("expression", "")})
                 rollback_ops.insert(0, {"type": "drop_exclude_constraint", "table": table_name, "name": name, "expression": ex.get("expression", "")})
 

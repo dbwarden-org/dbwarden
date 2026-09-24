@@ -87,6 +87,9 @@ def database_config(
     migration_table: str | None = None,
     model_paths: list[str] | None = None,
     model_tables: list[str] | None = None,
+    data_paths: list[str] | None = None,
+    data_snapshot_dir: str = ".dbwarden/data",
+    snapshot_registry: str = ".dbwarden/snapshots/registry.json",
     dev_database_type: DatabaseType | None = None,
     dev_database_url: str | None = None,
     overlap_models: bool = False,
@@ -100,6 +103,9 @@ def database_config(
     lock_namespace: str | None = None,
     migration_hooks: dict[str, list[Callable[..., Any]]] | None = None,
     environments: list[Any] | None = None,
+    split_at_severity: str | None = None,
+    max_severity: str = "CRITICAL",
+    strict_pending: bool = False,
     **plugin_config: Any,
 ) -> DatabaseHandle:
     """Declare a database.
@@ -121,6 +127,9 @@ def database_config(
         migration_table=migration_table,
         model_paths=model_paths,
         model_tables=model_tables,
+        data_paths=[] if data_paths is None else data_paths,
+        data_snapshot_dir=data_snapshot_dir,
+        snapshot_registry=snapshot_registry,
         dev_database_type=dev_database_type,
         dev_database_url=dev_database_url,
         overlap_models=overlap_models,
@@ -134,6 +143,9 @@ def database_config(
         lock_namespace=lock_namespace,
         migration_hooks=migration_hooks,
         environments=environments,
+        split_at_severity=split_at_severity,
+        max_severity=max_severity,
+        strict_pending=strict_pending,
     )
     return _register_config_values(values, plugin_config)
 
@@ -205,11 +217,11 @@ class _DbwardenDatabaseMeta(type):
 _DECLARATIVE_FIELDS = {
     "database_name", "database_type", "database_url_sync", "database_url_async",
     "secure_values", "skip_if_missing", "default", "migrations_dir", "migration_table",
-    "model_paths", "model_tables", "dev_database_type", "dev_database_url", "overlap_models",
+    "model_paths", "model_tables", "data_paths", "data_snapshot_dir", "snapshot_registry", "dev_database_type", "dev_database_url", "overlap_models",
     "auto_apply_seeds", "seed_table", "pg_schema", "pg_migration_lock_timeout",
     "ch_cluster", "ch_replicated_database",
     "clickhouse_lock_ttl", "lock_namespace", "migration_hooks",
-    "environments",
+    "environments", "split_at_severity", "max_severity", "strict_pending",
 }
 _DECLARATIVE_DEFAULTS = {
     "database_type": "sqlite",
@@ -222,6 +234,9 @@ _DECLARATIVE_DEFAULTS = {
     "migration_table": None,
     "model_paths": None,
     "model_tables": None,
+    "data_paths": None,
+    "data_snapshot_dir": ".dbwarden/data",
+    "snapshot_registry": ".dbwarden/snapshots/registry.json",
     "dev_database_type": None,
     "dev_database_url": None,
     "overlap_models": False,
@@ -235,8 +250,11 @@ _DECLARATIVE_DEFAULTS = {
     "lock_namespace": None,
     "migration_hooks": None,
     "environments": None,
+    "split_at_severity": None,
+    "max_severity": "CRITICAL",
+    "strict_pending": False,
 }
-_MUTABLE_FIELDS = {"model_paths", "model_tables", "migration_hooks", "environments"}
+_MUTABLE_FIELDS = {"model_paths", "model_tables", "data_paths", "migration_hooks", "environments"}
 
 
 def _plugin_config_keys() -> set[str]:
