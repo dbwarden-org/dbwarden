@@ -140,7 +140,9 @@ def extract_full_schema_snapshot(
             )
             result.update(pg_objects)
 
-        return result
+        from dbwarden.data.integration import filter_data_tables
+
+        return filter_data_tables(result, database)
     finally:
         _cleanup(engine, own_engine, conn_context)
 
@@ -230,6 +232,9 @@ def _extract_tables(
 
     tables: dict[str, Any] = {}
     for table_name in table_names:
+        from dbwarden.constants import INTERNAL_TABLE_PREFIXES
+        if table_name.startswith(INTERNAL_TABLE_PREFIXES):
+            continue
         _regclass_name = f'"{pg_schema}"."{table_name}"' if pg_schema else f'"{table_name}"'
 
         if multi_batch is not None:
