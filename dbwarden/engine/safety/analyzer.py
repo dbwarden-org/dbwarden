@@ -5,9 +5,6 @@ from typing import Any
 from dbwarden.engine.backends.clickhouse.safety import (
     analyze_clickhouse_options,
 )
-from dbwarden.engine.backends.postgresql.safety import (
-    classify_pg_type_change,
-)
 from dbwarden.engine.backends.sqlite.safety import (
     analyze_sqlite_options,
 )
@@ -15,7 +12,9 @@ from dbwarden.engine.discovery import (
     ModelTable,
 )
 from dbwarden.engine.safety.classifiers import (
+    LEGACY_SEVERITY,
     _snapshot_column_type_signature,
+    classify_operation,
 )
 from dbwarden.models import SafetyIssue
 
@@ -34,7 +33,7 @@ def analyze_schema(
         object_label = table.object_type.replace("_", " ")
         issues.append(
             SafetyIssue(
-                severity="INFO",
+                severity=LEGACY_SEVERITY[classify_operation({"type": "create_table"})],
                 change_type="create_table",
                 table_name=table_name,
                 message=f"Create {object_label} '{table_name}'",
@@ -44,7 +43,7 @@ def analyze_schema(
     for table_name in sorted(snapshot_names - model_names):
         issues.append(
             SafetyIssue(
-                severity="WARNING",
+                severity=LEGACY_SEVERITY[classify_operation({"type": "drop_table"})],
                 change_type="drop_table",
                 table_name=table_name,
                 message=f"Drop table '{table_name}'",
@@ -68,7 +67,7 @@ def _analyze_table(table_snapshot: dict[str, Any], model_table: ModelTable) -> l
     if table_snapshot.get("comment") != model_table.comment:
         issues.append(
             SafetyIssue(
-                severity="INFO",
+                severity=LEGACY_SEVERITY[classify_operation({"type": "alter_table_comment"})],
                 change_type="change_table_comment",
                 table_name=model_table.name,
                 message=f"Change comment of table '{model_table.name}'",
@@ -78,7 +77,7 @@ def _analyze_table(table_snapshot: dict[str, Any], model_table: ModelTable) -> l
     if table_snapshot.get("object_type", "table") != model_table.object_type:
         issues.append(
             SafetyIssue(
-                severity="WARNING",
+                severity=LEGACY_SEVERITY[classify_operation({"type": "alter_pg_table"})],
                 change_type="change_object_type",
                 table_name=model_table.name,
                 message=(
@@ -93,18 +92,19 @@ def _analyze_table(table_snapshot: dict[str, Any], model_table: ModelTable) -> l
         column = model_columns[column_name]
         issues.append(
             SafetyIssue(
-                severity="INFO",
+                severity=LEGACY_SEVERITY[classify_operation({"type": "add_column", "model_column": column})],
                 change_type="add_column",
                 table_name=model_table.name,
                 column_name=column_name,
                 message=f"Add column '{column_name}' to '{model_table.name}'",
+                required_flag="--force" if classify_operation({"type": "add_column", "model_column": column}) in ("WARN", "CRITICAL") else None,
             )
         )
 
     for column_name in sorted(snapshot_columns.keys() - model_columns.keys()):
         issues.append(
             SafetyIssue(
-                severity="WARNING",
+                severity=LEGACY_SEVERITY[classify_operation({"type": "drop_column"})],
                 change_type="drop_column",
                 table_name=model_table.name,
                 column_name=column_name,
@@ -116,11 +116,14 @@ def _analyze_table(table_snapshot: dict[str, Any], model_table: ModelTable) -> l
     for column_name in sorted(snapshot_columns.keys() & model_columns.keys()):
         snapshot_column = snapshot_columns[column_name]
         model_column = model_columns[column_name]
-        from dbwarden.engine.snapshot.type_normalize import _model_type_str, normalize_type
+        from dbwarden.engine.snapshot.type_normalize import (
+            _model_type_str,
+            normalize_type,
+        )
 
         snapshot_type = _snapshot_column_type_signature(snapshot_column)
         model_type = normalize_type(_model_type_str(model_column.type))
-        model_pg_column = None
+        model_pg_column: dict[str, Any] | None = None
         if model_column.pg_meta:
             model_pg_column = {}
             for src, dst in (
@@ -145,12 +148,9 @@ def _analyze_table(table_snapshot: dict[str, Any], model_table: ModelTable) -> l
                 }
             if model_column.pg_meta.get("pg_enum_name"):
                 model_type = {"type": "enum", "enum_name": model_column.pg_meta["pg_enum_name"]}
-        severity = "WARNING"
-        required_flag = "--force"
-        if table_snapshot.get("database_type") == "postgresql":
-            classification = classify_pg_type_change(snapshot_type, model_type)
-            severity = {"SAFE": "INFO", "WARN": "WARNING", "CRITICAL": "WARNING"}[classification]
-            required_flag = None if classification == "SAFE" else "--force"
+        classification = classify_operation({"type": "alter_column_type", "from_type": snapshot_type, "to_type": model_type}, table_snapshot.get("database_type", ""))
+        severity = LEGACY_SEVERITY[classification]
+        required_flag = "--force" if classification in ("WARN", "CRITICAL") else None
         if snapshot_type != model_type:
             issues.append(
                 SafetyIssue(
@@ -169,7 +169,7 @@ def _analyze_table(table_snapshot: dict[str, Any], model_table: ModelTable) -> l
         if snapshot_column.get("comment") != model_column.comment:
             issues.append(
                 SafetyIssue(
-                    severity="INFO",
+                    severity=LEGACY_SEVERITY[classify_operation({"type": "alter_column_comment"})],
                     change_type="change_column_comment",
                     table_name=model_table.name,
                     column_name=column_name,
@@ -182,7 +182,7 @@ def _analyze_table(table_snapshot: dict[str, Any], model_table: ModelTable) -> l
         if snapshot_column.get("pg_column") != model_pg_column:
             issues.append(
                 SafetyIssue(
-                    severity="WARNING",
+                    severity=LEGACY_SEVERITY[classify_operation({"type": "alter_pg_column_meta"})],
                     change_type="change_pg_column_meta",
                     table_name=model_table.name,
                     column_name=column_name,
@@ -195,19 +195,20 @@ def _analyze_table(table_snapshot: dict[str, Any], model_table: ModelTable) -> l
 
     snap_pg_table = table_snapshot.get("pg_table") or {}
     model_pg_table = model_table.pg_table or {}
-    pg_table_keys = [("fillfactor", "INFO", None, "Change fillfactor for '{table}'"),
-                     ("tablespace", "WARNING", "--force", "Change tablespace for '{table}'"),
-                     ("inherits", "WARNING", "--force", "Change inheritance parents for '{table}'"),
-                     ("pg_excludes", "WARNING", "--force", "Change EXCLUDE constraints for '{table}'")]
-    for key, severity, required_flag, msg_template in pg_table_keys:
+    pg_table_keys = [("fillfactor", "Change fillfactor for '{table}'"),
+                     ("tablespace", "Change tablespace for '{table}'"),
+                     ("inherits", "Change inheritance parents for '{table}'"),
+                     ("pg_excludes", "Change EXCLUDE constraints for '{table}'")]
+    for key, msg_template in pg_table_keys:
         if snap_pg_table.get(key) != model_pg_table.get(key):
+            level = classify_operation({"type": "alter_pg_table", "key": key})
             issues.append(
                 SafetyIssue(
-                    severity=severity,
+                    severity=LEGACY_SEVERITY[level],
                     change_type=f"change_pg_table_{key}",
                     table_name=model_table.name,
                     message=msg_template.replace("{table}", model_table.name),
-                    required_flag=required_flag,
+                    required_flag="--force" if level in ("WARN", "CRITICAL") else None,
                 )
             )
 
@@ -217,7 +218,7 @@ def _analyze_table(table_snapshot: dict[str, Any], model_table: ModelTable) -> l
         if snap_storage.get(key) != model_storage.get(key):
             issues.append(
                 SafetyIssue(
-                    severity="INFO",
+                    severity=LEGACY_SEVERITY[classify_operation({"type": "alter_pg_storage_param"})],
                     change_type="change_pg_storage_params",
                     table_name=model_table.name,
                     message=f"Change storage parameter '{key}' for '{model_table.name}'",
