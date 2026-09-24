@@ -14,7 +14,7 @@ Every change dbwarden detects is classified. Destructive operations require `--f
 
 ```bash
 # Preview what would run
-dbwarden make-migrations --plan --force -d analytics
+dbwarden make-migrations --plan -d analytics
 
 # Apply with force
 dbwarden migrate --force -d analytics
@@ -133,7 +133,7 @@ ALTER TABLE events MODIFY ORDER BY (event_date, id, status)   (INFO)
 
 ```bash
 # 1. Preview the recreate
-$ dbwarden make-migrations --plan --force -d analytics
+$ dbwarden make-migrations --plan -d analytics
 
 # 2. Apply
 $ dbwarden migrate --force -d analytics
