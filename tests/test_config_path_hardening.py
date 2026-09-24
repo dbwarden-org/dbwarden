@@ -2,22 +2,37 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from dbwarden.config.resolve import _discover_dbwarden_files, _full_scan_database_config_calls
+import pytest
+
+from dbwarden.config.resolve import (
+    _discover_dbwarden_files,
+    _full_scan_database_config_calls,
+)
+from dbwarden.config_schema import _validate_impact_paths
 
 
-def test_config_discovery_rejects_symlinked_dbwarden_file(tmp_path: Path):
+def test_impact_paths_reject_sibling_with_same_prefix(tmp_path, monkeypatch):
+    root = tmp_path / "project"
+    root.mkdir()
+    monkeypatch.chdir(root)
+    monkeypatch.setattr(Path, "resolve", lambda path: tmp_path / "project-extra" if str(path) == "linked" else path)
+    with pytest.raises(ValueError, match="escape the project root"):
+        _validate_impact_paths(None, None, ["linked"])
+
+
+def test_config_discovery_rejects_symlinked_dbwarden_file(tmp_path: Path, symlink_factory):
     outside = tmp_path / "outside.py"
     outside.write_text("from dbwarden import database_config\n", encoding="utf-8")
     link = tmp_path / "dbwarden.py"
-    link.symlink_to(outside)
+    symlink_factory(link, outside)
     assert _discover_dbwarden_files(tmp_path) == []
 
 
-def test_config_full_scan_rejects_symlinked_python_file(tmp_path: Path):
+def test_config_full_scan_rejects_symlinked_python_file(tmp_path: Path, symlink_factory):
     outside = tmp_path / "outside.py"
     outside.write_text("from dbwarden import database_config\n", encoding="utf-8")
     link = tmp_path / "config.py"
-    link.symlink_to(outside)
+    symlink_factory(link, outside)
     assert _full_scan_database_config_calls(tmp_path) == []
 
 

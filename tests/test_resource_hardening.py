@@ -8,13 +8,13 @@ from dbwarden.engine.model_discovery.path_discovery import discover_models_in_di
 from dbwarden.plugin import _fetch_url
 
 
-def test_model_discovery_rejects_symlinked_python_file(tmp_path: Path):
+def test_model_discovery_rejects_symlinked_python_file(tmp_path: Path, symlink_factory):
     target = tmp_path / "outside.py"
     target.write_text("class Outside: pass", encoding="utf-8")
     models = tmp_path / "models"
     models.mkdir()
     link = models / "linked.py"
-    link.symlink_to(target)
+    symlink_factory(link, target)
 
     assert discover_models_in_directory(str(models)) == []
 
