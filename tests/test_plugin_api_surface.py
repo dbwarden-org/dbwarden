@@ -55,6 +55,7 @@ REGISTRAR_METHODS: dict[str, str] = {
     "register": "(self, hook_name: str, fn: Callable[..., Any]) -> None",
     "register_object_handler": "(self, handler: Any) -> None",
     "register_config_key": "(self, *keys: str) -> None",
+    "register_migration_category": "(self, name: str, *, order: int) -> None",
 }
 
 HOOK_REGISTRY_METHODS: dict[str, str] = {
