@@ -24,7 +24,7 @@ MySQL 8.0 introduced *atomic DDL*, which is frequently misread as transactional 
 
 > **Atomic DDL is not transactional DDL.** DDL statements, atomic or otherwise, implicitly end any transaction that is active in the current session... DDL statements cannot be performed within another transaction, within transaction control statements such as `START TRANSACTION ... COMMIT`, or combined with other statements within the same transaction.
 
-Atomic DDL means crash safety: data dictionary updates, storage engine operations, and binlog writes are committed or rolled back as one unit (via the hidden `mysql.innodb_ddl_log` table), even if the server halts mid-operation. It says nothing about rolling back a *successful* statement. Only InnoDB supports it. MariaDB reached the equivalent in **10.6.1** ("most [DDL operations] atomic, and the rest crash-safe", via `ddl_recovery.log`), with the same implicit-commit semantics.
+Atomic DDL means crash safety: data dictionary updates, storage engine operations, and binlog writes are committed or rolled back as one unit (via the hidden `mysql.innodb_ddl_log` table), even if the server halts mid-operation. It says nothing about rolling back a *successful* statement. Only InnoDB supports it. MariaDB reached the equivalent in **10.6.1** ("most \[DDL operations\] atomic, and the rest crash-safe", via `ddl_recovery.log`), with the same implicit-commit semantics.
 
 ### How dbwarden handles it
 

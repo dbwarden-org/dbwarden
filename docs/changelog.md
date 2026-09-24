@@ -112,7 +112,7 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 - **A SQLite rebuild preserves what reflection cannot see.** Declared types keep their length and case (`VARCHAR(255)`, not `varchar`), and `AUTOINCREMENT`, foreign key `ON DELETE` / `ON UPDATE`, unnamed `UNIQUE (...)` constraints, partial indexes, `DESC` / `COLLATE` inside an index, and expression indexes all survive the rebuild.
 - **SQLite partial indexes are recorded.** The index predicate was read only under PostgreSQL's dialect key, so `WHERE` was dropped from every SQLite index.
 
-## [0.19.0] - 2026-09-03
+## \[0.19.0\] - 2026-09-03
 
 ### Added
 
@@ -134,7 +134,7 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 - **SQLite lock handling.** Reuses the `BEGIN IMMEDIATE` connection for migration execution.
 - **Heartbeat task correctly skipped on SQLite.** Staleness is inferred from `acquired_at` and process liveness.
 
-## [0.18.0] - 2026-09-01
+## \[0.18.0\] - 2026-09-01
 
 ### Added
 
@@ -156,7 +156,7 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 - **PostgreSQL column statistics, storage, and compression metadata** now captured during snapshot extraction.
 - **SQLite foreign key action fixups** handle edge cases that previously produced incorrect DDL.
 
-## [0.17.1] - 2026-08-15
+## \[0.17.1\] - 2026-08-15
 
 ### Added
 
@@ -177,7 +177,7 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 - **Plugin provenance is HTTPS-only and size-bounded.** Plugin lock and consent TOML serialization escapes structural characters, and installer/provenance inputs are validated.
 - **Migration SQL splitting respects quoted strings and comments.** Semicolons inside SQL literals and comments no longer split statements incorrectly.
 
-## [0.17.0] - 2026-08-13
+## \[0.17.0\] - 2026-08-13
 
 ### Added
 
@@ -194,7 +194,7 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 - **Plugin list table rendering.** The `plugin list` table no longer wraps or truncates plugin distribution names in narrow terminals.
 - **Rollback warning test stability.** The irreversible-rollback warning test now asserts against the log record instead of Rich console wrapping.
 
-## [0.16.5] - 2026-08-05
+## \[0.16.5\] - 2026-08-05
 
 ### Added
 
@@ -209,7 +209,7 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 - **MySQL diff for newly created tables.** A newly added table in a MySQL database no longer produces an empty or broken diff; the new-table path now emits the full create statement.
 - **Publish and CI workflows hardened.** Release publishing and the CI pipeline were tightened to fail fast on the conditions that previously produced partial artifacts.
 
-## [0.16.4] - 2026-08-05
+## \[0.16.4\] - 2026-08-05
 
 ### Added
 
@@ -220,14 +220,14 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 - **Config cache miss no longer rescans the whole workspace.** A config cache miss previously triggered a repeated full-workspace rescan; the cache now reloads in place.
 - **Offline rollback no longer double-reverses.** The offline rollback path was reversing the same operation twice; the reversal is now applied exactly once, and agg-target key types resolve through the cascade chain.
 
-## [0.16.3] - 2026-08-03
+## \[0.16.3\] - 2026-08-03
 
 ### Fixed
 
 - **Materialized view drops use `DROP_VIEW` ordering.** Drops for cascading materialized views are emitted in `DROP_VIEW` order, matching how the views depend on one another.
 - **`ch_raw` group-by column types resolve through the cascade chain.** A `ch_raw` view whose group-by keys come from an upstream view now resolves the types transitively instead of falling back to an unresolved state.
 
-## [0.16.2] - 2026-07-29
+## \[0.16.2\] - 2026-07-29
 
 ### Fixed
 
@@ -236,7 +236,7 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 - **`ch_meta.ch_type` populated regardless of backend.** The `ch_type` metadata is now filled in even when the diff is running under a non-ClickHouse backend.
 - **Config fallback now warns.** Falling back to a default backend or schema when a config value is missing now emits a warning instead of silently proceeding.
 
-## [0.16.1] - 2026-07-28
+## \[0.16.1\] - 2026-07-28
 
 ### Added
 
@@ -251,7 +251,7 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 
 - **Three agg-target DDL bugs.** Aggregation target handling in the DDL layer emitted incorrect SQL in three edge cases.
 
-## [0.16.0] - 2026-07-24
+## \[0.16.0\] - 2026-07-24
 
 ### Added
 
@@ -270,7 +270,7 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 
 - **Generated model metadata preserved.** Reverse-engineered models keep their detected backend metadata instead of dropping it during regeneration.
 
-## [0.15.0] - 2026-07-21
+## \[0.15.0\] - 2026-07-21
 
 ### Added
 
@@ -284,13 +284,13 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 - **Rollback metadata preserved across diff pipelines.** Rollback information survives the snapshot, diff, and emission stages instead of being regenerated per stage.
 - **Rollback state restored for ClickHouse and PostgreSQL.** RBAC, collection, profile, and policy rollback are restored for ClickHouse; PostgreSQL rollback state is restored as well.
 
-## [0.14.3] - 2026-07-21
+## \[0.14.3\] - 2026-07-21
 
 ### Added
 
 - **`recover-model-state` command.** Restores model state from the database when the on-disk state is missing or stale.
 
-## [0.14.2] - 2026-07-21
+## \[0.14.2\] - 2026-07-21
 
 ### Fixed
 
@@ -299,13 +299,13 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 - **Dead `ChRbacHandler` removed.**
 - **Mobile sidebar drawer fixed.** The Zensical modern theme now uses a class-based drawer instead of `:has()`, and the viewport meta tag is present.
 
-## [0.14.1] - 2026-07-20
+## \[0.14.1\] - 2026-07-20
 
 ### Changed
 
 - **Docs aligned to the API.** Reference pages now match the exported surface, including the missing aggregation methods and RBAC class exports.
 
-## [0.14.0] - 2026-07-20
+## \[0.14.0\] - 2026-07-20
 
 ### Changed
 
@@ -321,7 +321,7 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 - **Convergence-audit and ClickHouse integration CI jobs.**
 - **ClickHouse documentation split into a multi-page reference** with dedicated pages for RBAC, views, dictionaries, and data operations.
 
-## [0.13.0] - 2026-07-06
+## \[0.13.0\] - 2026-07-06
 
 ### Added
 
@@ -334,13 +334,13 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 - **Nine SQL generation bugs resolved** across the PostgreSQL expansion.
 - **Schema package re-exports removed** so imports resolve against the single canonical path.
 
-## [0.12.5] - 2026-07-01
+## \[0.12.5\] - 2026-07-01
 
 ### Changed
 
 - **README version badge updated** and the publishing workflow prepared for the PyPI release.
 
-## [0.12.4] - 2026-06-24
+## \[0.12.4\] - 2026-06-24
 
 ### Changed
 
@@ -352,7 +352,7 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 - **Config and model caches refreshed** when the underlying files change.
 - **Docs lint issues fixed.**
 
-## [0.12.3] - 2026-06-23
+## \[0.12.3\] - 2026-06-23
 
 ### Fixed
 
@@ -361,7 +361,7 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 - **Primary key inferred for tables missing one**, and MySQL DDL translation improved.
 - **Generated SQLite databases ignored** by version control.
 
-## [0.12.1] - 2026-06-17
+## \[0.12.1\] - 2026-06-17
 
 ### Added
 
@@ -378,7 +378,7 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 - **Live snapshot taken when no cached snapshot exists** for `make-migrations`.
 - **Unique module name computed per file** in the sandbox loader, so two files with the same basename no longer collide.
 
-## [0.12.0] - 2026-06-13
+## \[0.12.0\] - 2026-06-13
 
 ### Added
 
@@ -392,7 +392,7 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 - **Auto-generated SQL for previously manual operations.** ClickHouse rename, nullable, `LowCardinality`, and projection changes, plus the PostgreSQL `USING` clause, are now emitted automatically.
 - **Generated models emit `pg.field()` and `ch.field()` spec objects** instead of flat backend attributes.
 
-## [0.11.2] - 2026-06-12
+## \[0.11.2\] - 2026-06-12
 
 ### Added
 
@@ -405,7 +405,7 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 - **Offline migration first run generates SQL for all tables**, not an empty set.
 - **Seed types moved to the `dbwarden.seed` module** so the CLI and engine share one definition.
 
-## [0.11.0] - 2026-06-11
+## \[0.11.0\] - 2026-06-11
 
 ### Added
 
@@ -416,19 +416,19 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 
 - **`requires-python` relaxed to `>=3.12`** and the upper bound removed, so Python 3.14 is supported.
 
-## [0.10.2] - 2026-06-11
+## \[0.10.2\] - 2026-06-11
 
 ### Added
 
 - **`model_tables` per-database filter** with overlap validation, so one model file set can be partitioned across databases with ownership checks.
 
-## [0.10.1] - 2026-06-11
+## \[0.10.1\] - 2026-06-11
 
 ### Fixed
 
 - **Config sandbox classification for in-package and `src/` layout projects.** Model files discovered inside the package directory or under `src/` are now classified correctly.
 
-## [0.10.0] - 2026-06-09
+## \[0.10.0\] - 2026-06-09
 
 ### Added
 
@@ -447,7 +447,7 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 - **System tables excluded from diffs** and rollback counts corrected.
 - **Offline migration engine fixed** for compatible operations and a wrong import, with 35 comprehensive tests; 26 edge-case tests added, and the crash on corrupted state resolved.
 
-## [0.9.5] - 2026-06-09
+## \[0.9.5\] - 2026-06-09
 
 ### Added
 
@@ -457,7 +457,7 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 
 - **Documentation updated** for the new flag and related CLI changes.
 
-## [0.9.4] - 2026-06-09
+## \[0.9.4\] - 2026-06-09
 
 ### Added
 
@@ -469,7 +469,7 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 - **Missing import in `rollback.py` fixed** (`get_database`).
 - **Comments added to every example.**
 
-## [0.9.0] - 2026-06-09
+## \[0.9.0\] - 2026-06-09
 
 ### Fixed
 
@@ -479,7 +479,7 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 
 - **Docs restructured.** Index and introduction merged, models/modeling split into separate references, squashing folded into the squash page, and the navigation rebuilt.
 
-## [0.8.0] - 2026-04-26 through 2026-06-09
+## \[0.8.0\] - 2026-04-26 through 2026-06-09
 
 This window aggregated the 0.8 and 0.9 development lines into core; the version was not bumped per feature.
 
@@ -502,7 +502,7 @@ This window aggregated the 0.8 and 0.9 development lines into core; the version 
 - **PostgreSQL first-class support with zero-diff round-trip**, including unlogged tables, `no_inherit`, deferred uniques, `tsvector`, `enum ADD VALUE`, partitioning, and the typed `@auto_schema` wrapper.
 - **ClickHouse first-class Meta** with `ChEngineSpec`, `ChIndexSpec`, and spec serialization.
 
-## [0.7] - 2026-04-26
+## \[0.7\] - 2026-04-26
 
 ### Added
 
@@ -520,7 +520,7 @@ This window aggregated the 0.8 and 0.9 development lines into core; the version 
 - **No spurious backup on initial `init`.**
 - **`RestrictedFileLoader` added** so sandboxed config loads cannot escape the project root.
 
-## [0.6] - 2026-04-24
+## \[0.6\] - 2026-04-24
 
 ### Added
 
@@ -533,20 +533,20 @@ This window aggregated the 0.8 and 0.9 development lines into core; the version 
 - **Python-based `database_config` runtime** replaced the TOML-only config surface.
 - **Docs restructured** into Getting Started, Tutorial, Advanced, and Reference tiers.
 
-## [0.5] - 2026-04-23
+## \[0.5\] - 2026-04-23
 
 ### Changed
 
 - **Documentation updates** across the site.
 
-## [0.4] - 2026-04-23
+## \[0.4\] - 2026-04-23
 
 ### Added
 
 - **SQLite translation layer with strict mode support.** PostgreSQL-flavored models run against SQLite locally, with a `--strict` flag enforcing translation correctness.
 - **Global `--dev` mode** and database URL and target uniqueness validation.
 
-## [0.3.6] - 2026-04-14
+## \[0.3.6\] - 2026-04-14
 
 ### Changed
 
@@ -554,20 +554,20 @@ This window aggregated the 0.8 and 0.9 development lines into core; the version 
 - **Migrations table keyed by filename** (auto-increment id removed) with a UNIQUE constraint on the version column for PostgreSQL `ON CONFLICT` support.
 - **ClickHouse-specific SQL queries** for migration tracking.
 
-## [0.3.2] - 2026-04-10
+## \[0.3.2\] - 2026-04-10
 
 ### Fixed
 
 - **Migration filename uses the config section name** instead of the URL.
 - **Logging and type mapping improved** across the command layer.
 
-## [0.3.1] - 2026-04-10
+## \[0.3.1\] - 2026-04-10
 
 ### Fixed
 
 - **Logging and type mapping improved** across the command layer.
 
-## [0.3.0] - 2026-04-10
+## \[0.3.0\] - 2026-04-10
 
 ### Added
 
@@ -582,13 +582,13 @@ This window aggregated the 0.8 and 0.9 development lines into core; the version 
 
 - **Duplicate migrations fixed.**
 
-## [0.2.0] - 2026-03-04
+## \[0.2.0\] - 2026-03-04
 
 ### Changed
 
 - **Icon and banner added**, and tests and docs updated for the rebrand.
 
-## [0.1.5] - 2026-02-27
+## \[0.1.5\] - 2026-02-27
 
 ### Added
 
@@ -603,13 +603,13 @@ This window aggregated the 0.8 and 0.9 development lines into core; the version 
 
 - **Async mode detection and duplicate connection logs** in the connection layer.
 
-## [0.1.3] - 2026-02-16
+## \[0.1.3\] - 2026-02-16
 
 ### Added
 
 - **`warden.toml` documented.**
 
-## [0.1.2] - 2026-02-10
+## \[0.1.2\] - 2026-02-10
 
 ### Added
 
@@ -623,7 +623,7 @@ This window aggregated the 0.8 and 0.9 development lines into core; the version 
 
 - **`CallableColumnDefault` handled** so SQLite no longer emits syntax errors for callable defaults.
 
-## [0.1.1] - 2026-02-08
+## \[0.1.1\] - 2026-02-08
 
 ### Added
 
