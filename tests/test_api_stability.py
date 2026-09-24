@@ -160,9 +160,9 @@ class TestDbwardenConfigAPI:
             class Bad(DbwardenConfig):
                 impact_paths = ["../escape"]
 
-    def test_paths_reject_symlink_escape(self, tmp_path, monkeypatch):
+    def test_paths_reject_symlink_escape(self, tmp_path, monkeypatch, symlink_factory):
         link = tmp_path / "link_to_etc"
-        link.symlink_to("/etc")
+        symlink_factory(link, tmp_path.parent, target_is_directory=True)
         monkeypatch.chdir(tmp_path)
         with pytest.raises(ConfigurationError, match="symlinks"):
             class Bad(DbwardenConfig):
@@ -800,9 +800,9 @@ class TestConfigSchema:
         with pytest.raises(ValueError, match="traversal"):
             _validate_impact_paths(None, None, ["../escape"])
 
-    def test_validate_impact_paths_rejects_symlink_escape(self, tmp_path, monkeypatch):
+    def test_validate_impact_paths_rejects_symlink_escape(self, tmp_path, monkeypatch, symlink_factory):
         link = tmp_path / "link"
-        link.symlink_to("/etc")
+        symlink_factory(link, tmp_path.parent, target_is_directory=True)
         monkeypatch.chdir(tmp_path)
         with pytest.raises(ValueError, match="symlinks"):
             _validate_impact_paths(None, None, ["link"])
