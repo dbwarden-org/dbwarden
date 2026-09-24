@@ -60,10 +60,15 @@ def _check_preconditions(database: str | None) -> bool:
     if not is_clean_working_tree():
         error("Working tree is not clean. hint: commit or stash changes before merge")
         return False
-    for path in [
-        *Path(get_migrations_directory(database)).glob("*.sql"),
-        get_model_state_path(database),
-    ]:
+    try:
+        candidate_paths = [
+            *Path(get_migrations_directory(database)).glob("*.sql"),
+            get_model_state_path(database),
+        ]
+    except Exception:
+        # Outside a configured project there is nothing to scan for markers.
+        candidate_paths = []
+    for path in candidate_paths:
         if path.exists() and has_conflict_markers(str(path)):
             error(f"Conflict markers in {path}. hint: resolve them first")
             return False
