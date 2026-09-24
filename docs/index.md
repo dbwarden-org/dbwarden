@@ -44,6 +44,16 @@ dbwarden is a declarative schema compiler for SQLAlchemy. You declare the schema
 
 There are no migration scripts to write or maintain. There is no migration runtime. Your models are the contract. The database is kept in sync with them.
 
+## Features and limits
+
+- **Migration authoring:** SQLAlchemy models, backend metadata, rename detection, reverse engineering, explicit SQL files, and rollback generation.
+- **Safety:** operation classification, expand-contract type changes, severity splits, execution ceilings, pending-plan checks, and impact reports.
+- **State and history:** offline model-state JSON, schema snapshots, checksums, repeatable migrations, merge reconciliation, and rebase support.
+- **Operation:** multiple database configurations, optional database skipping, locks, sandbox providers, SQLite dev translation, JSON output, and tracing.
+- **Extensions:** plugin configuration, handlers, hooks, CLI commands, and named migration groups. FastAPI, seed extensions, and backend object plugins have separate installation and compatibility requirements.
+
+Use the [feature map](reference/feature-map.md) to find each workflow and its implementation boundary. The [CLI inventory](reference/cli-options.md) lists every built-in option; the [Python inventory](reference/python-api.md) lists exports, signatures, declared fields, and methods.
+
 ## At a glance
 - Migrations generated from your models, not written by hand
 - Plain SQL output: reviewable, committable, executable anywhere
