@@ -98,19 +98,16 @@ Configuration:
 primary = database_config(
     database_name="primary",
     model_paths=["app.models.primary"],
-    ...
 )
 
 analytics = database_config(
     database_name="analytics",
     model_paths=["app.models.analytics"],
-    ...
 )
 
 logging = database_config(
     database_name="logging",
     model_paths=["app.models.logging"],
-    ...
 )
 ```
 
@@ -201,7 +198,6 @@ Configure custom directories:
 primary = database_config(
     database_name="primary",
     migrations_dir="migrations/primary",  # Custom path
-    ...
 )
 ```
 
@@ -336,18 +332,17 @@ When you have multiple databases, each **must** specify `model_paths`:
 ```python
 #  Error: model_paths required
 analytics = database_config(
-analytics = database_config(database_name="analytics", ...)  # Missing model_paths
+    database_name="analytics",  # Missing model_paths
+)
 
 #  Correct
 primary = database_config(
     database_name="primary",
     model_paths=["app.models.primary"],
-    ...
 )
 analytics = database_config(
     database_name="analytics",
     model_paths=["app.models.analytics"],
-    ...
 )
 ```
 
@@ -360,12 +355,10 @@ Model paths cannot overlap:
 primary = database_config(
     database_name="primary",
     model_paths=["app.models"],
-    ...
 )
 analytics = database_config(
     database_name="analytics",
     model_paths=["app.models"],  # Same path
-    ...
 )
 ```
 
@@ -378,13 +371,11 @@ primary = database_config(
     database_name="primary",
     model_paths=["app.models"],
     overlap_models=True,  #  Allow overlap
-    ...
 )
 replica = database_config(
     database_name="replica",
     model_paths=["app.models"],
     overlap_models=True,  #  Allow overlap
-    ...
 )
 ```
 
@@ -398,7 +389,6 @@ replica = database_config(
 primary = database_config(
     database_name="primary",
     model_paths=["app.models.primary"],  #  Add this
-    ...
 )
 ```
 
