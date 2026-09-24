@@ -529,7 +529,7 @@ $ dbwarden make-migrations --plan -d analytics
 # CRITICAL: Changing ORDER BY from (a, b) to (c) requires --force
 
 # Review the plan, then apply
-$ dbwarden make-migrations --plan --force -d analytics
+$ dbwarden make-migrations --plan -d analytics
 # Shows the full recreate pipeline:
 #   DETACH TABLE events
 #   CREATE TABLE events_new ...
