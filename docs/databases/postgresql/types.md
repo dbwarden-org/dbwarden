@@ -61,7 +61,7 @@ pg_domains=[
         "name": "us_postal_code",
         "type": "text",
         "not_null": True,
-        "check": "VALUE ~ '^\d{5}(-\d{4})?$'",
+        "check": r"VALUE ~ '^\d{5}(-\d{4})?$'",
     },
     {
         "name": "positive_int",
