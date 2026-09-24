@@ -83,6 +83,15 @@ The orphan `__pycache__` directories under `schema/{clickhouse,mysql,pgsql,maria
    ```
 3. If you add or remove a public export, update the corresponding `__all__` list in the module's `__init__.py`.
 4. If you introduce a new top-level directory, add it to the table in this document.
+5. If you change public APIs or CLI options, regenerate the inventories and run the docs audit:
+   ```bash
+   python scripts/check-docs.py --api-reference > docs/reference/python-api.md
+   python scripts/check-docs.py --cli-reference > docs/reference/cli-options.md
+   python scripts/check-docs.py
+   python scripts/generate_llms_full.py
+   zensical build --strict
+   ```
+   The inventories come from local source and CLI registration. The audit checks exports, examples, command flags, links, and navigation. It does not execute external-service examples; run the relevant integration tests separately.
 
 ### Code style
 
