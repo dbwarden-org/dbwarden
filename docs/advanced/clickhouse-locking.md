@@ -10,7 +10,7 @@ Every other database backend (PostgreSQL, MySQL, SQLite) provides a native lock 
 
 - PostgreSQL has `pg_advisory_lock()` (session-scoped, auto-releases on crash)
 - MySQL has `GET_LOCK()` (session-scoped, auto-releases on crash)
-- SQLite has `BEGIN IMMEDIATE` (write锁, released on crash via journal cleanup)
+- SQLite has `BEGIN IMMEDIATE` (write lock, released on crash via journal cleanup)
 
 ClickHouse has none of these. Specifically, ClickHouse is missing:
 
