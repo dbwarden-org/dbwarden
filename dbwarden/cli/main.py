@@ -20,6 +20,7 @@ from dbwarden.commands import (
     handle_migrate,
     handle_new,
     handle_plugin_add,
+    handle_plugin_categories,
     handle_plugin_info,
     handle_plugin_list,
     handle_plugin_remove,
@@ -38,6 +39,7 @@ from dbwarden.commands import (
     handle_version,
     handle_settings_show_command,
 )
+from dbwarden.commands.data import data_app, transition_app
 from dbwarden.logging import (
     enable_json_logging,
     get_logger,
@@ -65,6 +67,9 @@ seed_app = typer.Typer(help="Manage seed data")
 app.add_typer(seed_app, name="seed")
 plugin_app = typer.Typer(help="Manage dbwarden plugins")
 app.add_typer(plugin_app, name="plugin")
+
+app.add_typer(data_app, name="data")
+app.add_typer(transition_app, name="data-transition")
 
 
 def _severity_option(value: str | None) -> str | None:
@@ -167,6 +172,14 @@ def _apply_cli_logging(
         except ValueError as exc:
             raise typer.BadParameter(str(exc), param_hint="--log-level") from exc
         set_component_level(component, component_level)
+
+
+@plugin_app.command("categories")
+def plugin_categories(
+    output_format: str = typer.Option("table", "--format", "-f", help="Output format: table or json"),
+) -> None:
+    """List built-in and loaded plugin migration groups in execution order."""
+    handle_plugin_categories(output_format=output_format)
 
 
 @plugin_app.command("list")
@@ -399,6 +412,11 @@ def make_migrations(
     perf: bool = typer.Option(
         False, "--perf", help="Log SQL-generation phase timing"
     ),
+    split_at_severity: str | None = typer.Option(None, "--split-at-severity", callback=_severity_option, help="Defer operations at or above SAFE, INFO, WARN, or CRITICAL."),
+    strict_pending: bool | None = typer.Option(None, "--strict-pending/--no-strict-pending", help="Refuse generation when pending files lack composable plans."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview generated migrations without writing files."),
+    param: list[str] = typer.Option([], "--param", help="Freeze a data expression parameter as name=JSON or name=text."),
+    show_managed_values: bool = typer.Option(False, "--show-managed-values", help="Include data literals in --plan output."),
 ):
     """Auto-generate SQL migration from SQLAlchemy models."""
     validate_directory()
@@ -418,7 +436,46 @@ def make_migrations(
         postgres_auto_using=postgres_auto_using,
         migration_type=migration_type,
         perf=perf,
+        split_at_severity=split_at_severity,
+        strict_pending=strict_pending,
+        dry_run=dry_run,
+        parameters=_data_parameters(param),
+        show_managed_values=show_managed_values,
     )
+
+
+def _data_parameters(values):
+    import json
+    result = {}
+    for value in values:
+        name, separator, raw = value.partition("=")
+        if not separator or not name or name in result:
+            raise typer.BadParameter("--param requires distinct name=value entries")
+        try:
+            result[name] = json.loads(raw)
+        except ValueError:
+            result[name] = raw
+    return result
+
+
+@app.command("make-data-migration")
+def make_data_migration(
+    description: str = typer.Argument(None),
+    database: str | None = typer.Option(None, "--database", "-d"),
+    offline: bool = typer.Option(False, "--offline"),
+    dry_run: bool = typer.Option(False, "--dry-run"),
+    plan: bool = typer.Option(False, "--plan"),
+    sql: bool = typer.Option(False, "--sql"),
+    param: list[str] = typer.Option([], "--param"),
+    show_managed_values: bool = typer.Option(False, "--show-managed-values"),
+    split_at_severity: str | None = typer.Option(None, "--split-at-severity", callback=_severity_option),
+):
+    """Generate versioned managed-row and transformation migrations."""
+    validate_directory()
+    from dbwarden.commands.make_migrations.generation import run_generation
+    run_generation(description=description, database=database, offline=offline, dry_run=dry_run,
+                   output_plan=plan, output_sql=sql, parameters=_data_parameters(param),
+                   data_only=True, split_at_severity=split_at_severity, show_managed_values=show_managed_values)
 
 
 @app.command()
@@ -463,6 +520,11 @@ def migrate(
     baseline: bool = typer.Option(
         False, "--baseline", help="Mark migrations as applied without executing"
     ),
+    reapply_data: bool = typer.Option(
+        False,
+        "--reapply-data",
+        help="Explicitly reapply data migrations that were successfully rolled back",
+    ),
     with_backup: bool = typer.Option(
         False, "--with-backup", "-b", help="Create a backup before migrating"
     ),
@@ -471,6 +533,11 @@ def migrate(
     ),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Show what would be applied without executing"
+    ),
+    data: bool = typer.Option(
+        False,
+        "--data",
+        help="With --dry-run, verify and render frozen data bundle details without writes",
     ),
     sandbox: bool = typer.Option(
         False, "--sandbox", help="Apply migrations in a temporary sandbox database"
@@ -486,6 +553,8 @@ def migrate(
         "--defer-snapshots",
         help="Write one final schema snapshot instead of one after every migration",
     ),
+    max_severity: str | None = typer.Option(None, "--max-severity", callback=_severity_option, help="Severity ceiling: SAFE, INFO, WARN, CRITICAL. Stops before higher/UNKNOWN files; exit 3."),
+    force: bool = typer.Option(False, "--force", help="Acknowledge operation risks; does not raise the severity ceiling."),
 ):
     """Apply pending migrations to the database."""
     validate_directory()
@@ -496,13 +565,17 @@ def migrate(
         database=database,
         all_databases=all_databases,
         baseline=baseline,
+        reapply_data=reapply_data,
         with_backup=with_backup,
         backup_dir=backup_dir,
         dry_run=dry_run,
+        data=data,
         sandbox=sandbox,
         apply_seeds=apply_seeds,
         perf=perf,
         defer_snapshots=defer_snapshots,
+        max_severity=max_severity,
+        force=force,
     )
 
 
@@ -603,6 +676,7 @@ def status(
 
 @app.command()
 def check(
+    version: str | None = typer.Argument(None, help="Version to classify with --write-plan."),
     output: str = typer.Option(
         "txt", "--out", "-o", help="Output format (json, txt)"
     ),
@@ -614,10 +688,13 @@ def check(
     database: str | None = typer.Option(
         None, "--database", "-d", help="Target database name"
     ),
+    write_plan: bool = typer.Option(False, "--write-plan", help="Statically classify SQL into hash-bound plans; no live database."),
+    all_files: bool = typer.Option(False, "--all", help="Classify all migration files; unresolved files produce exit 4."),
+    data: bool = typer.Option(False, "--data", help="Also verify live declarative data convergence."),
 ):
     """Run the schema safety analyzer."""
     validate_directory()
-    handle_check(output_format=output, database=database, force=force)
+    handle_check(output_format=output, database=database, force=force, write_plan=write_plan, all_files=all_files, version=version, data=data)
 
 
 @app.command()
@@ -963,20 +1040,20 @@ def main() -> None:
     reset_connection_logging()
     try:
         app()
-    except typer.Exit:
-        raise
+    except typer.Exit as exc:
+        raise SystemExit(exc.exit_code) from None
     except DBWardenError as exc:
         if json_mode():
             emit_error_json(_error_code(exc), str(exc))
         else:
             error(str(exc))
-        raise typer.Exit(code=2) from exc
+        raise SystemExit(2) from None
     except Exception as exc:
         if json_mode():
             emit_error_json("internal_error", str(exc))
         else:
             error(str(exc))
-        raise typer.Exit(code=1) from exc
+        raise SystemExit(1) from None
 
 
 def _error_code(exc: Exception) -> str:
