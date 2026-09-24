@@ -4,7 +4,7 @@ description: Reference for dbwarden plugin CLI commands.
 
 # Plugin CLI
 
-All commands live under `dbwarden plugin`. Unlike other dbwarden commands, `dbwarden plugin` does not auto-load plugins first, so it can inspect and manage plugins without importing them.
+All commands live under `dbwarden plugin`. Unlike other dbwarden commands, `dbwarden plugin` does not auto-load plugins first, so it can inspect and manage plugins without importing them. Management and inspection do not import plugins by default. `categories` loads trusted plugins without prompting; `list` and `info` do so only with `--load`.
 
 ## Subcommands
 
@@ -16,12 +16,14 @@ All commands live under `dbwarden plugin`. Unlike other dbwarden commands, `dbwa
 | `remove <name>` | Uninstall a plugin and clean up its consent/lock state. |
 | `trust <name>` | Record consent for a community plugin's installed version. |
 | `untrust <name>` | Revoke consent for a community plugin. |
+| `categories` | List built-in and loaded plugin migration groups, order, and owner. |
 
 ## Flags
 
 | Command | Flag | Effect |
 |---------|------|--------|
-| `list`, `info` | `--format`, `-f` `table\|json` | Output format (default `table`). |
+| `list`, `info`, `categories` | `--format`, `-f` `table\|json` | Output format (default `table`). |
+| `list`, `info` | `--load` | Load trusted plugins without prompting to inspect registrations. |
 | `add` | `--uv` | Install with `uv add` instead of pip. |
 | `add` | `--version <v>` | Pin an exact version (`dist==<v>`). |
 | `add` | `--dry-run` | Print the install plan without installing. |
@@ -83,6 +85,17 @@ dbwarden plugin untrust dbwarden-example
 ```
 
 `trust` records consent for the currently installed version in `.dbwarden/consent.toml`. `untrust` removes it.
+
+## categories
+
+```bash
+dbwarden plugin categories --format json
+dbwarden plugin info dbwarden-example --load --format json
+```
+
+`list` and `info` JSON include `migration_categories`, containing each registered category's `name`, `order`, and `plugin`. Use `--load` to populate these registrations in a fresh CLI process. `info` also displays category names in its table.
+
+Categories are named migration groups; safety levels remain SAFE/INFO/WARN/CRITICAL. See [object plugin categories](../developing/object-plugins.md#safety-and-migration-categories).
 
 ## File Formats
 
