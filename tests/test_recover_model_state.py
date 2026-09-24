@@ -142,7 +142,7 @@ class TestRecoverModelState:
                 Path("dbwarden.py").write_text(
                     "from dbwarden import database_config\n\n"
                     "database_config(database_name='default', default=True, "
-                    "database_type='sqlite', database_url_sync='sqlite:///" + str(db_path) + "')\n",
+                    f"database_type='sqlite', database_url_sync={'sqlite:///' + str(db_path)!r})\n",
                     encoding="utf-8",
                 )
 
@@ -196,4 +196,6 @@ class TestRecoverModelState:
                 assert "users" in state["tables"]
                 assert state["tables"]["users"]["columns"]["id"]["primary_key"] is True
             finally:
+                from dbwarden.connection.connection import dispose_engine
+                dispose_engine(f"sqlite:///{db_path}", "sqlite")
                 os.chdir(str(old_cwd))
