@@ -14,6 +14,8 @@ Model discovery is the process where dbwarden:
 3. Extracts table metadata
 4. Uses metadata to generate migrations
 
+Generated `*.data.py` files are not model modules. dbwarden excludes them from recursive model discovery so frozen migration artifacts cannot become live declarations. Put live transition modules in `data_paths` instead.
+
 ## The `model_paths` Parameter
 
 ### Basic Usage
