@@ -14,10 +14,12 @@ class MigrationMetadata:
         depends_on: Optional[list[str]] = None,
         is_seed: bool = False,
         description: Optional[str] = None,
+        base_checksum: str | None = None,
     ):
         self.depends_on = depends_on or []
         self.is_seed = is_seed
         self.description = description
+        self.base_checksum = base_checksum
 
 
 def get_description_from_filename(filename: str) -> str:
@@ -75,6 +77,10 @@ def parse_migration_header(file_path: str) -> MigrationMetadata:
             break
 
         seed_match = re.match(r"^--\s*seed\s*$", stripped, re.IGNORECASE)
+        base_match = re.fullmatch(r"--\s*base_checksum:\s*([a-f0-9]{64})", stripped)
+        if base_match:
+            metadata.base_checksum = base_match.group(1)
+            continue
         if seed_match:
             metadata.is_seed = True
             continue

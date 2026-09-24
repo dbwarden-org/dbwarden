@@ -58,6 +58,10 @@ def _merge_pending_migrations_into_snapshot(
         if not filename.endswith(".sql"):
             continue
         filepath = os.path.join(migrations_dir, filename)
+        from dbwarden.merge.marker import is_superseded
+        from dbwarden.merge.reconciliation import is_reconciliation
+        if is_superseded(filepath) or is_reconciliation(filepath):
+            continue
         statements = parse_upgrade_statements(filepath)
 
         for stmt in statements:
