@@ -60,6 +60,11 @@ def handle_make_migrations(
     drop_preserved_clickhouse_table: bool | None = None,
     postgres_auto_using: bool = False,
     perf: bool = False,
+    split_at_severity: str | None = None,
+    strict_pending: bool | None = None,
+    dry_run: bool = False,
+    parameters: dict | None = None,
+    show_managed_values: bool = False,
 ) -> None:
     """Handle make-migrations command."""
     make_migrations_cmd(
@@ -78,6 +83,11 @@ def handle_make_migrations(
         drop_preserved_clickhouse_table=drop_preserved_clickhouse_table,
         postgres_auto_using=postgres_auto_using,
         perf=perf,
+        split_at_severity=split_at_severity,
+        strict_pending=strict_pending,
+        dry_run=dry_run,
+        parameters=parameters,
+        show_managed_values=show_managed_values,
     )
 
 
@@ -104,6 +114,10 @@ def handle_migrate(
     apply_seeds: bool = False,
     perf: bool = False,
     defer_snapshots: bool = False,
+    max_severity: str | None = None,
+    force: bool = False,
+    data: bool = False,
+    reapply_data: bool = False,
 ) -> None:
     """Handle migrate command."""
     migrate_cmd(
@@ -120,6 +134,10 @@ def handle_migrate(
         apply_seeds=apply_seeds,
         perf=perf,
         defer_snapshots=defer_snapshots,
+        max_severity=max_severity,
+        force=force,
+        data=data,
+        reapply_data=reapply_data,
     )
 
 
@@ -155,11 +173,15 @@ def handle_check(
     output_format: str,
     database: str | None = None,
     force: bool = False,
+    write_plan: bool = False,
+    all_files: bool = False,
+    version: str | None = None,
+    data: bool = False,
 ) -> None:
     """Handle safety check command."""
     if json_mode() and output_format != "json":
         output_format = "json"
-    check_cmd(output_format=output_format, database=database, force=force)
+    check_cmd(output_format=output_format, database=database, force=force, write_plan=write_plan, all_files=all_files, version=version, data=data)
 
 
 def handle_check_impact(
@@ -184,11 +206,12 @@ def handle_diff(
     verbose: bool = False,
     database: str | None = None,
     offline: bool = False,
+    data: bool = False,
 ) -> None:
     """Handle diff command."""
     if json_mode() and output_format != "json":
         output_format = "json"
-    diff_cmd(output_format=output_format, verbose=verbose, database=database, offline=offline)
+    diff_cmd(output_format=output_format, verbose=verbose, database=database, offline=offline, data=data)
 
 
 def handle_config() -> None:
@@ -358,6 +381,12 @@ def handle_seed_export(
         all_databases=all_databases,
         output_dir=output_dir,
     )
+
+
+def handle_plugin_categories(output_format: str = "table") -> None:
+    from dbwarden.commands.plugin_cmd import plugin_categories_cmd
+
+    plugin_categories_cmd(output_format="json" if json_mode() else output_format)
 
 
 def handle_plugin_list(output_format: str = "table") -> None:
