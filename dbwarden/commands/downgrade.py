@@ -138,7 +138,7 @@ def downgrade_cmd(
                 continue
 
             filepath = filepaths[version]
-            filename = filepath.split("/")[-1]
+            filename = Path(filepath).name
             sql_statements = parse_rollback_statements(filepath)
 
             if not sql_statements:
