@@ -98,9 +98,6 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-
-    class Meta(PGTableMeta):
-        id = PGColumnMeta(autoincrement=True)
 ```
 
 To explicitly disable auto-increment:
