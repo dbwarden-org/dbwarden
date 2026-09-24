@@ -10,6 +10,38 @@ An object plugin adds a database object **type** to dbwarden's schema convergenc
 
 An object plugin is the right tool when the feature is **database state declared by the model (or config) and converged by dbwarden**, not a one-off script. Good candidates: extensions, roles, grants, policies, triggers, functions, sequences, and backend-specific declarative objects. If the thing you want isn't schema state dbwarden should diff and emit, use a value hook or a migration instead.
 
+## Safety and Migration Categories
+
+`Op` and `MigrationStatement` accept optional `safety` and `category` keywords. Plugins must classify custom operation kinds with `SAFE`, `INFO`, `WARN`, or `CRITICAL`; missing classifications stop generation. Core classifications remain a minimum: a plugin cannot lower a known operation's severity. If both operation and statement declare safety, the highest declaration wins. The generated plan records the plugin identity and classification, so deployment does not require importing the original plugin to interpret an existing plan.
+
+```python
+def setup(registrar):
+    registrar.register_migration_category("cleanup", order=200)
+    registrar.register_object_handler(MyHandler())
+
+# In diff(): each independently deployable change is a separate Op.
+Op("create_custom_view", {"name": "report"}, category="base", safety="INFO")
+Op("replace_custom_view", {"name": "legacy"}, category="deferred", safety="WARN")
+Op("remove_custom_view", {"name": "old"}, category="cleanup", safety="CRITICAL")
+
+# Or set the same fields on emitted statements:
+MigrationStatement(
+    order=self.statement_order,
+    upgrade_sql="CREATE VIEW report AS SELECT 1 AS value;",
+    rollback_sql="DROP VIEW report;",
+    category="base",
+    safety="INFO",
+)
+```
+
+Built-in groups are `base` (order 0) and `deferred` (order 100). Custom names must match `[a-z][a-z0-9_]{0,47}` and have a unique positive integer order other than 100. `base`, `deferred`, and `unsplit` are reserved. Registration is idempotent only for the same plugin, name, and order; conflicting registrations fail.
+
+Generation writes one versioned SQL/plan pair per nonempty group, in group order. Custom filenames end in `__<category>.sql`. Every plan carries its actual group, plugin owner, order, typed operations, and consecutive state checksums. Dependencies move operations into later groups when necessary. `--split-at-severity` also moves high-severity operations to at least `deferred`; selecting `base` cannot bypass it. Execution still follows the version prefix and `--max-severity` ceiling.
+
+An operation remains atomic. All statements emitted for that operation must agree on category; split independently deployable statements into separate operations. Statement category overrides the operation's default. Use explicit `id` and `depends_on` operation attributes for plugin dependencies core cannot infer. Repeatables accept unsplit/base operations only. Generated repeatable SQL must be safe to rerun; category and safety declarations do not make SQL idempotent.
+
+Inspect registrations with `dbwarden plugin categories --format json`, or `dbwarden plugin info <distribution> --load --format json`.
+
 ## The `ObjectHandler` Contract
 
 A handler is any object exposing these attributes and methods (see `dbwarden.engine.core.protocol.ObjectHandler`):
