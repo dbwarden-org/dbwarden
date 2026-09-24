@@ -12,6 +12,7 @@ import re
 from pathlib import Path
 from typing import Optional
 
+from dbwarden.files import atomic_write_text
 from dbwarden.logging import get_component_logger
 
 logger = get_component_logger("merge")
@@ -50,7 +51,7 @@ def capture_rename_intent(
             break
 
     lines.insert(insert_idx, rename_line)
-    path.write_text("\n".join(lines))
+    atomic_write_text(path, "\n".join(lines))
 
 
 def parse_rename_intents(file_path: str | Path) -> list[dict]:
