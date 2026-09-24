@@ -19,11 +19,13 @@ from dbwarden.output import (
     success_panel,
 )
 from dbwarden.plugin import (
+    ObjectPluginRegistry,
     PluginInstallError,
     add_plugin,
     consent_allows,
     installer_command,
     iter_plugin_entry_points,
+    load_plugins,
     plugin_reports,
     record_consent,
     remove_plugin,
@@ -42,6 +44,10 @@ def _report_to_dict(report) -> dict:
         "state": report.state,
         "hooks": list(report.hooks),
         "object_handlers": list(report.object_handlers),
+        "migration_categories": [
+            item for item in ObjectPluginRegistry.categories().values()
+            if item["plugin"] == report.distribution
+        ],
         "error": report.error,
         "lock": (
             {
@@ -121,12 +127,27 @@ def plugin_info_cmd(dist_name: str, output_format: str = "table") -> None:
         "State": report.state,
         "Hooks": report.hooks,
         "Object handlers": report.object_handlers,
+        "Migration categories": [name for name, item in ObjectPluginRegistry.categories().items() if item["plugin"] == dist_name],
         "Error": report.error or "",
         "Repository": spec.repository if spec else "",
         "Verified minimum": VERIFIED_PLUGINS.get(dist_name, ""),
         "Lock verified": report.lock.verified if report.lock else "",
         "Lock identity": report.lock.identity if report.lock else "",
     }))
+
+
+def plugin_categories_cmd(output_format: str = "table") -> None:
+    load_plugins(interactive=False)
+    categories = list(ObjectPluginRegistry.categories().values())
+    if output_format == "json":
+        plain(json.dumps(categories, indent=2))
+        return
+    table = Table(title="Migration Categories")
+    for column in ("Category", "Order", "Plugin"):
+        table.add_column(column)
+    for category in categories:
+        table.add_row(category["name"], str(category["order"]), category["plugin"] or "core")
+    render(table)
 
 
 def plugin_trust_cmd(dist_name: str) -> None:
