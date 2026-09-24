@@ -1,10 +1,10 @@
-# dbwarden Examples
+# dbwarden examples
 
 Runnable example projects demonstrating dbwarden workflows.
 Each directory maps to one or more sections in the cookbook docs
 at [`docs/cookbook/`](../docs/cookbook/index.md).
 
-## Getting Started
+## Getting started
 
 The quickest path through all core concepts:
 
@@ -16,7 +16,7 @@ bash scripts/02-models-migrations.sh
 bash scripts/03-apply-inspect.sh
 ```
 
-## Example Index
+## Example index
 
 | Directory | Sections | What It Covers | Requires |
 |-----------|----------|----------------|----------|
@@ -25,7 +25,7 @@ bash scripts/03-apply-inspect.sh
 | `fastapi-app/` | 9–10 | FastAPI integration + auto-generated Pydantic schemas via `@auto_schema` (requires `dbwarden-fastapi` plugin) | Docker (PostgreSQL) |
 | `observability/` | 11 | Prometheus metrics, structured JSON logging, query tracing middleware | Docker |
 
-## How These Examples Work
+## How these examples work
 
 Each example is self-contained:
 
@@ -42,7 +42,7 @@ Each example is self-contained:
 4. **Docker-based examples** (`multi-database`, `fastapi-app`, `observability`)
    include a `docker-compose.yml` or `run.sh` to start the required services.
 
-## Detailed Walkthroughs
+## Detailed walkthroughs
 
 See [`docs/cookbook/index.md`](../docs/cookbook/index.md) for the full
 chapter-by-chapter guide with annotated SQL output, CLI flags, and

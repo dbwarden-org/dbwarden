@@ -1,4 +1,4 @@
-# FastAPI + dbwarden Example
+# FastAPI + dbwarden example
 
 A complete FastAPI application using dbwarden for database migrations, health checks, and session management.
 
@@ -7,7 +7,7 @@ A complete FastAPI application using dbwarden for database migrations, health ch
 - Docker (for PostgreSQL)
 - Python 3.12+
 
-## Quick Start
+## Quick start
 
 ```bash
 uv add dbwarden sqlalchemy fastapi uvicorn asyncpg
@@ -29,7 +29,7 @@ dbwarden migrate
 uvicorn app.main:app --reload
 ```
 
-## API Endpoints
+## API endpoints
 
 | Endpoint | Description |
 |----------|-------------|

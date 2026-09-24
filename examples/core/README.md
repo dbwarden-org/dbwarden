@@ -1,4 +1,4 @@
-# Core dbwarden Workflow
+# Core dbwarden workflow
 
 A progressive example demonstrating the core dbwarden migration workflow.
 
@@ -8,7 +8,7 @@ A progressive example demonstrating the core dbwarden migration workflow.
 - `uv add dbwarden sqlalchemy psycopg2-binary`
 - A running PostgreSQL instance (update `database_url_sync` in `dbwarden.py`)
 
-## Quick Start
+## Quick start
 
 ```bash
 uv add dbwarden sqlalchemy psycopg2-binary
@@ -17,7 +17,7 @@ bash scripts/02-models-migrations.sh
 bash scripts/03-apply-inspect.sh
 ```
 
-## Script Index
+## Script index
 
 | Script | Commands Demonstrated |
 |--------|----------------------|

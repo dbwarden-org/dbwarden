@@ -1,4 +1,4 @@
-# dbwarden Observability
+# dbwarden observability
 
 Demonstrates Prometheus metrics, structured logging, and query tracing with dbwarden.
 
@@ -7,7 +7,7 @@ Demonstrates Prometheus metrics, structured logging, and query tracing with dbwa
 - Docker (for PostgreSQL, Prometheus, Grafana)
 - Python 3.12+
 
-## Quick Start
+## Quick start
 
 ```bash
 uv add "dbwarden[metrics]" sqlalchemy fastapi uvicorn asyncpg
@@ -22,9 +22,9 @@ bash run.sh
 uvicorn app.main:app --reload
 ```
 
-## What's Included
+## What's included
 
-### Prometheus Metrics
+### Prometheus metrics
 
 - `dbwarden_migrations_total`: Migration count by status
 - `dbwarden_migration_duration_seconds`: Migration execution time
@@ -34,7 +34,7 @@ uvicorn app.main:app --reload
 
 Available at `http://localhost:8000/metrics`.
 
-### Query Tracing
+### Query tracing
 
 The `QueryTracingMiddleware` logs every SQL query with duration:
 
@@ -42,7 +42,7 @@ The `QueryTracingMiddleware` logs every SQL query with duration:
 {"event": "query", "duration_ms": 42, "database": "primary"}
 ```
 
-### Structured Logging
+### Structured logging
 
 ```bash
 DBWARDEN_LOG_JSON=1 uvicorn app.main:app
