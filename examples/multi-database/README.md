@@ -8,7 +8,7 @@ Demonstrates managing two databases in a single project: PostgreSQL for transact
 - Python 3.12+
 - `uv add dbwarden sqlalchemy clickhouse-connect`
 
-## Quick Start
+## Quick start
 
 ```bash
 # Run everything with one command
@@ -23,7 +23,7 @@ dbwarden migrate --all
 dbwarden status --all
 ```
 
-## Key Concepts
+## Key concepts
 
 - Each declarative database class gets its own migration directory under `migrations/` (the equivalent `database_config()` function form is also supported)
 - `--database primary` / `--database analytics` targets a specific database
