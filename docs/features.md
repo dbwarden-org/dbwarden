@@ -7,6 +7,8 @@ description: Overview of dbwarden features, with short examples for migrations, 
 
 This page gives a compact overview of the main dbwarden features, with short examples. dbwarden is a schema compiler. Each feature maps to a compilation stage.
 
+For the complete workflow index and implementation boundaries, see the [feature map](reference/feature-map.md). It includes safety scopes, repeatables, state composition, merge/reconcile, plugin groups, and operational diagnostics.
+
 ## SQL-First Compilation
 
 dbwarden compiles migrations as plain SQL files. Each file contains both an `--upgrade` section and a `--rollback` section.
@@ -60,6 +62,10 @@ dbwarden reads SQLAlchemy models, diffs them against the live schema or an offli
 $ dbwarden make-migrations "add posts table" --database primary
 Created migration: migrations/primary/primary__0002_add_posts_table.sql
 ```
+
+## Declarative Data Migrations
+
+Managed rows, typed derived values, and historical table transitions compile into versioned SQL plus a canonical frozen data artifact. The executor journals each application and checks guards in the migration transaction. See [Declarative data migrations](declarative-data-migrations.md) for declarations, artifacts, rollback, and reconciliation.
 
 ## Backend-Specific Metadata
 
