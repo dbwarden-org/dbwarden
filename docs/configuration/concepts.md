@@ -2,6 +2,10 @@
 
 Understand how dbwarden configuration works under the hood.
 
+## Declarative Data Paths
+
+Use `data_paths` for live declarative data modules, separately from `model_paths`. dbwarden imports these paths only to compile current declarations; it excludes generated `*.data.py` artifacts. `data_snapshot_dir` defaults to `.dbwarden/data` and `snapshot_registry` defaults to `.dbwarden/snapshots/registry.json`. Both must stay inside the project. Two databases cannot share a live data path unless `overlap_models=True` explicitly allows the overlap. See [Declarative data migrations](../declarative-data-migrations.md).
+
 ## What is Configuration?
 
 Configuration tells dbwarden:
