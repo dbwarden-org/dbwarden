@@ -107,10 +107,16 @@ dbwarden does not set these automatically. You control them through `data_op()`:
 from dbwarden.databases.clickhouse import data_op
 
 # Metadata ALTER with wait
-data_op("ALTER TABLE events ADD INDEX ix_a col_a TYPE minmax GRANULARITY 100 SETTINGS alter_sync = 2")
+data_op(
+    name="add_index_with_sync",
+    forward="ALTER TABLE events ADD INDEX ix_a col_a TYPE minmax GRANULARITY 100 SETTINGS alter_sync = 2",
+)
 
 # Mutation with wait
-data_op("ALTER TABLE events DELETE WHERE event_date < '2020-01-01' SETTINGS mutations_sync = 2")
+data_op(
+    name="delete_old_events_with_sync",
+    forward="ALTER TABLE events DELETE WHERE event_date < '2020-01-01' SETTINGS mutations_sync = 2",
+)
 ```
 
 Or at the session level before running `dbwarden migrate`:
@@ -188,7 +194,10 @@ On non-replicated tables this works fine. On ReplicatedMergeTree, multiple setti
 Until dbwarden batches MODIFY SETTING into a single statement, you can manually combine them in a `data_op()`:
 
 ```python
-data_op("ALTER TABLE events MODIFY SETTING index_granularity = 4096, max_bytes_to_merge_at_max_space_in_pool = 10000000000")
+data_op(
+    name="batch_modify_settings",
+    forward="ALTER TABLE events MODIFY SETTING index_granularity = 4096, max_bytes_to_merge_at_max_space_in_pool = 10000000000",
+)
 ```
 
 ## ALTER batching
