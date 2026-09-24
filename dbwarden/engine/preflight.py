@@ -50,6 +50,7 @@ def run_preflight(
     impact_paths: list[str] | None = None,
     migrations_dir: str | None = None,
     applied_versions: set[str] | None = None,
+    force: bool = False,
 ) -> PreflightResult:
     """Run preflight checks on exact pending migrations.
 
@@ -81,6 +82,13 @@ def run_preflight(
             continue
 
         # Check for upgrade section
+        try:
+            from dbwarden.data.integration import load_data_plan
+            load_data_plan(filepath)
+        except (ValueError, OSError, TypeError) as exc:
+            result.abort = True
+            result.errors.append(f"{version}: invalid frozen data bundle: {exc}")
+            continue
         if "-- upgrade" not in content.lower() and not content.strip():
             result.abort = True
             result.errors.append(f"{version}: migration file has no upgrade section")
@@ -110,6 +118,14 @@ def run_preflight(
                 result.warnings.append(f"{version}: malformed plan ({exc})")
             continue
 
+        from dbwarden.engine.safety.plans import read_trusted_plan
+
+        trusted, _ = read_trusted_plan(filepath)
+        if trusted:
+            if "--force" in trusted["required_flags"] and not force:
+                result.abort = True
+                result.errors.append(f"{version}: acknowledgement required. hint: review the plan and pass --force")
+            continue
         safety_ops = _parse_plan_safety(plan)
         for op in safety_ops:
             severity = op.get("severity", "INFO")
