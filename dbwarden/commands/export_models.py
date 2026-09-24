@@ -1,19 +1,18 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from dbwarden import __version__
 from dbwarden.config import ConfigurationError, get_database, get_multi_db_config
+from dbwarden.engine.core.model_state import model_state_json_dumps
 from dbwarden.engine.model_discovery import (
-    get_all_model_tables,
     filter_model_tables_by_name,
+    get_all_model_tables,
     validate_model_tables_exist,
 )
-from dbwarden.engine.core.model_state import model_state_json_dumps
 from dbwarden.engine.offline import model_state_to_dict
+from dbwarden.files import atomic_write_text, preserve_files_on_error
 from dbwarden.output import success
-from dbwarden.files import atomic_write_text
 
 
 def export_models_cmd(
@@ -61,9 +60,10 @@ def export_models_cmd(
     from dbwarden.commands.make_migrations import get_model_state_path
 
     legacy_path = get_model_state_path(db_name, legacy=True)
-    if legacy_path != out_path:
-        legacy_path.parent.mkdir(parents=True, exist_ok=True)
-        atomic_write_text(legacy_path, payload)
-    atomic_write_text(out_path, payload)
+    with preserve_files_on_error({legacy_path, out_path}):
+        if legacy_path != out_path:
+            legacy_path.parent.mkdir(parents=True, exist_ok=True)
+            atomic_write_text(legacy_path, payload)
+        atomic_write_text(out_path, payload)
 
     success(f"Exported {len(tables)} model(s) to {out_path}")
