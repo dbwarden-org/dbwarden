@@ -82,7 +82,7 @@ These properties trigger the recreate pipeline (DETACH source → CREATE new →
 | PARTITION BY change | CRITICAL |
 | SAMPLE BY change | INFO |
 | Object type change (`table` ↔ `materialized_view`) | CRITICAL |
-| MV target (`ch_to_table`) change | CRITICAL |
+| MV target (`to`) change | CRITICAL |
 | Column type change (incompatible) | CRITICAL |
 | LowCardinality / Nullable wrapper change | CRITICAL |
 
@@ -91,11 +91,11 @@ These properties trigger the recreate pipeline (DETACH source → CREATE new →
 ```python
 # Source column type change triggers MV recreate
 # Current: amount is Float64
-class Meta(CHTableMeta):
-    ch = ch_table(
+class Meta(CHViewMeta):
+    ch = materialized_view(
         engine=merge_tree(),
         order_by="date",
-        ch_select="SELECT date, agg.sumState(amount) AS state FROM events GROUP BY date",
+        select="SELECT date, sumState(amount) AS state FROM events GROUP BY date",
     )
 
 # If amount changes to Float32, the AggregateFunction signature changes:
