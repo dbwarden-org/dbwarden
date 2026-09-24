@@ -68,7 +68,6 @@ from app.models import Base  #  Import fails
 primary = database_config(
     database_name="primary",
     model_paths=["app.models"],  #  Use model_paths instead
-    ...
 )
 ```
 
@@ -87,7 +86,9 @@ ConfigurationError: Exactly one default=True required
 ```python
 #  Wrong
 analytics = database_config(
-analytics = database_config(database_name="analytics", default=False, ...)
+    database_name="analytics",
+    default=False,
+)
 ```
 
 **Solution:** Set one database as default:
@@ -95,7 +96,9 @@ analytics = database_config(database_name="analytics", default=False, ...)
 ```python
 #  Correct
 analytics = database_config(
-analytics = database_config(database_name="analytics", default=False, ...)
+    database_name="analytics",
+    default=True,
+)
 ```
 
 **Cause 2: Multiple defaults**
@@ -103,7 +106,9 @@ analytics = database_config(database_name="analytics", default=False, ...)
 ```python
 #  Wrong
 analytics = database_config(
-analytics = database_config(database_name="analytics", default=True, ...)
+    database_name="analytics",
+    default=True,
+)
 ```
 
 **Solution:** Only one default:
@@ -111,7 +116,8 @@ analytics = database_config(database_name="analytics", default=True, ...)
 ```python
 #  Correct
 analytics = database_config(
-analytics = database_config(database_name="analytics", ...)  # default=False implied
+    database_name="analytics",  # default=False implied
+)
 ```
 
 ## "Duplicate database_name"
@@ -128,7 +134,8 @@ Same `database_name` used twice:
 
 ```python
 primary = database_config(
-primary = database_config(database_name="primary", ...)  #  Duplicate
+    database_name="primary",  #  Duplicate
+)
 ```
 
 ### Solution
@@ -137,7 +144,8 @@ Use unique names:
 
 ```python
 analytics = database_config(
-analytics = database_config(database_name="analytics", ...)  #  Different name
+    database_name="analytics",  #  Different name
+)
 ```
 
 ## "No SQLAlchemy models found"
@@ -196,7 +204,6 @@ class Base(DeclarativeBase):
 primary = database_config(
     database_name="primary",
     model_paths=["app.models"],  #  Add this
-    ...
 )
 ```
 
@@ -234,7 +241,8 @@ Multiple databases without `model_paths`:
 ```python
 #  Wrong
 analytics = database_config(
-analytics = database_config(database_name="analytics", ...)  # No model_paths
+    database_name="analytics",  # No model_paths
+)
 ```
 
 ### Solution
@@ -246,12 +254,10 @@ Add `model_paths` to all databases:
 primary = database_config(
     database_name="primary",
     model_paths=["app.models.primary"],
-    ...
 )
 analytics = database_config(
     database_name="analytics",
     model_paths=["app.models.analytics"],
-    ...
 )
 ```
 
@@ -272,12 +278,10 @@ Same model paths for different databases:
 primary = database_config(
     database_name="primary",
     model_paths=["app.models"],
-    ...
 )
 analytics = database_config(
     database_name="analytics",
     model_paths=["app.models"],  #  Same path
-    ...
 )
 ```
 
@@ -290,12 +294,10 @@ analytics = database_config(
 primary = database_config(
     database_name="primary",
     model_paths=["app.models.primary"],
-    ...
 )
 analytics = database_config(
     database_name="analytics",
     model_paths=["app.models.analytics"],
-    ...
 )
 ```
 
@@ -307,13 +309,11 @@ primary = database_config(
     database_name="primary",
     model_paths=["app.models"],
     overlap_models=True,
-    ...
 )
 replica = database_config(
     database_name="replica",
     model_paths=["app.models"],
     overlap_models=True,
-    ...
 )
 ```
 
@@ -335,13 +335,11 @@ primary = database_config(
     database_name="primary",
     model_paths=["app.models"],
     model_tables=["users", "posts"],
-    ...
 )
 analytics = database_config(
     database_name="analytics",
     model_paths=["other_models"],
     model_tables=["users"],  # 'users' already owned by primary
-    ...
 )
 ```
 
@@ -355,7 +353,6 @@ analytics = database_config(
     database_name="analytics",
     model_paths=["other_models"],
     model_tables=["analytics_events"],  # No overlap with primary
-    ...
 )
 ```
 
@@ -368,7 +365,6 @@ analytics = database_config(
     model_paths=["other_models"],
     model_tables=["users", "analytics_events"],
     overlap_models=True,  # Allow overlap
-    ...
 )
 ```
 
@@ -390,7 +386,6 @@ primary = database_config(
     database_name="primary",
     dev_database_type="sqlite",
     # Missing dev_database_url
-    ...
 )
 ```
 
@@ -404,7 +399,6 @@ primary = database_config(
     database_name="primary",
     dev_database_type="sqlite",
     dev_database_url="sqlite:///./dev.db",  #  Add this
-    ...
 )
 ```
 
@@ -522,12 +516,13 @@ python -c "import app.models"
 ```python
 #  Slow - scans everything
 primary = database_config(
+    database_name="primary",
+)
 
 #  Fast - targeted scan
 primary = database_config(
     database_name="primary",
     model_paths=["app.models"],
-    ...
 )
 ```
 
