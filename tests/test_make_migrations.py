@@ -278,6 +278,8 @@ def test_make_migrations_writes_plan_file_next_to_sql():
             assert plan["operations"]
             assert plan["checksum"]
         finally:
+            from dbwarden.connection.connection import dispose_engine
+            dispose_engine("sqlite:///./app.db", "sqlite")
             os.chdir(old_cwd)
 
 
