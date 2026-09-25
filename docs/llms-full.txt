@@ -1671,7 +1671,12 @@ from dbwarden_redis import migration_lock
 redis = Redis.from_url("redis://localhost:6379")
 
 async with migration_lock(redis):
-    await run_migration()
+    await run_migration(
+        sql_statements,
+        version="0002",
+        migration_operation="apply",
+        filename="primary__0002_feature.sql",
+    )
 ```
 
 The Redis lock uses `SET NX EX` with a configurable TTL (default 60 seconds).
@@ -5632,11 +5637,15 @@ Without `default=True`, dbwarden wouldn't know which database to use for the sec
 ```python
 #  Good
 analytics = database_config(
-analytics = database_config(database_name="analytics", default=False, ...)  # or omit default
+    database_name="analytics",
+    default=False,  # or omit default
+)
 
 #  Bad - two defaults
 analytics = database_config(
-analytics = database_config(database_name="analytics", default=True, ...)  # Error!
+    database_name="analytics",
+    default=True,  # Error!
+)
 ```
 
 ### Default Affects CLI Behavior
@@ -5841,7 +5850,7 @@ They're completely independent:
 
 ### Model Path Boundaries
 
-```python
+```
 app/
   models/
     primary/
@@ -5858,13 +5867,11 @@ Configuration:
 primary = database_config(
     database_name="primary",
     model_paths=["app.models.primary"],  #  Only primary models
-    ...
 )
 
 analytics = database_config(
     database_name="analytics",
     model_paths=["app.models.analytics"],  #  Only analytics models
-    ...
 )
 ```
 
@@ -7646,13 +7653,11 @@ if TYPE_CHECKING:
 primary = database_config(
     database_name="primary",
     model_paths=["app.models.primary"],  #  Add this
-    ...
 )
 
 analytics = database_config(
     database_name="analytics",
     model_paths=["app.models.analytics"],  #  Add this
-    ...
 )
 ```
 
@@ -7668,13 +7673,11 @@ analytics = database_config(
 primary = database_config(
     database_name="primary",
     model_paths=["app.models.primary"],  # Different path
-    ...
 )
 
 analytics = database_config(
     database_name="analytics",
     model_paths=["app.models.analytics"],  # Different path
-    ...
 )
 ```
 
@@ -7685,14 +7688,12 @@ primary = database_config(
     database_name="primary",
     model_paths=["app.shared"],
     overlap_models=True,  #  Allow overlap
-    ...
 )
 
 analytics = database_config(
     database_name="analytics",
     model_paths=["app.shared"],
     overlap_models=True,  #  Allow overlap
-    ...
 )
 ```
 
@@ -7877,19 +7878,16 @@ Configuration:
 primary = database_config(
     database_name="primary",
     model_paths=["app.models.primary"],
-    ...
 )
 
 analytics = database_config(
     database_name="analytics",
     model_paths=["app.models.analytics"],
-    ...
 )
 
 logging = database_config(
     database_name="logging",
     model_paths=["app.models.logging"],
-    ...
 )
 ```
 
@@ -7980,7 +7978,6 @@ Configure custom directories:
 primary = database_config(
     database_name="primary",
     migrations_dir="migrations/primary",  # Custom path
-    ...
 )
 ```
 
@@ -8115,18 +8112,17 @@ When you have multiple databases, each **must** specify `model_paths`:
 ```python
 #  Error: model_paths required
 analytics = database_config(
-analytics = database_config(database_name="analytics", ...)  # Missing model_paths
+    database_name="analytics",  # Missing model_paths
+)
 
 #  Correct
 primary = database_config(
     database_name="primary",
     model_paths=["app.models.primary"],
-    ...
 )
 analytics = database_config(
     database_name="analytics",
     model_paths=["app.models.analytics"],
-    ...
 )
 ```
 
@@ -8139,12 +8135,10 @@ Model paths cannot overlap:
 primary = database_config(
     database_name="primary",
     model_paths=["app.models"],
-    ...
 )
 analytics = database_config(
     database_name="analytics",
     model_paths=["app.models"],  # Same path
-    ...
 )
 ```
 
@@ -8157,13 +8151,11 @@ primary = database_config(
     database_name="primary",
     model_paths=["app.models"],
     overlap_models=True,  #  Allow overlap
-    ...
 )
 replica = database_config(
     database_name="replica",
     model_paths=["app.models"],
     overlap_models=True,  #  Allow overlap
-    ...
 )
 ```
 
@@ -8177,7 +8169,6 @@ replica = database_config(
 primary = database_config(
     database_name="primary",
     model_paths=["app.models.primary"],  #  Add this
-    ...
 )
 ```
 
@@ -9073,7 +9064,6 @@ from app.models import Base  #  Import fails
 primary = database_config(
     database_name="primary",
     model_paths=["app.models"],  #  Use model_paths instead
-    ...
 )
 ```
 
@@ -9092,7 +9082,9 @@ ConfigurationError: Exactly one default=True required
 ```python
 #  Wrong
 analytics = database_config(
-analytics = database_config(database_name="analytics", default=False, ...)
+    database_name="analytics",
+    default=False,
+)
 ```
 
 **Solution:** Set one database as default:
@@ -9100,7 +9092,9 @@ analytics = database_config(database_name="analytics", default=False, ...)
 ```python
 #  Correct
 analytics = database_config(
-analytics = database_config(database_name="analytics", default=False, ...)
+    database_name="analytics",
+    default=True,
+)
 ```
 
 **Cause 2: Multiple defaults**
@@ -9108,7 +9102,9 @@ analytics = database_config(database_name="analytics", default=False, ...)
 ```python
 #  Wrong
 analytics = database_config(
-analytics = database_config(database_name="analytics", default=True, ...)
+    database_name="analytics",
+    default=True,
+)
 ```
 
 **Solution:** Only one default:
@@ -9116,7 +9112,8 @@ analytics = database_config(database_name="analytics", default=True, ...)
 ```python
 #  Correct
 analytics = database_config(
-analytics = database_config(database_name="analytics", ...)  # default=False implied
+    database_name="analytics",  # default=False implied
+)
 ```
 
 ## "Duplicate database_name"
@@ -9133,7 +9130,8 @@ Same `database_name` used twice:
 
 ```python
 primary = database_config(
-primary = database_config(database_name="primary", ...)  #  Duplicate
+    database_name="primary",  #  Duplicate
+)
 ```
 
 ### Solution
@@ -9142,7 +9140,8 @@ Use unique names:
 
 ```python
 analytics = database_config(
-analytics = database_config(database_name="analytics", ...)  #  Different name
+    database_name="analytics",  #  Different name
+)
 ```
 
 ## "No SQLAlchemy models found"
@@ -9201,7 +9200,6 @@ class Base(DeclarativeBase):
 primary = database_config(
     database_name="primary",
     model_paths=["app.models"],  #  Add this
-    ...
 )
 ```
 
@@ -9239,7 +9237,8 @@ Multiple databases without `model_paths`:
 ```python
 #  Wrong
 analytics = database_config(
-analytics = database_config(database_name="analytics", ...)  # No model_paths
+    database_name="analytics",  # No model_paths
+)
 ```
 
 ### Solution
@@ -9251,12 +9250,10 @@ Add `model_paths` to all databases:
 primary = database_config(
     database_name="primary",
     model_paths=["app.models.primary"],
-    ...
 )
 analytics = database_config(
     database_name="analytics",
     model_paths=["app.models.analytics"],
-    ...
 )
 ```
 
@@ -9277,12 +9274,10 @@ Same model paths for different databases:
 primary = database_config(
     database_name="primary",
     model_paths=["app.models"],
-    ...
 )
 analytics = database_config(
     database_name="analytics",
     model_paths=["app.models"],  #  Same path
-    ...
 )
 ```
 
@@ -9295,12 +9290,10 @@ analytics = database_config(
 primary = database_config(
     database_name="primary",
     model_paths=["app.models.primary"],
-    ...
 )
 analytics = database_config(
     database_name="analytics",
     model_paths=["app.models.analytics"],
-    ...
 )
 ```
 
@@ -9312,13 +9305,11 @@ primary = database_config(
     database_name="primary",
     model_paths=["app.models"],
     overlap_models=True,
-    ...
 )
 replica = database_config(
     database_name="replica",
     model_paths=["app.models"],
     overlap_models=True,
-    ...
 )
 ```
 
@@ -9340,13 +9331,11 @@ primary = database_config(
     database_name="primary",
     model_paths=["app.models"],
     model_tables=["users", "posts"],
-    ...
 )
 analytics = database_config(
     database_name="analytics",
     model_paths=["other_models"],
     model_tables=["users"],  # 'users' already owned by primary
-    ...
 )
 ```
 
@@ -9360,7 +9349,6 @@ analytics = database_config(
     database_name="analytics",
     model_paths=["other_models"],
     model_tables=["analytics_events"],  # No overlap with primary
-    ...
 )
 ```
 
@@ -9373,7 +9361,6 @@ analytics = database_config(
     model_paths=["other_models"],
     model_tables=["users", "analytics_events"],
     overlap_models=True,  # Allow overlap
-    ...
 )
 ```
 
@@ -9395,7 +9382,6 @@ primary = database_config(
     database_name="primary",
     dev_database_type="sqlite",
     # Missing dev_database_url
-    ...
 )
 ```
 
@@ -9409,7 +9395,6 @@ primary = database_config(
     database_name="primary",
     dev_database_type="sqlite",
     dev_database_url="sqlite:///./dev.db",  #  Add this
-    ...
 )
 ```
 
@@ -9527,12 +9512,13 @@ python -c "import app.models"
 ```python
 #  Slow - scans everything
 primary = database_config(
+    database_name="primary",
+)
 
 #  Fast - targeted scan
 primary = database_config(
     database_name="primary",
     model_paths=["app.models"],
-    ...
 )
 ```
 
@@ -12762,7 +12748,7 @@ Op(
     upgrade_attrs={
         "table": "users",
         "column": "display_name",
-        "model_column": <ModelColumn: display_name VARCHAR(255) nullable>,
+        "model_column": model_col,  # ModelColumn("display_name", "VARCHAR(255)", ...)
     },
     rollback_attrs={"table": "users", "column": "display_name"},
 )
@@ -12770,11 +12756,7 @@ Op(
 # Rollback op
 Op(
     object_type="drop_column",
-    upgrade_attrs={
-        "table": "users",
-        "column": "display_name",
-        "definition": {"type": "VARCHAR(255)", "nullable": True},
-    },
+    upgrade_attrs={"table": "users", "column": "display_name"},
     rollback_attrs={"table": "users", "column": "display_name"},
 )
 ```
@@ -13643,14 +13625,14 @@ class Event(Base):
             projections=[
                 ProjectionSpec(
                     name="by_date",
-                    select="SELECT event_date, count() GROUP BY event_date",
+                    query="SELECT event_date, count() GROUP BY event_date",
                 ),
             ],
             indexes=[
                 ChIndexSpec(
                     name="idx_path",
-                    expr="path",
-                    clickhouse_type="bloom_filter(0.01)",
+                    columns=["path"],
+                    type="bloom_filter(0.01)",
                     granularity=64,
                 ),
             ],
@@ -14439,7 +14421,7 @@ Every aggregate must have an alias (`.as_(name)`):
 aggregates=[
     agg.count().as_("event_count"),
     agg.sum("amount", "Float64").as_("total_amount"),
-    agg.uniq("user_id").as_("unique_users"),
+    agg.uniq("user_id", "String").as_("unique_users"),
 ]
 ```
 
@@ -14482,7 +14464,7 @@ class EventStats(AggregatingView):
             ],
             aggregates=[
                 agg.count().as_("views"),
-                agg.uniq(PageView.session_id).as_("unique_sessions"),
+                agg.uniq(PageView.session_id, "String").as_("unique_sessions"),
                 agg.sum(PageView.duration).as_("total_duration"),
             ],
             order_by=["url", "day"],
@@ -14636,10 +14618,16 @@ dbwarden does not set these automatically. You control them through `data_op()`:
 from dbwarden.databases.clickhouse import data_op
 
 # Metadata ALTER with wait
-data_op("ALTER TABLE events ADD INDEX ix_a col_a TYPE minmax GRANULARITY 100 SETTINGS alter_sync = 2")
+data_op(
+    name="add_index_with_sync",
+    forward="ALTER TABLE events ADD INDEX ix_a col_a TYPE minmax GRANULARITY 100 SETTINGS alter_sync = 2",
+)
 
 # Mutation with wait
-data_op("ALTER TABLE events DELETE WHERE event_date < '2020-01-01' SETTINGS mutations_sync = 2")
+data_op(
+    name="delete_old_events_with_sync",
+    forward="ALTER TABLE events DELETE WHERE event_date < '2020-01-01' SETTINGS mutations_sync = 2",
+)
 ```
 
 Or at the session level before running `dbwarden migrate`:
@@ -14717,7 +14705,10 @@ On non-replicated tables this works fine. On ReplicatedMergeTree, multiple setti
 Until dbwarden batches MODIFY SETTING into a single statement, you can manually combine them in a `data_op()`:
 
 ```python
-data_op("ALTER TABLE events MODIFY SETTING index_granularity = 4096, max_bytes_to_merge_at_max_space_in_pool = 10000000000")
+data_op(
+    name="batch_modify_settings",
+    forward="ALTER TABLE events MODIFY SETTING index_granularity = 4096, max_bytes_to_merge_at_max_space_in_pool = 10000000000",
+)
 ```
 
 ## ALTER batching
@@ -14961,16 +14952,13 @@ class Metrics(Base):
 
     width: Mapped[float] = mapped_column()
     height: Mapped[float] = mapped_column()
-    area: Mapped[float] = mapped_column()
+    area: Mapped[float] = mapped_column(comment="Calculated area in pixels")
 
     class Meta(CHTableMeta):
         ch = ch_table(engine=merge_tree(), order_by="width")
 
         class area(CHColumnMeta):
-            ch = ch.field(
-                alias="width * height",
-                comment="Calculated area in pixels",
-            )
+            ch = ch.field(alias="width * height")
 ```
 
 ### REMOVE clause example
@@ -14996,7 +14984,10 @@ class Meta(CHTableMeta):
 | `ttl` | `str` | `TTL expr` | `MODIFY COLUMN c REMOVE TTL` |
 | `low_cardinality` | `bool` | `LowCardinality(String)` | Wrapped into type |
 | `nullable` | `bool` | `Nullable(String)` | Wrapped into type |
-| `comment` | `str` | `COMMENT ON COLUMN` | `MODIFY COLUMN c REMOVE COMMENT` |
+
+Column comments are not a `ch.field()` option; they ride on the SQLAlchemy
+column itself (`mapped_column(comment=...)`) and are diffed by the comment
+handler into `MODIFY COLUMN c COMMENT '...'` / `MODIFY COLUMN c REMOVE COMMENT`.
 
 Setting a property to `None` (or omitting it) and then setting it to a value emits `MODIFY COLUMN ... <property>`. The reverse (removing a property) emits the `REMOVE` form. This is a write-only asymmetry in ClickHouse that dbwarden handles for you.
 
@@ -15189,33 +15180,36 @@ from dbwarden.databases.clickhouse import data_op
 
 # Freeze for backup
 for m in ["2023-01", "2023-02", "2023-03"]:
-    data_op(f"ALTER TABLE events FREEZE PARTITION '{m}'")
+    data_op(name=f"freeze_{m}", forward=f"ALTER TABLE events FREEZE PARTITION '{m}'")
 
 # After backup verified, drop
 for m in ["2023-01", "2023-02", "2023-03"]:
-    data_op(f"ALTER TABLE events DROP PARTITION '{m}'")
+    data_op(name=f"drop_{m}", forward=f"ALTER TABLE events DROP PARTITION '{m}'")
 ```
 
 ### Conditional mutation with setting override
 
 ```python
 # Large mutation with timeout
-data_op("""
+data_op(
+    name="archive_old_events",
+    forward="""
     ALTER TABLE events
         UPDATE status = 'archived'
         WHERE event_date < '2020-01-01'
         SETTINGS mutations_sync = 2
-""")
+""",
+)
 ```
 
 ### OPTIMIZE with deduplicate
 
 ```python
 # Force full merge and deduplication on all parts
-data_op("OPTIMIZE TABLE events FINAL DEDUPLICATE")
+data_op(name="optimize_deduplicate", forward="OPTIMIZE TABLE events FINAL DEDUPLICATE")
 
 # With column-specific deduplication
-data_op("OPTIMIZE TABLE events FINAL DEDUPLICATE BY id, event_date")
+data_op(name="optimize_deduplicate_by", forward="OPTIMIZE TABLE events FINAL DEDUPLICATE BY id, event_date")
 ```
 
 ### Multi-step migration with data ops
@@ -15224,15 +15218,18 @@ data_op("OPTIMIZE TABLE events FINAL DEDUPLICATE BY id, event_date")
 def migrate_events():
     # 1. Create new table via migrate
     # 2. Backfill from old partition
-    data_op("""
+    data_op(
+        name="replace_partition_from_v1",
+        forward="""
         ALTER TABLE events_v2
             REPLACE PARTITION '2024-01'
             FROM events_v1
-    """)
+    """,
+    )
     # 3. Drop old partition
-    data_op("ALTER TABLE events_v1 DROP PARTITION '2024-01'")
+    data_op(name="drop_v1_partition", forward="ALTER TABLE events_v1 DROP PARTITION '2024-01'")
     # 4. Verify
-    data_op("OPTIMIZE TABLE events_v2 FINAL")
+    data_op(name="optimize_v2", forward="OPTIMIZE TABLE events_v2 FINAL")
 ```
 
 ## Partition operations
@@ -15241,32 +15238,32 @@ def migrate_events():
 from dbwarden.databases.clickhouse import data_op
 
 # Attach a detached partition
-data_op("ALTER TABLE events ATTACH PARTITION '2024-01'")
+data_op(name="attach_partition", forward="ALTER TABLE events ATTACH PARTITION '2024-01'")
 
 # Replace one partition with another
-data_op("ALTER TABLE events REPLACE PARTITION '2024-02' FROM staging_events")
+data_op(name="replace_partition", forward="ALTER TABLE events REPLACE PARTITION '2024-02' FROM staging_events")
 
 # Drop a partition
-data_op("ALTER TABLE events DROP PARTITION '2024-01'")
+data_op(name="drop_partition", forward="ALTER TABLE events DROP PARTITION '2024-01'")
 
 # Clear column in partition
-data_op("ALTER TABLE events CLEAR COLUMN payload IN PARTITION '2024-01'")
+data_op(name="clear_column", forward="ALTER TABLE events CLEAR COLUMN payload IN PARTITION '2024-01'")
 
 # Freeze partition for backup
-data_op("ALTER TABLE events FREEZE PARTITION '2024-01'")
+data_op(name="freeze_partition", forward="ALTER TABLE events FREEZE PARTITION '2024-01'")
 
 # Unfreeze
-data_op("ALTER TABLE events UNFREEZE PARTITION '2024-01'")
+data_op(name="unfreeze_partition", forward="ALTER TABLE events UNFREEZE PARTITION '2024-01'")
 ```
 
 ## Mutations
 
 ```python
 # DELETE
-data_op("ALTER TABLE events DELETE WHERE event_date < '2023-01-01'")
+data_op(name="delete_old_events", forward="ALTER TABLE events DELETE WHERE event_date < '2023-01-01'")
 
 # UPDATE
-data_op("ALTER TABLE events UPDATE payload = 'redacted' WHERE id = 123")
+data_op(name="redact_payload", forward="ALTER TABLE events UPDATE payload = 'redacted' WHERE id = 123")
 ```
 
 !!! tip "Synchronicity"
@@ -15276,20 +15273,20 @@ data_op("ALTER TABLE events UPDATE payload = 'redacted' WHERE id = 123")
 
 ```python
 # Merge parts
-data_op("OPTIMIZE TABLE events FINAL")
+data_op(name="optimize_final", forward="OPTIMIZE TABLE events FINAL")
 
 # With partition
-data_op("OPTIMIZE TABLE events PARTITION '2024-01' FINAL")
+data_op(name="optimize_partition", forward="OPTIMIZE TABLE events PARTITION '2024-01' FINAL")
 
 # Deduplicate
-data_op("OPTIMIZE TABLE events FINAL DEDUPLICATE")
+data_op(name="optimize_deduplicate", forward="OPTIMIZE TABLE events FINAL DEDUPLICATE")
 ```
 
 ## POPULATE
 
 ```python
 # Populate a materialized view
-data_op("ALTER TABLE mv_name POPULATE")
+data_op(name="populate_mv", forward="ALTER TABLE mv_name POPULATE")
 ```
 
 This is a data-op rather than a DDL property because it is a write concern, not structural. See [Materialized views](materialized-views.md).
@@ -15302,7 +15299,10 @@ Named collection secrets are rotated through ClickHouse's secret store:
 
 ```python
 # Refresh credentials from secret store
-data_op("ALTER NAMED COLLECTION kafka_prod UPDATE sasl_password = SECRET 'new_secret_id'")
+data_op(
+    name="rotate_kafka_secret",
+    forward="ALTER NAMED COLLECTION kafka_prod UPDATE sasl_password = SECRET 'new_secret_id'",
+)
 ```
 
 ## Safety
@@ -15696,7 +15696,7 @@ class Meta(CHTableMeta):
     ch = ch_table(
         engine=kafka(
             named_collection="kafka_prod",
-            topic="events",
+            topic_list="events",
             format="JSONEachRow",
             group_name="dbwarden_consumer",
         ),
@@ -15719,14 +15719,16 @@ Parameters that can be set directly (overriding the named collection):
 
 | Factory parameter | DDL setting |
 |------------------|-------------|
-| `named_collection` | `kafka_named_collection` |
-| `topic` | `kafka_topic_list` |
-| `format` | `kafka_format` |
+| `named_collection` | collection name argument |
+| `broker_list` | `kafka_broker_list` |
+| `topic_list` | `kafka_topic_list` |
 | `group_name` | `kafka_group_name` |
+| `format` | `kafka_format` |
 | `num_consumers` | `kafka_num_consumers` |
-| `thread_per_consumer` | `kafka_thread_per_consumer` |
-| `handle_error_mode` | `kafka_handle_error_mode` |
-| `commit_every_batch` | `kafka_commit_every_batch` |
+
+Other Kafka settings (`kafka_thread_per_consumer`, `kafka_handle_error_mode`,
+`kafka_commit_every_batch`, ...) are set through the `KafkaSettings` TypedDict
+below, not as `kafka()` parameters.
 
 `KafkaSettings` is a fully-typed TypedDict for arbitrary Kafka engine settings:
 
@@ -15747,7 +15749,7 @@ class Meta(CHTableMeta):
     ch = ch_table(
         engine=s3(
             named_collection="s3_prod",
-            pattern="events/*.parquet",
+            path="events/*.parquet",
             format="Parquet",
         ),
     )
@@ -15757,8 +15759,8 @@ Parameters:
 
 | Parameter | DDL setting |
 |-----------|-------------|
-| `named_collection` | `s3_named_collection` |
-| `pattern` | `url` (first positional) |
+| `named_collection` | collection name argument |
+| `path` | `url` |
 | `format` | `format` |
 | `compression` | `compression` |
 
@@ -15773,7 +15775,7 @@ class Meta(CHTableMeta):
     ch = ch_table(
         engine=s3_queue(
             named_collection="s3_prod",
-            pattern="incoming/*.json",
+            path="incoming/*.json",
             format="JSONEachRow",
         ),
     )
@@ -15819,28 +15821,16 @@ class Meta(CHTableMeta):
 from dbwarden.databases.clickhouse import mysql_engine, postgresql_engine, mongodb, redis
 
 # MySQL engine
-engine = mysql_engine(
-    named_collection="mysql_prod",
-    query="SELECT * FROM source_db.table",
-)
+engine = mysql_engine("mysql-host.example.com", 3306, "source_db", "source_table", "reader", "secret")
 
 # PostgreSQL engine
-engine = postgresql_engine(
-    named_collection="pg_prod",
-    query="SELECT * FROM source_schema.source_table",
-)
+engine = postgresql_engine("pg-host.example.com", 5432, "source_db", "source_table", "reader", "secret")
 
 # MongoDB engine
-engine = mongodb(
-    named_collection="mongo_prod",
-    collection="source_collection",
-)
+engine = mongodb("mongo-host.example.com", 27017, "source_db", "source_collection", "reader", "secret")
 
-# Redis engine
-engine = redis(
-    named_collection="redis_prod",
-    key="prefix:*",
-)
+# Redis engine (storage is the database index)
+engine = redis("redis-host.example.com", 6379, "secret", 0)
 ```
 
 Each has an associated `*Settings` TypedDict for engine-specific settings.
@@ -15862,14 +15852,14 @@ named_collection(
 
 engine = kafka(
     named_collection="aws_prod",
-    topic="events",
+    topic_list="events",
     format="JSONEachRow",
     group_name="ch_consumer",
 )
 
 engine2 = s3(
     named_collection="aws_prod",
-    pattern="data/*.parquet",
+    path="data/*.parquet",
     format="Parquet",
 )
 ```
@@ -15879,7 +15869,7 @@ engine2 = s3(
 ```python
 engine = s3_queue(
     named_collection="aws_prod",
-    pattern="incoming/*.json",
+    path="incoming/*.json",
     format="JSONEachRow",
 )
 
@@ -15892,30 +15882,20 @@ settings: S3QueueSettings = {
 }
 ```
 
-### PostgreSQL engine with query
+### PostgreSQL engine
 
 ```python
-engine = postgresql_engine(
-    named_collection="pg_prod",
-    query="SELECT id, name, created_at FROM public.users WHERE active = 1",
-)
+engine = postgresql_engine("pg-host.example.com", 5432, "source_db", "users", "reader", "secret")
 ```
 
 ### URL engine with multiple formats
 
 ```python
 # CSV
-engine = url_engine(
-    named_collection="http_data",
-    format="CSV",
-)
+engine = url_engine("https://data.example.com/export.csv", "CSV")
 
-# With specific compression
-engine = url_engine(
-    named_collection="http_data",
-    format="JSONEachRow",
-    compression="gzip",
-)
+# JSONEachRow
+engine = url_engine("https://data.example.com/events.json", "JSONEachRow")
 ```
 
 ## URL
@@ -15925,10 +15905,7 @@ from dbwarden.databases.clickhouse import url_engine
 
 class Meta(CHTableMeta):
     ch = ch_table(
-        engine=url_engine(
-            named_collection="http_prod",
-            format="CSV",
-        ),
+        engine=url_engine("https://data.example.com/export.csv", "CSV"),
     )
 ```
 
@@ -15955,10 +15932,7 @@ from dbwarden.databases.clickhouse import hdfs
 
 class Meta(CHTableMeta):
     ch = ch_table(
-        engine=hdfs(
-            named_collection="hdfs_prod",
-            format="Parquet",
-        ),
+        engine=hdfs("hdfs://namenode:9000/data/events.parquet", "Parquet"),
     )
 ```
 
@@ -16182,6 +16156,8 @@ from dbwarden.databases.clickhouse import (
 ### Null engine as MV sink
 
 ```python
+from dbwarden.databases.clickhouse import MaterializedView, CHViewMeta, materialized_view
+
 class NullSink(Base):
     __tablename__ = "null_sink"
 
@@ -16192,17 +16168,13 @@ class NullSink(Base):
             engine=null(),
         )
 
-class ViewFromSink(Base):
+class ViewFromSink(MaterializedView):
     __tablename__ = "view_from_sink"
 
-    value: Mapped[int] = mapped_column()
-
-    class Meta(CHTableMeta):
-        ch = ch_table(
-            engine=merge_tree(),
-            order_by="value",
-            ch_to_table="sink_dest",
-            ch_select="SELECT count(*) AS value FROM null_sink",
+    class Meta(CHViewMeta):
+        ch = materialized_view(
+            to="sink_dest",
+            select="SELECT count(*) AS value FROM null_sink",
         )
 ```
 
@@ -16217,10 +16189,7 @@ class AllEvents(Base):
 
     class Meta(CHTableMeta):
         ch = ch_table(
-            engine=merge(
-                source_database="analytics",
-                table_regex="events_202[0-9]_*",
-            ),
+            engine=merge("analytics", "events_202[0-9]_*"),
         )
 ```
 
@@ -16234,10 +16203,10 @@ class CountryDict(Base):
     name: Mapped[str] = mapped_column()
 
     class Meta(CHTableMeta):
-        ch = ch_table(engine=dictionary_engine())
+        ch = ch_table(engine=dictionary_engine("countries"))
 ```
 
-The dictionary is declared separately via `ch_dictionary()`. See [Dictionaries](dictionaries.md).
+The dictionary is declared separately via `dictionary()`. See [Dictionaries](dictionaries.md).
 
 ## Null
 
@@ -16258,10 +16227,7 @@ DDL: `ENGINE = Memory`. In-memory storage, lost on restart. Schema management on
 ## Merge
 
 ```python
-engine = merge(
-    source_database="analytics",
-    table_regex="events_.*",
-)
+engine = merge("analytics", "events_.*")
 ```
 
 DDL: `ENGINE = Merge('analytics', 'events_.*')`. A virtual table that reads from multiple tables whose names match the regex.
@@ -16277,18 +16243,15 @@ DDL: `ENGINE = Set`. Always in-memory. Use for IN-query acceleration.
 ## Join
 
 ```python
-engine = join_engine(
-    join_type="LEFT",
-    strictness="ALL",
-)
+engine = join_engine("ALL", "LEFT")
 ```
 
-DDL: `ENGINE = Join(LEFT, ALL)`. Specialized for JOIN queries.
+DDL: `ENGINE = Join(ALL, LEFT)`. Specialized for JOIN queries.
 
 ## Dictionary
 
 ```python
-engine = dictionary_engine()
+engine = dictionary_engine("countries")
 ```
 
 DDL: `ENGINE = Dictionary(<dict_name>)`. References a [Dictionary](dictionaries.md) object by name.
@@ -16405,7 +16368,7 @@ These properties trigger the recreate pipeline (DETACH source → CREATE new →
 | PARTITION BY change | CRITICAL |
 | SAMPLE BY change | INFO |
 | Object type change (`table` ↔ `materialized_view`) | CRITICAL |
-| MV target (`ch_to_table`) change | CRITICAL |
+| MV target (`to`) change | CRITICAL |
 | Column type change (incompatible) | CRITICAL |
 | LowCardinality / Nullable wrapper change | CRITICAL |
 
@@ -16414,11 +16377,11 @@ These properties trigger the recreate pipeline (DETACH source → CREATE new →
 ```python
 # Source column type change triggers MV recreate
 # Current: amount is Float64
-class Meta(CHTableMeta):
-    ch = ch_table(
+class Meta(CHViewMeta):
+    ch = materialized_view(
         engine=merge_tree(),
         order_by="date",
-        ch_select="SELECT date, agg.sumState(amount) AS state FROM events GROUP BY date",
+        select="SELECT date, sumState(amount) AS state FROM events GROUP BY date",
     )
 
 # If amount changes to Float32, the AggregateFunction signature changes:
@@ -16851,7 +16814,7 @@ class KafkaEvents(Base):
         ch = ch_table(
             engine=kafka(
                 named_collection="kafka_prod",
-                topic="raw_events",
+                topic_list="raw_events",
                 format="JSONEachRow",
                 group_name="dbwarden",
             ),
@@ -16892,8 +16855,8 @@ class Analytics(DbwardenDatabase):
     ch_users = [
         ChUserSpec(
             name="bob",
-            named_collection="ldap_auth",
-            default_role="analyst",
+            auth="ldap BY 'ldap.example.com'",
+            default_roles=("analyst",),
         ),
     ]
     ch_grants = [
@@ -17396,7 +17359,7 @@ Engine usage:
 ```python
 engine = kafka(
     named_collection="kafka_secure",
-    topic="events",
+    topic_list="events",
     format="Avro",
     group_name="dbwarden",
 )
@@ -17426,7 +17389,7 @@ database_config(
 ```python
 engine = kafka(
     named_collection="kafka_prod",
-    topic="events",
+    topic_list="events",
 )
 ```
 
@@ -17434,10 +17397,14 @@ The engine gets credentials from the named collection. The named collection is r
 
 ## Reference from RBAC
 
+Users reference server-side authentication configuration (e.g. an LDAP
+server) by name through the `auth` string; the value is declare-only and
+never diffed:
+
 ```python
 ChUserSpec(
-    named_collection="ldap_prod",
-    ...
+    name="alice",
+    auth="ldap BY 'ldap_prod'",
 )
 ```
 
@@ -18086,11 +18053,14 @@ class LogSearch(Base):
 ```python
 # 1. Add projection to model
 # 2. Generate migration (ADD PROJECTION is INFO)
-# 3. Apply migration
-dbwarden migrate -d analytics
+# 3. Apply migration: dbwarden migrate -d analytics
 # 4. Materialize on existing data
 from dbwarden.databases.clickhouse import data_op
-data_op("ALTER TABLE orders MATERIALIZE PROJECTION category_summary")
+
+data_op(
+    name="materialize_category_summary",
+    forward="ALTER TABLE orders MATERIALIZE PROJECTION category_summary",
+)
 ```
 
 ## MATERIALIZE as data operation
@@ -18184,12 +18154,9 @@ No diff beyond name: roles are identifiers.
 ch_users=[
     ChUserSpec(
         name="alice",
-        # Authentication: declare-only via named collection
-        named_collection="ldap_prod",
-        # Or directly (but values are not stored/compared):
-        # identified_by="sha256_password", password="secret"
-        default_role="analyst",
-        settings={"max_memory_usage": 10000000000},
+        # Authentication is declare-only: written at creation, never diffed.
+        auth="sha256_password BY 'secret'",
+        default_roles=("analyst",),
     ),
 ]
 ```
@@ -18198,8 +18165,9 @@ Generated DDL:
 
 ```sql
 CREATE USER IF NOT EXISTS alice
-DEFAULT ROLE analyst
-SETTINGS max_memory_usage = 10000000000;
+IDENTIFIED WITH sha256_password BY 'secret'
+HOST ANY
+DEFAULT ROLE analyst;
 ```
 
 ## Row policies
@@ -18209,7 +18177,8 @@ ch_row_policies=[
     ChRowPolicySpec(
         name="analyst_filter",
         table="events",
-        as_restriction="event_date >= '2024-01-01'",
+        using="event_date >= '2024-01-01'",
+        to_roles=("analyst",),
     ),
 ]
 ```
@@ -18230,7 +18199,9 @@ TO analyst;
 ch_quotas=[
     ChQuotaSpec(
         name="monthly_reads",
-        interval={"month": [1000000, 0, 0]},
+        interval="1 MONTH",
+        limits={"queries": 1000000, "errors": 0, "result rows": 0},
+        to_roles=("analyst",),
     ),
 ]
 ```
@@ -18250,8 +18221,7 @@ TO analyst;
 ch_settings_profiles=[
     ChSettingsProfileSpec(
         name="strict",
-        settings={"max_memory_usage": 10000000000},
-        constraints={"max_memory_usage": "READONLY"},
+        settings={"max_memory_usage": "10000000000"},
     ),
 ]
 ```
@@ -18260,7 +18230,7 @@ Generated DDL:
 
 ```sql
 CREATE SETTINGS PROFILE IF NOT EXISTS strict
-SETTINGS max_memory_usage = 10000000000 CONSTRAINED READONLY;
+SETTINGS max_memory_usage = 10000000000;
 ```
 
 ## Grants
@@ -18291,7 +18261,7 @@ database_config(
     database_type="clickhouse",
     database_url_sync="clickhouse://localhost:9000",
     ch_named_collections=[
-        named_collection("ldap_corp", keys={"ldap_server": "ldap.corp.example.com"}),
+        named_collection("ldap_corp", ldap_server="ldap.corp.example.com"),
     ],
     ch_roles=[
         ChRoleSpec("readonly"),
@@ -18302,40 +18272,36 @@ database_config(
         ChSettingsProfileSpec(
             name="strict_read",
             settings={
-                "max_memory_usage": 5000000000,
-                "max_result_rows": 10000,
-            },
-            constraints={
-                "max_memory_usage": "READONLY",
-                "max_result_rows": "READONLY",
+                "max_memory_usage": "5000000000",
+                "max_result_rows": "10000",
             },
         ),
     ],
     ch_users=[
         ChUserSpec(
             name="alice",
-            named_collection="ldap_corp",
-            default_role="analyst",
+            auth="ldap BY 'ldap.corp.example.com'",
+            default_roles=("analyst",),
             settings_profile="strict_read",
         ),
         ChUserSpec(
             name="bob",
-            identified_by="sha256_password",
-            password="changeme",  # declare-only: not diffed after creation
-            default_role="readonly",
+            auth="sha256_password BY 'changeme'",  # declare-only: not diffed after creation
+            default_roles=("readonly",),
         ),
     ],
     ch_row_policies=[
         ChRowPolicySpec(
             name="analyst_filter",
             table="analytics.events",
-            as_restriction="event_date >= '2024-01-01'",
+            using="event_date >= '2024-01-01'",
         ),
     ],
     ch_quotas=[
         ChQuotaSpec(
             name="monthly_cap",
-            interval={"month": [100000, 0, 0]},
+            interval="1 MONTH",
+            limits={"queries": 100000, "errors": 0, "result rows": 0},
         ),
     ],
     ch_grants=[
@@ -18356,9 +18322,8 @@ database_config(
     ch_roles=[{"name": "analyst"}, {"name": "engineer"}],
     ch_users=[{
         "name": "carol",
-        "identified_by": "sha256_password",
-        "password": "s3cret",
-        "default_role": "engineer",
+        "auth": "sha256_password BY 's3cret'",
+        "default_roles": ("engineer",),
     }],
 )
 ```
@@ -18886,7 +18851,12 @@ from dbwarden_redis import migration_lock
 redis = Redis.from_url("redis://localhost:6379")
 
 async with migration_lock(redis):
-    await run_migration()
+    await run_migration(
+        sql_statements,
+        version="0002",
+        migration_operation="apply",
+        filename="primary__0002_feature.sql",
+    )
 ```
 
 The Redis lock uses `SET NX EX` with a configurable TTL (default 60 seconds). The database lock and Redis lock guard different entry points (CLI vs any wrapped code path) and can be used independently or together. See [dbwarden-redis](https://github.com/dbwarden-org/dbwarden-redis) for full documentation.
@@ -20343,9 +20313,6 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-
-    class Meta(PGTableMeta):
-        id = PGColumnMeta(autoincrement=True)
 ```
 
 To explicitly disable auto-increment:
