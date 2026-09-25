@@ -22,6 +22,67 @@ _IRREVERSIBLE_ROLLBACK_OPS: frozenset[str] = frozenset({
     "declarative_data",
 })
 
+# Markers of a rollback reason that explicitly admits data loss. Reasons
+# without one of these markers (e.g. a row-preserving ClickHouse recreate
+# round-trip caveat) stay verbose-only diagnostics.
+_DATA_LOSS_REASON_MARKERS: frozenset[str] = frozenset({
+    "not their data",
+    "not recoverable",
+    "null values",
+    "data loss",
+    "lose data",
+    "loses data",
+})
+
+
+def _rollback_data_loss_message(
+    op_type: str,
+    target: str,
+    column: str | None,
+    rollback_kind: str,
+    rollback_reason: str | None,
+) -> str | None:
+    """Build an operator-facing warning when a rollback cannot restore data.
+
+    Returns None when the rollback fully restores state. Native drop_column
+    rollbacks recreate the column without its values, and some conditional
+    rollbacks carry a computed reason that admits data loss (e.g. SQLite
+    rebuilds: "restores the columns but not their data").
+    """
+    if rollback_kind == "real" and op_type == "drop_column":
+        qualified = f"{target}.{column}" if column else target
+        return (
+            f"drop_column {qualified}: rollback restores the column with NULL values; "
+            "row data is not recoverable"
+        )
+    if (
+        rollback_kind == "conditional"
+        and rollback_reason
+        and any(marker in rollback_reason.lower() for marker in _DATA_LOSS_REASON_MARKERS)
+    ):
+        return f"{op_type} {target}: {rollback_reason}"
+    return None
+
+
+def collect_rollback_warnings(pairs: list[tuple[dict[str, Any], "MigrationStatement"]]) -> list[str]:
+    """Collect data-loss rollback warnings from (op, statement) pairs.
+
+    Mirrors the warnings emitted at generation time so plan artifacts can
+    carry the same consequences for pre-apply inspection.
+    """
+    warnings: list[str] = []
+    for op, stmt in pairs:
+        message = _rollback_data_loss_message(
+            op["type"],
+            str(op.get("table") or op.get("name") or ""),
+            op.get("column") if isinstance(op.get("column"), str) else None,
+            stmt.rollback_kind,
+            stmt.rollback_reason,
+        )
+        if message:
+            warnings.append(message)
+    return warnings
+
 
 def _rollback_kind_from_sql(rollback_sql: str) -> str | None:
     sql = rollback_sql.strip().lower()
@@ -304,7 +365,7 @@ def snapshot_diff_to_sql(
     changes: list[Any] = []
     logger = get_logger(debug_level=logging.getLogger("dbwarden").level)
 
-    def _warn_about_rollback(stmt: MigrationStatement, op_type: str, target: str) -> str:
+    def _warn_about_rollback(stmt: MigrationStatement, op_type: str, target: str, column: str | None = None) -> str:
         inferred = _rollback_kind_from_sql(stmt.rollback_sql)
         rollback_kind = stmt.rollback_kind
         if rollback_kind == "real" and inferred:
@@ -323,6 +384,9 @@ def snapshot_diff_to_sql(
             logger.warning(
                 f"{rollback_kind.title()} rollback for {op_type} on {target}: {reason}"
             )
+        data_loss = _rollback_data_loss_message(op_type, target, column, rollback_kind, stmt.rollback_reason)
+        if data_loss:
+            logger.warning(data_loss)
         return rollback_kind
 
     if not concurrent:
@@ -386,7 +450,12 @@ def snapshot_diff_to_sql(
                     stmt.rollback_kind = "irreversible"
                     stmt.rollback_reason = stmt.rollback_reason or op.get("rollback_reason")
             for stmt in emitted:
-                rollback_kind = _warn_about_rollback(stmt, _ot, str(_table))
+                rollback_kind = _warn_about_rollback(
+                    stmt,
+                    _ot,
+                    str(_table),
+                    column=op.get("column") if _ot == "drop_column" else None,
+                )
                 _enforce_rollback_contract(
                     stmt,
                     _ot,
