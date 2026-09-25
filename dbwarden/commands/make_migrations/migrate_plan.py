@@ -27,6 +27,7 @@ def build_migration_plan(
     typed_ops: list[dict] | None = None,
     content: str | None = None,
     backend: str = "",
+    rollback_warnings: list[str] | None = None,
 ) -> dict[str, object]:
     operations = [_build_plan_operation(change) for change in changes]
     checksum = calculate_checksum([upgrade_sql]) if upgrade_sql.strip() else calculate_checksum([])
@@ -51,6 +52,8 @@ def build_migration_plan(
         "required_flags": required_flags(typed_ops if typed_ops is not None else operations, backend),
         "checksum": checksum,
     }
+    if rollback_warnings:
+        plan["rollback_warnings"] = list(rollback_warnings)
     if content is not None:
         bind_plan(plan, content, typed_ops if typed_ops is not None else operations, backend)
     return plan

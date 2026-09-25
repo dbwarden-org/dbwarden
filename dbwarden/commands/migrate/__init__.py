@@ -906,6 +906,17 @@ def migrate_single(
                                 "hint: resolve the reported errors"
                             )
 
+            # Surface data-loss rollback warnings recorded in trusted plans
+            # (e.g. drop_column restores NULL values on rollback) so operators
+            # see the consequence before applying, not only after rolling back.
+            from dbwarden.engine.safety.plans import read_trusted_plan
+
+            for version, filepath in filepaths_by_version.items():
+                plan, _ = read_trusted_plan(filepath)
+                if plan:
+                    for rollback_warning in plan.get("rollback_warnings", []):
+                        warning(f"{version}: {rollback_warning}")
+
         from dbwarden.engine.checksum import calculate_checksum
 
         # Build pending migrations list for hooks
