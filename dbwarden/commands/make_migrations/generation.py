@@ -508,7 +508,12 @@ def generate_files(
             content += f"-- upgrade\n\n{upgrade}\n\n-- rollback\n\n{rollback}\n"
             plan["content_hash"] = content_hash(content, project_root=migrations_dir)
             artifact["content"] = content
-            artifact["frozen"] = render_frozen(data_spec, Path(filename).stem)
+            artifact["frozen"] = render_frozen(
+                data_spec,
+                Path(filename).stem,
+                execution=execution,
+                project_root=migrations_dir,
+            )
             plan["data_bundle"] = build_manifest(content, plan, artifact["frozen"])
         artifacts.append(artifact)
     if state is not None and target is not None and state != schema_state(target):

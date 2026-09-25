@@ -159,6 +159,28 @@ def content_hash(content: str, *, project_root: str | Path | None = None) -> str
     return _keyed_hash(key, content)
 
 
+def keyed_hash(key: bytes, content: str) -> str:
+    """HMAC-SHA256 integrity hash for auxiliary artifacts (frozen seals)."""
+    return _keyed_hash(key, content)
+
+
+def resolve_verify_key(plan_path: str | Path) -> tuple[bytes | None, str]:
+    """Resolve the plan verification key for an on-disk artifact location."""
+    return _resolve_verify_key(Path(plan_path))
+
+
+def seal_value(value: Any, *, project_root: str | Path | None = None) -> str:
+    """HMAC-SHA256 seal over the canonical JSON form of ``value``.
+
+    Used to integrity-bind auxiliary artifacts (the frozen record's copy of
+    ``data_execution``) with the same project key as plan content hashes.
+    """
+    from dbwarden.data.ir import canonical_bytes
+
+    key = _resolve_bind_key(project_root)
+    return _keyed_hash(key, canonical_bytes(value).decode("utf-8"))
+
+
 def severity_metadata(
     ops: list[dict[str, Any]], backend: str, provenance: str = "generated"
 ) -> dict:
