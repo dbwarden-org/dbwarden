@@ -49,3 +49,27 @@ def test_generated_never_overwritten(tmp_path):
     before = plan_path.read_bytes()
     assert classify_file(path, "sqlite")[0] == "UNKNOWN"
     assert plan_path.read_bytes() == before
+
+
+def test_deeply_nested_expression_fails_closed_without_crash(tmp_path):
+    """Finding 4: ~50+ nested parens overflow sqlglot's recursive descent with
+    a RecursionError (not a SqlglotError). Classification must report UNKNOWN
+    with a parser-failure reason and never write a plan, so
+    `check --write-plan --all` reports the file unresolved (exit 4) instead of
+    crashing with a traceback."""
+    from dbwarden.engine.safety.static import classify_sql
+
+    deep = "SELECT " + "(" * 120 + "1" + ")" * 120 + ";"
+    path = tmp_path / "primary__0001_deep.sql"
+    path.write_text(f"-- upgrade\n{deep}\n-- rollback\nSELECT 1;\n", encoding="utf-8")
+    try:
+        classify_sql(path.read_text(encoding="utf-8"), "postgresql")
+    except ValueError as exc:
+        assert "parser failure" in str(exc)
+    else:  # pragma: no cover - a parser that copes classifies instead
+        pass
+    level, reason = classify_file(path, "postgresql")
+    assert level == "UNKNOWN"
+    assert "parser failure" in reason
+    assert not path.with_suffix(".plan.json").exists()
+    assert file_severity(path)[0] == "UNKNOWN"
