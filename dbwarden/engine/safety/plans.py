@@ -341,8 +341,19 @@ def read_trusted_plan(path: str | Path) -> tuple[dict | None, str]:
         if "data_spec" in plan or "-- dbwarden: data-bundle" in content.splitlines():
             from dbwarden.data.artifacts import verify_bundle
             from dbwarden.data.ir import validate_spec
-            verify_bundle(path, plan)
-            validate_spec(plan["data_spec"])
+
+            try:
+                verify_bundle(path, plan)
+                validate_spec(plan["data_spec"])
+            except (ValueError, TypeError) as exc:
+                # Propagate the specific tamper reason (checksum mismatch:
+                # <which artifact>) instead of flattening it to the generic
+                # "malformed plan", so operators see what was tampered with.
+                return None, str(exc) or "malformed plan"
+            if not isinstance(plan.get("data_execution"), dict):
+                # Missing data_execution must hit the designed guard here,
+                # not a bare KeyError deep in the run path (finding 6).
+                return None, "Data plan requires data_execution and canonical data_spec"
         return plan, ""
     except FileNotFoundError:
         return None, MISSING_PLAN_REASON
