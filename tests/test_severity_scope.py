@@ -10,6 +10,7 @@ from dbwarden.engine.safety.plans import bind_plan
 from dbwarden.engine.safety.scope import (
     DeferredStop,
     filter_repeatables,
+    report_stop,
     severity_prefix,
 )
 
@@ -34,6 +35,19 @@ def test_repeatable_skip_is_per_run(tmp_path):
     path = migration(tmp_path, "RA", "set_not_null")
     assert filter_repeatables([path], "INFO", "primary") == []
     assert filter_repeatables([path], "WARN", "primary") == [path]
+
+
+def test_report_stop_tolerates_deleted_deferred_file(tmp_path, capsys):
+    """A deferred file deleted between the severity scan and the stop report
+    (concurrent edit) must not crash the report."""
+    path = migration(tmp_path, "0001", "set_not_null")
+    _allowed, stop = severity_prefix({"0001": path}, "INFO")
+    assert stop is not None
+    from pathlib import Path
+
+    Path(path).unlink()
+    report_stop(stop, "primary")  # completes without raising
+    assert "Stopped" in capsys.readouterr().out
 
 
 def test_all_continues_after_deferred_stop_and_errors_win():
