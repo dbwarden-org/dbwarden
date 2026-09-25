@@ -86,7 +86,10 @@ def _status_payload(database: str | None = None) -> dict:
         else:
             entry["state"] = "pending"
         if entry["state"] == "deferred" or "__deferred" in Path(path).stem:
-            age = max(0, time.time() - Path(path).stat().st_mtime)
+            try:
+                age = max(0, time.time() - Path(path).stat().st_mtime)
+            except OSError:
+                continue
             entry["deferred_age_seconds"] = age
             set_deferred_age(db_name, entry["version"], age)
     payload["summary"]["pending"] = sum(e["status"] == "pending" for e in payload["migrations"])
