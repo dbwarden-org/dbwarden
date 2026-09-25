@@ -4804,7 +4804,7 @@ PAGE: https://docs.dbwarden.org/commands/migrate/
 
 Apply pending migrations.
 
-`--max-severity INFO` applies a strict prefix and exits **3** before the first higher-severity or UNKNOWN file. Later files and repeatables do not execute. Default CRITICAL admits every level, including UNKNOWN, subject to existing preflight checks. `--force` acknowledges risks independently of this ceiling. Dry runs report the stop and return 0; baseline records metadata without SQL. See [Safety-scoped migrations](../correctness/safety-scoped-migrations.md).
+`--max-severity INFO` applies a strict prefix and exits **3** before the first higher-severity or UNKNOWN file. Later files and repeatables do not execute. UNKNOWN files stop under every ceiling, including the default CRITICAL; only a file with no plan at all passes the default ceiling, governed by the missing_plan preflight policy. `--force` acknowledges risks independently of this ceiling. Dry runs report the stop and return 0; baseline records metadata without SQL. See [Safety-scoped migrations](../correctness/safety-scoped-migrations.md).
 
 ## Usage
 
