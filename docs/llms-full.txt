@@ -2111,6 +2111,14 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 
 ### Fixed
 
+- **Plan provenance is anchored and keyed.** Trusted plans require their typed-operations anchor, and content hashes are HMAC-SHA256 keyed by a project-local `.dbwarden/plan.secret` — fabricated or recomputed plan files are rejected instead of authorizing severity ceilings. Legacy unkeyed plans fail closed with a regenerate hint.
+- **Frozen data bundles seal their execution steps.** `data_execution` is integrity-bound into the frozen artifact; tampered batch rows with a recomputed manifest are refused before any write. Bundles generated before the seal need one regeneration.
+- **UNKNOWN severity exceeds every ceiling, including the CRITICAL default.** Plan-less files keep their `missing_plan` policy behavior; explicitly-UNKNOWN files now stop with exit 3 under any ceiling.
+- **Model discovery extracts `__table_args__` constraints.** Table-level `UniqueConstraint`/`CheckConstraint` (named or unnamed) now reach model state, diffs, and CREATE TABLE output on every backend; previously SQLite rebuilds silently dropped them.
+- **SQLite rebuilds absorb companion column operations.** A type change combined with add/drop column no longer leaves a stray op that breaks the rollback with `duplicate column name`.
+- **Data-losing rollbacks are announced.** Dropping a column (or a rebuild that drops one) warns at generation time, records `rollback_warnings` in the plan artifact, and prints pre-apply — rollback restores schema with NULL values, not row data.
+- **The static classifier fails closed on parser recursion** and the docs checker returns exit 4 instead of crashing on deeply nested input.
+- **Deferred-file races no longer crash.** Deleted deferred files are tolerated by stop reports and status age metrics; missing `data_execution` raises the designed guard instead of a bare `KeyError`; tamper reasons propagate with specifics instead of "malformed plan".
 - **Offline safe type changes accept SQLAlchemy's non-key `autoincrement="auto"`.**
 - **PostgreSQL diffs no longer emit ClickHouse SQL from cached column type metadata.**
 - **Type-change `--plan` output remains valid JSON.**
