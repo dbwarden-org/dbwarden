@@ -399,6 +399,49 @@ class TestCollapse:
         )
         assert [op["type"] for op in upgrade] == ["alter_column_type"]
 
+    def test_companion_column_ops_are_absorbed_into_the_rebuild(self):
+        """A rebuild renders the table's full shape; a kept add/drop column op
+        next to it is redundant in the upgrade direction and breaks the
+        rollback direction, where statements run in reverse order (the op is
+        applied a second time, after the rebuild)."""
+        from_entries = snapshot_state_entries(self.SNAPSHOT)
+        to_entries = model_state_entries([
+            _table(columns=[
+                _col("id", "INTEGER", pk=True, nullable=False),
+                _col("age", "INTEGER"),
+                _col("email", "VARCHAR"),
+            ])
+        ])
+        upgrade, rollback = collapse_sqlite_ops(
+            [
+                {"type": "alter_column_type", "table": "users", "column": "age"},
+                {"type": "add_column", "table": "users", "column": "email"},
+            ],
+            [
+                {"type": "alter_column_type", "table": "users", "column": "age"},
+                {"type": "drop_column", "table": "users", "column": "email"},
+            ],
+            from_entries=from_entries, to_entries=to_entries,
+        )
+        assert [op["type"] for op in upgrade] == ["recreate_sq_table"]
+        assert [op["type"] for op in rollback] == ["recreate_sq_table"]
+
+    def test_column_ops_without_a_rebuild_are_left_alone(self):
+        from_entries = snapshot_state_entries(self.SNAPSHOT)
+        to_entries = model_state_entries([
+            _table(columns=[
+                _col("id", "INTEGER", pk=True, nullable=False),
+                _col("age", "INTEGER"),
+                _col("email", "VARCHAR"),
+            ])
+        ])
+        upgrade, _ = collapse_sqlite_ops(
+            [{"type": "add_column", "table": "users", "column": "email"}],
+            [],
+            from_entries=from_entries, to_entries=to_entries,
+        )
+        assert [op["type"] for op in upgrade] == ["add_column"]
+
 
 class TestSqTableHandler:
     def test_table_option_change_is_detected(self):
