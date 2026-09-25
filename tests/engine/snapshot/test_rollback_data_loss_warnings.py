@@ -8,6 +8,7 @@ CRITICAL severity signal at apply time.
 """
 
 import logging
+import re
 from types import SimpleNamespace
 
 from dbwarden.engine.core.models import ModelColumn, ModelTable
@@ -180,3 +181,134 @@ def test_collect_rollback_warnings_skips_rollbacks_that_restore_data():
         ({"type": "refresh_matview", "table": "mv"}, irreversible),
         ({"type": "add_column", "table": "users", "column": "phone_number"}, real_add_column),
     ]) == []
+
+
+def test_build_migration_plan_records_rollback_warnings():
+    from dbwarden.commands.make_migrations.migrate_plan import build_migration_plan
+
+    plan = build_migration_plan(
+        migration_id="primary__0001_test",
+        changes=[],
+        upgrade_sql="-- upgrade\nALTER TABLE users DROP COLUMN phone_number;\n",
+        rollback_warnings=[DATA_LOSS_MESSAGE],
+    )
+
+    assert plan["rollback_warnings"] == [DATA_LOSS_MESSAGE]
+
+
+def test_build_migration_plan_omits_rollback_warnings_when_empty():
+    from dbwarden.commands.make_migrations.migrate_plan import build_migration_plan
+
+    without_carrier = build_migration_plan(
+        migration_id="primary__0001_test",
+        changes=[],
+        upgrade_sql="-- upgrade\nCREATE TABLE users (id INTEGER);\n",
+    )
+    assert "rollback_warnings" not in without_carrier
+
+    with_empty_carrier = build_migration_plan(
+        migration_id="primary__0001_test",
+        changes=[],
+        upgrade_sql="-- upgrade\nCREATE TABLE users (id INTEGER);\n",
+        rollback_warnings=[],
+    )
+    assert "rollback_warnings" not in with_empty_carrier
+
+
+def test_generate_files_records_rollback_warnings_in_plan(monkeypatch, tmp_path):
+    from dbwarden.commands.make_migrations.generation import generate_files
+
+    _use_sqlite_config(monkeypatch)
+    migrations_dir = tmp_path / "migrations"
+    migrations_dir.mkdir()
+    upgrade_ops, rollback_ops = diff_models_against_snapshot(
+        [_sqlite_users_model()], _sqlite_snapshot_with_email(), db_name=None,
+    )
+
+    artifacts = generate_files(
+        upgrade_ops,
+        rollback_ops,
+        migrations_dir=str(migrations_dir),
+        database=None,
+        db_name=None,
+        write=False,
+    )
+
+    plan = artifacts[0]["plan"]
+    assert plan["rollback_warnings"] == [
+        "recreate_sq_table users: rebuild of 'users' drops column(s) email; "
+        "the rollback restores the columns but not their data"
+    ]
+
+
+def test_generate_files_records_native_drop_column_warning_in_plan(monkeypatch, tmp_path):
+    from dbwarden.commands.make_migrations.generation import generate_files
+
+    _use_sqlite_config(monkeypatch)
+    migrations_dir = tmp_path / "migrations"
+    migrations_dir.mkdir()
+    # Dropping a non-indexed column is expressed as a native DROP COLUMN.
+    upgrade_ops, rollback_ops = diff_models_against_snapshot(
+        [
+            ModelTable(
+                name="users",
+                columns=[
+                    _sqlite_col("id", "INTEGER", nullable=False, pk=True),
+                    _sqlite_col("email", "VARCHAR(255)"),
+                ],
+                indexes=[{"name": "ix_users_email", "columns": ["email"], "unique": False}],
+            )
+        ],
+        _sqlite_snapshot_with_email(),
+        db_name=None,
+    )
+    assert [op["type"] for op in upgrade_ops] == ["drop_column"]
+
+    artifacts = generate_files(
+        upgrade_ops,
+        rollback_ops,
+        migrations_dir=str(migrations_dir),
+        database=None,
+        db_name=None,
+        write=False,
+    )
+
+    plan = artifacts[0]["plan"]
+    assert plan["rollback_warnings"] == [
+        "drop_column users.age: rollback restores the column with NULL values; "
+        "row data is not recoverable"
+    ]
+
+
+def test_migrate_prints_rollback_warnings_from_trusted_plan(tmp_path, monkeypatch, capsys):
+    import json as _json
+
+    from dbwarden.commands.migrate import migrate_cmd
+    from dbwarden.config import set_dev_mode
+    from dbwarden.engine.safety.plans import bind_plan
+
+    set_dev_mode(False)
+    monkeypatch.chdir(tmp_path)
+    db = tmp_path / "app.db"
+    (tmp_path / "dbwarden.py").write_text(
+        "from dbwarden import database_config\n"
+        f"database_config(database_name='primary', default=True, database_type='sqlite', database_url_sync={('sqlite:///' + db.as_posix())!r})\n",
+        encoding="utf-8",
+    )
+    directory = tmp_path / "migrations" / "primary"
+    directory.mkdir(parents=True)
+    path = directory / "primary__0001_base.sql"
+    content = "-- upgrade\nCREATE TABLE items (id INTEGER PRIMARY KEY);\n-- rollback\nDROP TABLE items;\n"
+    path.write_text(content, encoding="utf-8")
+    plan = bind_plan({}, content, [{"type": "create_table"}], "sqlite")
+    plan["rollback_warnings"] = [DATA_LOSS_MESSAGE]
+    path.with_suffix(".plan.json").write_text(_json.dumps(plan), encoding="utf-8")
+
+    try:
+        migrate_cmd(database="primary", dry_run=True)
+
+        clean = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", capsys.readouterr().out)
+        assert f"0001: {DATA_LOSS_MESSAGE}" in clean
+    finally:
+        from dbwarden.connection.connection import dispose_engine
+        dispose_engine("sqlite:///" + db.as_posix(), "sqlite")

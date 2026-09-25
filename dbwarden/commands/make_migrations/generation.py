@@ -21,7 +21,7 @@ from dbwarden.engine.safety.classifiers import (
 )
 from dbwarden.engine.safety.partition import group_operations
 from dbwarden.engine.safety.plans import bind_plan
-from dbwarden.engine.snapshot.sql_gen import snapshot_diff_to_sql
+from dbwarden.engine.snapshot.sql_gen import collect_rollback_warnings, snapshot_diff_to_sql
 from dbwarden.engine.version import (
     generate_migration_filename,
     generate_repeatable_filename,
@@ -367,7 +367,14 @@ def generate_files(
         statements = [stmt for op, stmt in ordered if op["id"] in ids]
         upgrade, rollback = _assemble_migration(statements)
         typed = _json_value(ops)
-        plan: dict[str, Any] = build_migration_plan(Path(filename).stem, [], upgrade)
+        plan: dict[str, Any] = build_migration_plan(
+            Path(filename).stem,
+            [],
+            upgrade,
+            rollback_warnings=collect_rollback_warnings(
+                [(op, stmt) for op, stmt in ordered if op["id"] in ids]
+            ),
+        )
         plan["operations"] = [
             dict(op, severity=LEGACY_SEVERITY[classify_operation(op, backend)])
             for op in typed
