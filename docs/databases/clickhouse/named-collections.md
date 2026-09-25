@@ -77,7 +77,7 @@ Engine usage:
 ```python
 engine = kafka(
     named_collection="kafka_secure",
-    topic="events",
+    topic_list="events",
     format="Avro",
     group_name="dbwarden",
 )
@@ -107,7 +107,7 @@ database_config(
 ```python
 engine = kafka(
     named_collection="kafka_prod",
-    topic="events",
+    topic_list="events",
 )
 ```
 
@@ -115,10 +115,14 @@ The engine gets credentials from the named collection. The named collection is r
 
 ## Reference from RBAC
 
+Users reference server-side authentication configuration (e.g. an LDAP
+server) by name through the `auth` string; the value is declare-only and
+never diffed:
+
 ```python
 ChUserSpec(
-    named_collection="ldap_prod",
-    ...
+    name="alice",
+    auth="ldap BY 'ldap_prod'",
 )
 ```
 
