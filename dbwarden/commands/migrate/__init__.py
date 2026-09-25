@@ -780,10 +780,36 @@ def migrate_single(
             recorded = {record.filename for record in get_migration_records(db_name)}
             filepaths_by_version = {version: path for version, path in filepaths_by_version.items() if Path(path).name not in recorded and path not in recorded}
 
+        if filepaths_by_version:
+            # Validate frozen data bundles before severity filtering can drop
+            # untrusted files from the batch: a tampered bundle must abort the
+            # migration through preflight with its specific reason, not defer
+            # silently under an UNKNOWN severity ceiling stop.
+            from dbwarden.data.integration import load_data_plan
+
+            bundle_errors = []
+            for version, filepath in filepaths_by_version.items():
+                try:
+                    load_data_plan(filepath)
+                except (ValueError, OSError, TypeError) as exc:
+                    bundle_errors.append(
+                        f"{version}: invalid frozen data bundle: {exc}"
+                    )
+            for message in bundle_errors:
+                error(message)
+            if bundle_errors:
+                if dry_run:
+                    warning("Preflight checks would abort this migration.")
+                else:
+                    raise RuntimeError(
+                        "Migration aborted by preflight checks. hint: resolve the reported errors"
+                    )
+
+        pending_filepaths = dict(filepaths_by_version)
         filepaths_by_version, deferred_stop = severity_prefix(filepaths_by_version, ceiling)
 
         if data:
-            _preview_frozen_data(filepaths_by_version.values(), db_name)
+            _preview_frozen_data(pending_filepaths.values(), db_name)
 
         runs_always_filepaths = get_runs_always_filepaths(migrations_dir)
         runs_on_change_filepaths = get_runs_on_change_filepaths(
@@ -1291,17 +1317,22 @@ def migrate_cmd(
 
 
 def _preview_frozen_data(filepaths, database: str | None) -> None:
-    """Read and verify frozen bundles before reporting data dry-run details."""
+    """Read and verify frozen bundles before reporting data dry-run details.
+
+    Bundles that fail verification are omitted from the preview; after
+    reporting, the first load error is raised so ``migrate --dry-run --data``
+    refuses tampered bundles instead of silently printing an empty preview.
+    """
     import json
     from pathlib import Path
 
     from dbwarden.commands.data import dry_run_data_plan
-    from dbwarden.engine.safety.plans import read_trusted_plan
-    from dbwarden.data.artifacts import verify_bundle
+    from dbwarden.data.integration import load_data_plan
     from dbwarden.merge.marker import is_superseded
     from dbwarden.output import info
 
     bundles = []
+    errors = []
     from dbwarden.config import get_database
     from dbwarden.connection.connection import get_db_connection
     from sqlalchemy.engine import make_url
@@ -1313,12 +1344,13 @@ def _preview_frozen_data(filepaths, database: str | None) -> None:
     for path in sorted(map(Path, filepaths)):
         if is_superseded(path):
             continue
-        plan, reason = read_trusted_plan(path)
+        try:
+            plan = load_data_plan(path, database)
+        except (ValueError, OSError, TypeError) as exc:
+            errors.append(exc)
+            continue
         if plan is None:
             continue
-        if not isinstance(plan.get("data_bundle"), dict):
-            continue
-        verify_bundle(path, plan)
         try:
             if not available:
                 raise ValueError("Read-only probes require an existing database; no database file was created")
@@ -1332,10 +1364,12 @@ def _preview_frozen_data(filepaths, database: str | None) -> None:
         bundles.append({"migration": path.name, **preview})
     if not bundles:
         info("Data dry-run: no verified frozen data bundles found.")
-        return
-    info("Data dry-run: verified frozen bundles; no data writes executed.")
-    for bundle in bundles:
-        info(json.dumps(bundle, sort_keys=True, default=str))
+    else:
+        info("Data dry-run: verified frozen bundles; no data writes executed.")
+        for bundle in bundles:
+            info(json.dumps(bundle, sort_keys=True, default=str))
+    if errors:
+        raise errors[0]
 
 
 def _get_filepaths_by_version(

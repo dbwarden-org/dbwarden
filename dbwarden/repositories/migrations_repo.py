@@ -203,6 +203,13 @@ def run_migration(
 
         def run_data(conn):
             _set_lock_timeout(conn, db_name)
+            if not isinstance(data_plan.get("data_execution"), dict):
+                # Designed guard (finding 6): a trusted data plan always
+                # carries data_execution; fail with the actionable message
+                # instead of a bare KeyError on the progress total.
+                raise TypeError(
+                    "Data plan requires data_execution and canonical data_spec"
+                )
             completed = 0
             total = sum(len(step.get("sql", [])) for step in data_plan["data_execution"][migration_operation])
 
