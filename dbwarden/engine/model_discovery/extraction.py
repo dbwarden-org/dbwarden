@@ -4,6 +4,8 @@ import enum as _enum
 import logging
 from typing import Any, Optional
 
+from sqlalchemy import CheckConstraint, UniqueConstraint
+
 from dbwarden.config import get_database, is_strict_translation
 from dbwarden.engine.backends.mysql.render import (
     append_mysql_column_attrs as _append_mysql_column_attrs,
@@ -269,10 +271,71 @@ def extract_table_from_model(
             if pg_grants is None:
                 pg_grants = list(dw_meta.table_attrs.get("pg_grants", [])) or None
 
+        # Table-level constraints declared via __table_args__ (UniqueConstraint,
+        # CheckConstraint) live on Table.constraints; they are not mirrored into
+        # any Meta, so without this pass they silently vanished from model
+        # state, diffs and CREATE TABLE output. Sorted by creation order:
+        # Table.constraints is a set, and exported state must be deterministic.
+        # Views carry no table constraints - the Meta branch above cleared them.
+        if object_type == "table":
+            table_obj = model_class.__table__
+            sa_columns = {c.name: c for c in table_obj.columns}
+            # Meta-declared uniques were collected above; they are the
+            # authoritative spec for their columns, subsuming a unique=True
+            # flag on the same column (the historical behavior).
+            meta_uniques = list(uniques)
+            for constraint in sorted(
+                table_obj.constraints,
+                key=lambda c: getattr(c, "_creation_order", 0),
+            ):
+                if isinstance(constraint, UniqueConstraint):
+                    constraint_columns = [c.name for c in constraint.columns]
+                    if not constraint_columns:
+                        continue
+                    if (
+                        len(constraint_columns) == 1
+                        and constraint.name is None
+                        and getattr(sa_columns.get(constraint_columns[0]), "unique", False)
+                        and any(constraint_columns[0] in u.get("columns", []) for u in meta_uniques)
+                    ):
+                        # unique=True created this unnamed constraint and a
+                        # Meta-declared unique already covers the column, so
+                        # the flag and the spec would surface as two
+                        # constraints on the same column. A table-level
+                        # UniqueConstraint on the column is a distinct object
+                        # and is kept as declared.
+                        continue
+                    unique_entry: dict[str, Any] = {
+                        "columns": constraint_columns,
+                        "deferrable": bool(constraint.deferrable),
+                        "initially_deferred": str(constraint.initially or "").upper() == "DEFERRED",
+                    }
+                    if constraint.name:
+                        unique_entry["name"] = constraint.name
+                    pg_dialect = constraint.dialect_options.get("postgresql", {})
+                    if pg_dialect.get("nulls_not_distinct"):
+                        unique_entry["nulls_not_distinct"] = True
+                    if pg_dialect.get("include"):
+                        unique_entry["include"] = list(pg_dialect["include"])
+                    uniques.append(unique_entry)
+                elif isinstance(constraint, CheckConstraint):
+                    check_entry: dict[str, Any] = {
+                        "expression": str(constraint.sqltext),
+                    }
+                    if constraint.name:
+                        check_entry["name"] = constraint.name
+                    checks.append(check_entry)
+
         # A column-level unique=True is a unique constraint whether or not the
         # model declares a class Meta. Reading it only inside the Meta branch
         # left the constraint out of the model, so a diff against a database
         # that has it emitted a DROP.
+        #
+        # unique=True also surfaces as an (unnamed) UniqueConstraint on
+        # Table.constraints, which the table-constraints pass above has already
+        # collected; the membership test below keeps that exact constraint
+        # object from being added a second time. A table-level UniqueConstraint
+        # on the same column is a distinct object and is kept as declared.
         for column in model_class.__table__.columns:
             if getattr(column, "unique", False):
                 col_name = column.name

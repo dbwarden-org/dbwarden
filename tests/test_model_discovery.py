@@ -149,6 +149,208 @@ class User(Base):
         assert "pg_storage" not in table.columns[1].pg_meta
 
 
+class TestTableConstraintExtraction:
+    """__table_args__ UniqueConstraint/CheckConstraint reach ModelTable.
+
+    Table-level constraints live on SQLAlchemy's Table.constraints; they are
+    not mirrored into any dbwarden Meta. A model that declared them used to
+    lose them from export-models state, diffs and CREATE TABLE output.
+    """
+
+    @staticmethod
+    def _make_model(*table_args):
+        from sqlalchemy import CheckConstraint, Column, Integer, String, UniqueConstraint
+        from sqlalchemy.orm import DeclarativeBase
+
+        class Base(DeclarativeBase):
+            pass
+
+        class User(Base):
+            __tablename__ = "users"
+            __table_args__ = table_args
+
+            id = Column(Integer, primary_key=True)
+            email = Column(String(255), nullable=False)
+            age = Column(Integer)
+
+        return User
+
+    def test_named_table_args_constraints_are_extracted(self, monkeypatch):
+        from sqlalchemy import CheckConstraint, UniqueConstraint
+
+        monkeypatch.setattr(model_discovery.type_mapping, "_get_backend_name", lambda db_name=None: "postgresql")
+        User = self._make_model(
+            UniqueConstraint("email", name="uq_users_email"),
+            CheckConstraint("age >= 0", name="ck_users_age"),
+        )
+
+        table = extract_table_from_model(User, db_name="primary")
+
+        assert table is not None
+        assert {
+            "columns": ["email"],
+            "name": "uq_users_email",
+            "deferrable": False,
+            "initially_deferred": False,
+        } in table.uniques
+        assert {"name": "ck_users_age", "expression": "age >= 0"} in table.checks
+
+    def test_unnamed_constraints_keep_name_none(self, monkeypatch):
+        from sqlalchemy import CheckConstraint, UniqueConstraint
+
+        monkeypatch.setattr(model_discovery.type_mapping, "_get_backend_name", lambda db_name=None: "postgresql")
+        User = self._make_model(
+            UniqueConstraint("email"),
+            CheckConstraint("age >= 0"),
+        )
+
+        table = extract_table_from_model(User, db_name="primary")
+
+        assert table is not None
+        assert {
+            "columns": ["email"],
+            "deferrable": False,
+            "initially_deferred": False,
+        } in table.uniques
+        assert {"expression": "age >= 0"} in table.checks
+
+    def test_column_unique_true_is_not_extracted_twice(self, monkeypatch):
+        from sqlalchemy import Column, Integer, String
+        from sqlalchemy.orm import declarative_base
+
+        monkeypatch.setattr(model_discovery.type_mapping, "_get_backend_name", lambda db_name=None: "postgresql")
+
+        Base = declarative_base()
+
+        class User(Base):
+            __tablename__ = "users"
+            id = Column(Integer, primary_key=True)
+            email = Column(String(255), nullable=False, unique=True)
+
+        table = extract_table_from_model(User, db_name="primary")
+
+        assert table is not None
+        email_uniques = [u for u in table.uniques if u.get("columns") == ["email"]]
+        assert email_uniques == [{
+            "columns": ["email"],
+            "deferrable": False,
+            "initially_deferred": False,
+        }]
+
+    def test_column_unique_true_and_table_constraint_stay_distinct(self, monkeypatch):
+        """unique=True and a table-level UniqueConstraint are distinct
+        SQLAlchemy objects; both survive even on the same column."""
+        from sqlalchemy import Column, Integer, String, UniqueConstraint
+        from sqlalchemy.orm import declarative_base
+
+        monkeypatch.setattr(model_discovery.type_mapping, "_get_backend_name", lambda db_name=None: "postgresql")
+
+        Base = declarative_base()
+
+        class User(Base):
+            __tablename__ = "users"
+            __table_args__ = (UniqueConstraint("email", name="uq_users_email"),)
+            id = Column(Integer, primary_key=True)
+            email = Column(String(255), nullable=False, unique=True)
+
+        table = extract_table_from_model(User, db_name="primary")
+
+        assert table is not None
+        email_uniques = [u for u in table.uniques if u.get("columns") == ["email"]]
+        assert {u.get("name") for u in email_uniques} == {"uq_users_email", None}
+
+    def test_deferrable_and_pg_dialect_options_are_preserved(self, monkeypatch):
+        from sqlalchemy import UniqueConstraint
+
+        monkeypatch.setattr(model_discovery.type_mapping, "_get_backend_name", lambda db_name=None: "postgresql")
+        User = self._make_model(
+            UniqueConstraint(
+                "email", "age", name="uq_users_email_age",
+                deferrable=True, initially="DEFERRED",
+                postgresql_nulls_not_distinct=True,
+                postgresql_include=["id"],
+            ),
+        )
+
+        table = extract_table_from_model(User, db_name="primary")
+
+        assert table is not None
+        assert {
+            "columns": ["email", "age"],
+            "name": "uq_users_email_age",
+            "deferrable": True,
+            "initially_deferred": True,
+            "nulls_not_distinct": True,
+            "include": ["id"],
+        } in table.uniques
+
+    def test_sqlite_create_table_renders_named_constraints(self, monkeypatch):
+        from sqlalchemy import CheckConstraint, UniqueConstraint
+
+        monkeypatch.setattr(model_discovery.type_mapping, "_get_backend_name", lambda db_name=None: "sqlite")
+        User = self._make_model(
+            UniqueConstraint("email", name="uq_users_email"),
+            CheckConstraint("age >= 0", name="ck_users_age"),
+        )
+
+        table = extract_table_from_model(User, db_name="primary")
+
+        assert table is not None
+        from dbwarden.engine.backends.sqlite.sql_build import build_sqlite_create_table_sql
+
+        sql = build_sqlite_create_table_sql(table)
+        assert "CONSTRAINT uq_users_email UNIQUE (email)" in sql
+        assert "CONSTRAINT ck_users_age CHECK (age >= 0)" in sql
+
+    def test_get_all_model_tables_extracts_table_args_constraints(self, tmp_path):
+        from sqlalchemy import CheckConstraint, UniqueConstraint
+
+        model_file = tmp_path / "models.py"
+        model_file.write_text(
+            "from sqlalchemy import Column, Integer, String, UniqueConstraint, CheckConstraint\n"
+            "from sqlalchemy.orm import declarative_base\n"
+            "Base = declarative_base()\n"
+            "class User(Base):\n"
+            "    __tablename__ = 'users'\n"
+            "    __table_args__ = (\n"
+            "        UniqueConstraint('email', name='uq_users_email'),\n"
+            "        CheckConstraint('age >= 0', name='ck_users_age'),\n"
+            "    )\n"
+            "    id = Column(Integer, primary_key=True)\n"
+            "    email = Column(String(255), nullable=False)\n"
+            "    age = Column(Integer)\n"
+        )
+
+        tables = model_discovery.get_all_model_tables([str(model_file)])
+
+        table = next(t for t in tables if t.name == "users")
+        assert {
+            "columns": ["email"],
+            "name": "uq_users_email",
+            "deferrable": False,
+            "initially_deferred": False,
+        } in table.uniques
+        assert {"name": "ck_users_age", "expression": "age >= 0"} in table.checks
+
+    def test_multi_column_unique_constraint_columns_preserved(self, monkeypatch):
+        from sqlalchemy import UniqueConstraint
+
+        monkeypatch.setattr(model_discovery.type_mapping, "_get_backend_name", lambda db_name=None: "postgresql")
+        User = self._make_model(
+            UniqueConstraint("email", "age", name="uq_users_email_age"),
+        )
+
+        table = extract_table_from_model(User, db_name="primary")
+
+        assert table is not None
+        assert {
+            "columns": ["email", "age"],
+            "name": "uq_users_email_age",
+            "deferrable": False,
+            "initially_deferred": False,
+        } in table.uniques
+
+
 class TestModelColumn:
     """Tests for ModelColumn class."""
 
