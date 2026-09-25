@@ -114,6 +114,30 @@ def test_failure_keeps_prefix_and_rollback_removes_only_deferred(project):
         assert connection.execute("SELECT COUNT(*) FROM items").fetchone()[0] == 0
 
 
+def test_unknown_file_stops_at_default_critical_ceiling(project):
+    """A file whose severity resolves to explicit UNKNOWN (tamper-evidenced
+    here) stops under the default CRITICAL ceiling with exit 3; it must not
+    run. Plan-less files are the exception (missing_plan policy)."""
+    from dbwarden.repositories import get_migrated_versions
+
+    path = project.parent / "migrations/primary/primary__0004_tampered.sql"
+    content = "-- upgrade\nCREATE TABLE tampered (id INTEGER);\n-- rollback\nSELECT 1;\n"
+    path.write_text(content, encoding="utf-8")
+    plan = bind_plan({}, content, [{"type": "create_table"}], "sqlite")
+    path.with_suffix(".plan.json").write_text(json.dumps(plan), encoding="utf-8")
+    # Edit after planning: plan no longer matches -> explicit UNKNOWN.
+    path.write_text(content + "-- edited after planning\n", encoding="utf-8")
+
+    with pytest.raises(typer.Exit) as exc:
+        migrate_cmd(database="primary", force=True)  # default ceiling: CRITICAL
+    assert exc.value.exit_code == 3
+    assert get_migrated_versions("primary") == ["0001", "0002", "0003"]
+    with sqlite3.connect(project) as conn:
+        assert not conn.execute(
+            "SELECT name FROM sqlite_master WHERE name='tampered'"
+        ).fetchall()
+
+
 def test_unknown_header_cannot_authorize_and_count_bounds_prefix(project):
     from dbwarden.repositories import get_migrated_versions
 

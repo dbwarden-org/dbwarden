@@ -167,7 +167,12 @@ def severity_level(value: str | Safety, *, allow_unknown: bool = False) -> Safet
 
 def exceeds(severity: str | Safety, ceiling: str | Safety) -> bool:
     cap = severity_level(ceiling)
-    return cap != Safety.CRITICAL and LEVELS.index(Safety(severity)) > LEVELS.index(cap)
+    level = Safety(severity)
+    # UNKNOWN exceeds every ceiling, including CRITICAL: a file whose
+    # severity cannot be established must stop, never run by default.
+    return level == Safety.UNKNOWN or (
+        cap != Safety.CRITICAL and LEVELS.index(level) > LEVELS.index(cap)
+    )
 
 
 def classify_operation(op: dict[str, Any], backend: str = "") -> Safety:

@@ -26,7 +26,9 @@ def test_plan_trust_and_normalization(tmp_path):
     path.write_text(content + "-- edited\n", encoding="utf-8")
     assert file_severity(path)[0] == Safety.UNKNOWN
     assert exceeds(Safety.UNKNOWN, "WARN")
-    assert not exceeds(Safety.UNKNOWN, "CRITICAL")
+    # UNKNOWN exceeds every ceiling, including CRITICAL: a file whose
+    # severity cannot be established must stop, never run by default.
+    assert exceeds(Safety.UNKNOWN, "CRITICAL")
 
 
 @pytest.mark.parametrize("mutation", [

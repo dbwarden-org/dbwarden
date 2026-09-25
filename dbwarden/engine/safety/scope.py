@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from dbwarden.engine.safety.classifiers import exceeds
-from dbwarden.engine.safety.plans import file_severity
+from dbwarden.engine.safety.classifiers import Safety, exceeds, severity_level
+from dbwarden.engine.safety.plans import MISSING_PLAN_REASON, file_severity
 from dbwarden.logging import get_component_logger
 from dbwarden.output import info, warning
 
@@ -18,13 +18,27 @@ class DeferredStop:
     reason: str = ""
 
 
+def ceiling_stops(level: Safety, reason: str, ceiling: str) -> bool:
+    """Whether the severity ceiling stops a file classified as ``level``.
+
+    Explicit UNKNOWN severity (parse failure, tamper evidence, tagged
+    UNKNOWN) exceeds every ceiling, including CRITICAL. Plan-less files
+    (``reason == MISSING_PLAN_REASON``) are the exception: they are governed
+    by the missing_plan preflight policy, so they pass at the default
+    CRITICAL ceiling and defer only when a lower ceiling is explicitly set.
+    """
+    if reason == MISSING_PLAN_REASON:
+        return severity_level(ceiling) != Safety.CRITICAL
+    return exceeds(level, ceiling)
+
+
 def severity_prefix(
     files: dict[str, str], ceiling: str
 ) -> tuple[dict[str, str], DeferredStop | None]:
     allowed: dict[str, str] = {}
     for version, filepath in sorted(files.items()):
         level, reason = file_severity(filepath)
-        if exceeds(level, ceiling):
+        if ceiling_stops(level, reason, ceiling):
             return allowed, DeferredStop(
                 version,
                 filepath,
@@ -79,7 +93,7 @@ def filter_repeatables(
     result = []
     for filepath in files:
         level, reason = file_severity(filepath)
-        if exceeds(level, ceiling):
+        if ceiling_stops(level, reason, ceiling):
             warning(
                 f"Skipping repeatable {filepath}: severity {level.value} exceeds {ceiling}. {reason}"
             )

@@ -49,6 +49,29 @@ def test_malformed_split_stops_scope_without_crashing(tmp_path, split):
     assert (stop.version, stop.remaining) == ("0001", 2)
 
 
+def test_planless_passes_default_ceiling_but_explicit_unknown_stops(tmp_path):
+    """Plan-less files keep missing_plan policy behavior at the default
+    CRITICAL ceiling, while explicit UNKNOWN (tamper-evidenced) exceeds
+    every ceiling."""
+    planless = tmp_path / "primary__0001_noplan.sql"
+    planless.write_text("-- upgrade\nSELECT 1;\n", encoding="utf-8")
+    allowed, stop = severity_prefix({"0001": str(planless)}, "CRITICAL")
+    assert allowed == {"0001": str(planless)}
+    assert stop is None
+
+    tampered = tmp_path / "primary__0002_tampered.sql"
+    content = "-- upgrade\nSELECT 1;\n"
+    tampered.write_text(content, encoding="utf-8")
+    plan = bind_plan({}, content, [{"type": "create_table"}], "sqlite")
+    tampered.with_suffix(".plan.json").write_text(json.dumps(plan), encoding="utf-8")
+    tampered.write_text(content + "-- edited after planning\n", encoding="utf-8")
+    assert file_severity(tampered) == ("UNKNOWN", "SQL content hash mismatch")
+    allowed, stop = severity_prefix({"0002": str(tampered)}, "CRITICAL")
+    assert allowed == {}
+    assert stop is not None
+    assert (stop.severity, stop.reason) == ("UNKNOWN", "SQL content hash mismatch")
+
+
 @pytest.mark.parametrize(
     "ops,reason",
     [
