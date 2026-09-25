@@ -93,7 +93,7 @@ def verify_bundle(sql_path, plan=None) -> dict:
     expected = build_manifest(sql_content, plan, frozen_content)
     if canonical_bytes(expected) != canonical_bytes(bundle):
         raise ValueError("Data migration artifact checksum mismatch")
-    frozen_migration_id, frozen_spec = _read_frozen_record(frozen_path)
+    frozen_migration_id, frozen_spec, execution_seal = _read_frozen_record(frozen_path)
     if frozen_migration_id != plan.get("migration_id"):
         raise ValueError("Frozen data artifact migration ID does not match the plan")
     if "data_spec" not in plan or canonical_bytes(frozen_spec) != canonical_bytes(
@@ -101,4 +101,25 @@ def verify_bundle(sql_path, plan=None) -> dict:
     ):
         raise ValueError("Frozen data specification does not match the migration plan")
     validate_spec(plan["data_spec"])
+    if execution_seal is not None:
+        # Sealed bundles (finding 5): the frozen record carries an HMAC over
+        # the data execution steps, keyed by the project plan key. Recompute
+        # it from the plan's copy so edited batch rows cannot survive a
+        # recomputed manifest. Bundles without the seal are legacy artifacts:
+        # every byte is still covered by the manifest checks above.
+        execution = plan.get("data_execution")
+        if not isinstance(execution, dict):
+            raise ValueError(
+                "Data plan requires data_execution and canonical data_spec"
+            )
+        from dbwarden.engine.safety.plans import keyed_hash, resolve_verify_key
+
+        key, key_reason = resolve_verify_key(sql_path)
+        if key is None:
+            raise ValueError(key_reason)
+        if execution_seal != keyed_hash(key, canonical_bytes(execution).decode("utf-8")):
+            raise ValueError(
+                "Frozen data execution does not match the sealed bundle; "
+                "regenerate the frozen artifact"
+            )
     return expected

@@ -165,3 +165,81 @@ def test_bundle_rejects_frozen_spec_different_from_plan(tmp_path):
     plan_path.write_text(json.dumps(plan), encoding="utf-8")
     with pytest.raises(ValueError, match="does not match"):
         verify_bundle(sql_path)
+
+
+def test_sealed_frozen_record_binds_data_execution(tmp_path):
+    """Finding 5: the frozen record seals data_execution with a keyed HMAC, so
+    edited batch rows cannot survive a recomputed manifest. Legacy records
+    without the seal still verify through the manifest alone."""
+    sql_path = tmp_path / "primary__0001_sealed.sql"
+    frozen_path = sql_path.with_suffix(".data.py")
+    plan_path = sql_path.with_suffix(".plan.json")
+    spec = empty_spec("primary", "sqlite")
+    execution = {
+        "upgrade": [
+            {
+                "operation_id": "op1",
+                "sql": ["CREATE TABLE bundle_t (id INTEGER);", "INSERT INTO bundle_t (id) VALUES (1);"],
+                "guards": [],
+            }
+        ],
+        "rollback": [],
+    }
+    frozen = render_frozen(
+        spec, "primary__0001_sealed", execution=execution, project_root=tmp_path
+    )
+    assert "DATA_EXECUTION_HMAC" in frozen
+    sql = "-- upgrade\n-- dbwarden: data-bundle\n"
+    plan = {
+        "migration_id": "primary__0001_sealed",
+        "data_spec": spec,
+        "data_execution": execution,
+    }
+    plan["data_bundle"] = build_manifest(sql, plan, frozen)
+    sql_path.write_text(sql, encoding="utf-8")
+    frozen_path.write_text(frozen, encoding="utf-8")
+    plan_path.write_text(json.dumps(plan), encoding="utf-8")
+    assert verify_bundle(sql_path) == plan["data_bundle"]
+
+    # Attack: edit the batch row and recompute the (public) manifest. The
+    # manifest still matches, but the frozen seal no longer does.
+    plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    plan["data_execution"]["upgrade"][0]["sql"][1] = (
+        "INSERT INTO bundle_t (id) VALUES (999);"
+    )
+    plan["data_bundle"] = build_manifest(
+        sql, plan, frozen_path.read_text(encoding="utf-8")
+    )
+    plan_path.write_text(json.dumps(plan), encoding="utf-8")
+    with pytest.raises(ValueError, match="sealed bundle"):
+        verify_bundle(sql_path)
+
+    # A forged seal value cannot be recomputed without the project key, and a
+    # record with the seal stripped is a legacy bundle whose every byte is
+    # still manifest-bound; either way the tampered rows do not verify.
+    forged = frozen.replace(
+        frozen.splitlines()[-1],
+        "DATA_EXECUTION_HMAC = 'hmac-sha256:" + "0" * 64 + "'",
+    )
+    plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    plan["data_execution"]["upgrade"][0]["sql"][1] = (
+        "INSERT INTO bundle_t (id) VALUES (999);"
+    )
+    plan["data_bundle"] = build_manifest(sql, plan, forged)
+    plan_path.write_text(json.dumps(plan), encoding="utf-8")
+    frozen_path.write_text(forged, encoding="utf-8")
+    with pytest.raises(ValueError, match="sealed bundle"):
+        verify_bundle(sql_path)
+
+
+def test_frozen_execution_seal_survives_static_read(tmp_path):
+    from dbwarden.data.frozen import read_frozen
+
+    spec = empty_spec("primary", "sqlite")
+    execution = {"upgrade": [], "rollback": []}
+    frozen = render_frozen(
+        spec, "primary__0001", execution=execution, project_root=tmp_path
+    )
+    path = tmp_path / "primary__0001.data.py"
+    path.write_text(frozen, encoding="utf-8")
+    assert read_frozen(path) == spec
