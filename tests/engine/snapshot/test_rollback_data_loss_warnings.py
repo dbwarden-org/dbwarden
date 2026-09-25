@@ -300,7 +300,9 @@ def test_migrate_prints_rollback_warnings_from_trusted_plan(tmp_path, monkeypatc
     path = directory / "primary__0001_base.sql"
     content = "-- upgrade\nCREATE TABLE items (id INTEGER PRIMARY KEY);\n-- rollback\nDROP TABLE items;\n"
     path.write_text(content, encoding="utf-8")
-    plan = bind_plan({}, content, [{"type": "create_table"}], "sqlite")
+    plan = bind_plan(
+        {}, content, [{"type": "create_table"}], "sqlite", project_root=tmp_path
+    )
     plan["rollback_warnings"] = [DATA_LOSS_MESSAGE]
     path.with_suffix(".plan.json").write_text(_json.dumps(plan), encoding="utf-8")
 

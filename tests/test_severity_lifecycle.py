@@ -29,7 +29,9 @@ def project(tmp_path, monkeypatch):
         path = directory / f"primary__{number:04d}_{name}.sql"
         content = f"-- upgrade\n{sql}\n-- rollback\nDROP TABLE items;\n"
         path.write_text(content, encoding="utf-8")
-        plan = bind_plan({}, content, [{"type": kind}], "sqlite")
+        # Keyed plan integrity: bind against the tmp project so the plans
+        # verify under the project-local plan key (hardened content_hash).
+        plan = bind_plan({}, content, [{"type": kind}], "sqlite", project_root=tmp_path)
         path.with_suffix(".plan.json").write_text(json.dumps(plan), encoding="utf-8")
     yield db
     from dbwarden.connection.connection import dispose_engine
@@ -79,7 +81,7 @@ def test_repeatable_retried_after_ceiling_rises(project, capsys):
     path = project.parent / "migrations/primary/primary__RA__touch.sql"
     content = "-- upgrade\nINSERT INTO items (id) VALUES (100);\n-- rollback\nDELETE FROM items WHERE id=100;\n"
     path.write_text(content, encoding="utf-8")
-    path.with_suffix(".plan.json").write_text(json.dumps(bind_plan({}, content, [{"type": "update"}], "sqlite")), encoding="utf-8")
+    path.with_suffix(".plan.json").write_text(json.dumps(bind_plan({}, content, [{"type": "update"}], "sqlite", project_root=project.parent)), encoding="utf-8")
     migrate_cmd(database="primary", max_severity="INFO")
     with sqlite3.connect(project) as connection:
         assert connection.execute("SELECT COUNT(*) FROM items").fetchone()[0] == 0
@@ -98,7 +100,7 @@ def test_failure_keeps_prefix_and_rollback_removes_only_deferred(project):
     path = project.parent / "migrations/primary/primary__0002_deferred.sql"
     failed = "-- upgrade\nINSERT INTO items (id) VALUES (2);\nSELECT * FROM missing_table;\n-- rollback\nDELETE FROM items WHERE id=2;\n"
     path.write_text(failed, encoding="utf-8")
-    path.with_suffix(".plan.json").write_text(json.dumps(bind_plan({}, failed, [{"type": "update"}], "sqlite")), encoding="utf-8")
+    path.with_suffix(".plan.json").write_text(json.dumps(bind_plan({}, failed, [{"type": "update"}], "sqlite", project_root=project.parent)), encoding="utf-8")
     with pytest.raises(LockError, match="missing_table"):
         migrate_cmd(database="primary", max_severity="WARN", force=True)
     assert get_migrated_versions("primary") == ["0001"]
@@ -106,7 +108,7 @@ def test_failure_keeps_prefix_and_rollback_removes_only_deferred(project):
         assert connection.execute("SELECT COUNT(*) FROM items").fetchone()[0] == 0
     repaired = failed.replace("SELECT * FROM missing_table;", "")
     path.write_text(repaired, encoding="utf-8")
-    path.with_suffix(".plan.json").write_text(json.dumps(bind_plan({}, repaired, [{"type": "update"}], "sqlite")), encoding="utf-8")
+    path.with_suffix(".plan.json").write_text(json.dumps(bind_plan({}, repaired, [{"type": "update"}], "sqlite", project_root=project.parent)), encoding="utf-8")
     migrate_cmd(database="primary", max_severity="WARN", force=True, to_version="0002")
     rollback_cmd(database="primary", count=1)
     assert get_migrated_versions("primary") == ["0001"]
@@ -123,7 +125,7 @@ def test_unknown_file_stops_at_default_critical_ceiling(project):
     path = project.parent / "migrations/primary/primary__0004_tampered.sql"
     content = "-- upgrade\nCREATE TABLE tampered (id INTEGER);\n-- rollback\nSELECT 1;\n"
     path.write_text(content, encoding="utf-8")
-    plan = bind_plan({}, content, [{"type": "create_table"}], "sqlite")
+    plan = bind_plan({}, content, [{"type": "create_table"}], "sqlite", project_root=project.parent)
     path.with_suffix(".plan.json").write_text(json.dumps(plan), encoding="utf-8")
     # Edit after planning: plan no longer matches -> explicit UNKNOWN.
     path.write_text(content + "-- edited after planning\n", encoding="utf-8")

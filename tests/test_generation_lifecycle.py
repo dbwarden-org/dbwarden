@@ -62,10 +62,13 @@ def test_offline_state_write_failure_restores_project(
                 database="primary", offline=True, split_at_severity="WARN"
             )
     assert failed
+    # The project plan key (.dbwarden/plan.secret) is idempotent keyring
+    # infrastructure created when plans are bound; it is not a migration
+    # artifact, so the failed run's file-restoration guarantee ignores it.
     assert {
         p: p.read_bytes()
         for p in tmp_path.rglob("*")
-        if p.is_file() and "__pycache__" not in p.parts
+        if p.is_file() and "__pycache__" not in p.parts and p.name != "plan.secret"
     } == before
     make_migrations_cmd(database="primary", offline=True, split_at_severity="WARN")
     assert not (tmp_path / "unused.db").exists()

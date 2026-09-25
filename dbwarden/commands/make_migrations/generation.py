@@ -418,7 +418,7 @@ def generate_files(
             content += "-- renames: " + json.dumps(renames, sort_keys=True) + "\n"
         if plan.get("base_checksum"):
             content += f"-- base_checksum: {plan['base_checksum']}\n"
-        bind_plan(plan, "", typed, backend)
+        bind_plan(plan, "", typed, backend, project_root=migrations_dir)
         if role != "unsplit":
             from dbwarden.plugin import ObjectPluginRegistry
 
@@ -439,7 +439,7 @@ def generate_files(
         content += f"-- upgrade\n\n{upgrade}\n\n-- rollback\n\n{rollback}\n"
         from dbwarden.engine.safety.plans import content_hash
 
-        plan["content_hash"] = content_hash(content)
+        plan["content_hash"] = content_hash(content, project_root=migrations_dir)
         artifact = {
             "filename": filename,
             "version": version,
@@ -506,7 +506,7 @@ def generate_files(
                 rollback = irreversible + "\n" + rollback
             content = content.split("-- upgrade\n", 1)[0]
             content += f"-- upgrade\n\n{upgrade}\n\n-- rollback\n\n{rollback}\n"
-            plan["content_hash"] = content_hash(content)
+            plan["content_hash"] = content_hash(content, project_root=migrations_dir)
             artifact["content"] = content
             artifact["frozen"] = render_frozen(data_spec, Path(filename).stem)
             plan["data_bundle"] = build_manifest(content, plan, artifact["frozen"])

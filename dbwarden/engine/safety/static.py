@@ -313,6 +313,9 @@ def classify_file(path: Path, backend: str) -> tuple[str, str]:
             operations,
             backend,
             provenance="static",
+            # Resolve the project key from the plan's own location so the
+            # written plan verifies wherever the project root is discoverable.
+            project_root=path.parent,
         )
         atomic_write_text(plan_path, json.dumps(plan, sort_keys=True, indent=2) + "\n")
         return plan["severity"]["file"], "classified"
