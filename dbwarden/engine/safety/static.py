@@ -207,26 +207,36 @@ def classify_sql(content: str, backend: str) -> list[dict]:
     for statement in _extract_section_statements(content, "-- upgrade"):
         if "/*!" in statement:
             raise ValueError("executable MySQL comment")
-        if backend == "postgresql":
-            from pglast.parser import ParseError, parse_sql_json
-
-            try:
-                native = json.loads(parse_sql_json(statement))["stmts"]
-            except ParseError as exc:
-                raise ValueError(f"PostgreSQL parse failed: {exc}") from exc
-            mapped = [_map_pg_extra(item["stmt"]) for item in native]
-            if native and all(item is not None for item in mapped):
-                operations.extend(
-                    op for group in mapped if group is not None for op in group
-                )
-                continue
         try:
-            nodes = parse(statement, read=dialect, error_level=ErrorLevel.RAISE)
-        except SqlglotError as exc:
-            raise ValueError(f"parse failed: {exc}") from exc
-        for node in nodes:
-            if node is not None:
-                operations.extend(_map_statement(node))
+            if backend == "postgresql":
+                from pglast.parser import ParseError, parse_sql_json
+
+                try:
+                    native = json.loads(parse_sql_json(statement))["stmts"]
+                except ParseError as exc:
+                    raise ValueError(f"PostgreSQL parse failed: {exc}") from exc
+                mapped = [_map_pg_extra(item["stmt"]) for item in native]
+                if native and all(item is not None for item in mapped):
+                    operations.extend(
+                        op for group in mapped if group is not None for op in group
+                    )
+                    continue
+            try:
+                nodes = parse(statement, read=dialect, error_level=ErrorLevel.RAISE)
+            except SqlglotError as exc:
+                raise ValueError(f"parse failed: {exc}") from exc
+            for node in nodes:
+                if node is not None:
+                    operations.extend(_map_statement(node))
+        except RecursionError as exc:
+            # Finding 4: sqlglot's recursive descent overflows Python's
+            # recursion limit on deeply nested expressions. That is a parser
+            # failure, not a crash: classify UNKNOWN so `check --write-plan`
+            # reports the file unresolved (exit 4) instead of dying with a
+            # traceback.
+            raise ValueError(
+                "parser failure: SQL nesting exceeds the parser recursion limit"
+            ) from exc
     if any(classify_operation(op, backend) == Safety.UNKNOWN for op in operations):
         raise ValueError("operation has no normative classification")
     return operations
@@ -321,3 +331,7 @@ def classify_file(path: Path, backend: str) -> tuple[str, str]:
         return plan["severity"]["file"], "classified"
     except (ValueError, OSError, UnicodeError) as exc:
         return "UNKNOWN", str(exc)
+    except RecursionError:
+        return "UNKNOWN", "parser failure: SQL nesting exceeds the parser recursion limit"
+    except Exception as exc:  # defensive: classification must fail closed
+        return "UNKNOWN", f"parser failure: {type(exc).__name__}: {exc}"
