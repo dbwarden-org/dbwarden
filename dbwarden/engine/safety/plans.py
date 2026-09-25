@@ -13,6 +13,12 @@ from dbwarden.engine.safety.classifiers import (
     required_flags,
 )
 
+#: ``file_severity``/``read_trusted_plan`` reason when a migration file has no
+#: plan sidecar at all. Plan-less files are governed by the missing_plan
+#: preflight policy, unlike files whose plan resolves to explicit UNKNOWN
+#: (parse failure, tamper evidence, tagged UNKNOWN).
+MISSING_PLAN_REASON = "no plan"
+
 
 def content_hash(content: str) -> str:
     normalized = content.replace("\r\n", "\n").replace("\r", "\n")
@@ -160,7 +166,7 @@ def read_trusted_plan(path: str | Path) -> tuple[dict | None, str]:
             validate_spec(plan["data_spec"])
         return plan, ""
     except FileNotFoundError:
-        return None, "no plan"
+        return None, MISSING_PLAN_REASON
     except (OSError, UnicodeError, ValueError, TypeError, KeyError):
         return None, "malformed plan"
 

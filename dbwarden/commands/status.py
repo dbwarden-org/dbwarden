@@ -45,8 +45,8 @@ def _status_payload(database: str | None = None) -> dict:
     from pathlib import Path
 
     from dbwarden.config import get_database
-    from dbwarden.engine.safety.classifiers import exceeds
     from dbwarden.engine.safety.plans import file_severity, read_trusted_plan
+    from dbwarden.engine.safety.scope import ceiling_stops
     from dbwarden.merge.marker import is_superseded
     from dbwarden.metrics import set_deferred_age
 
@@ -78,7 +78,7 @@ def _status_payload(database: str | None = None) -> dict:
             continue
         level, reason = file_severity(path)
         entry.update(severity=level.value, severity_reason=reason)
-        if exceeds(level, ceiling):
+        if ceiling_stops(level, reason, ceiling):
             entry["state"] = "deferred"
             blocked_by = blocked_by or entry["version"]
         elif blocked_by:

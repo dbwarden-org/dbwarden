@@ -14022,9 +14022,12 @@ Repeatables above the ceiling warn on every skipped run. Eligible repeatables
 run normally if no versioned file caused a stop. Changed-only repeatables that
 have not changed remain outside the candidate set.
 
-UNKNOWN blocks under SAFE, INFO, or WARN. CRITICAL is the uncapped default and
-admits UNKNOWN, subject to existing preflight policies. Applied historical files
-are not reclassified. There is no per-file severity override.
+UNKNOWN blocks under every ceiling, including the default CRITICAL ceiling:
+a file whose plan resolves to explicit UNKNOWN (parse failure, tamper
+evidence, tagged UNKNOWN) stops with exit 3. The only exception is a file
+with no plan at all, which is governed by the missing_plan preflight policy
+and passes at the default ceiling. Applied historical files are not
+reclassified. There is no per-file severity override.
 
 ## Adopt existing SQL
 
