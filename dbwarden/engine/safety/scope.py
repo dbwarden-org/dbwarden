@@ -80,11 +80,15 @@ def report_stop(stop: DeferredStop, database: str, *, dry_run: bool = False) -> 
         from dbwarden.metrics import increment_migrations_deferred, set_deferred_age
 
         increment_migrations_deferred(database, stop.severity)
-        set_deferred_age(
-            database,
-            stop.version,
-            max(0, time.time() - Path(stop.filepath).stat().st_mtime),
-        )
+        try:
+            age = max(0, time.time() - Path(stop.filepath).stat().st_mtime)
+        except OSError:
+            # The deferred file can be deleted between the severity scan and
+            # this report (a normal concurrent edit); its age is then simply
+            # unknown, so the metric is omitted instead of crashing.
+            pass
+        else:
+            set_deferred_age(database, stop.version, age)
 
 
 def filter_repeatables(
