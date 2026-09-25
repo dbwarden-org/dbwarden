@@ -172,11 +172,14 @@ class LogSearch(Base):
 ```python
 # 1. Add projection to model
 # 2. Generate migration (ADD PROJECTION is INFO)
-# 3. Apply migration
-dbwarden migrate -d analytics
+# 3. Apply migration: dbwarden migrate -d analytics
 # 4. Materialize on existing data
 from dbwarden.databases.clickhouse import data_op
-data_op("ALTER TABLE orders MATERIALIZE PROJECTION category_summary")
+
+data_op(
+    name="materialize_category_summary",
+    forward="ALTER TABLE orders MATERIALIZE PROJECTION category_summary",
+)
 ```
 
 ## MATERIALIZE as data operation
