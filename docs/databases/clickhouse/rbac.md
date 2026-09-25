@@ -53,12 +53,9 @@ No diff beyond name: roles are identifiers.
 ch_users=[
     ChUserSpec(
         name="alice",
-        # Authentication: declare-only via named collection
-        named_collection="ldap_prod",
-        # Or directly (but values are not stored/compared):
-        # identified_by="sha256_password", password="secret"
-        default_role="analyst",
-        settings={"max_memory_usage": 10000000000},
+        # Authentication is declare-only: written at creation, never diffed.
+        auth="sha256_password BY 'secret'",
+        default_roles=("analyst",),
     ),
 ]
 ```
@@ -67,8 +64,9 @@ Generated DDL:
 
 ```sql
 CREATE USER IF NOT EXISTS alice
-DEFAULT ROLE analyst
-SETTINGS max_memory_usage = 10000000000;
+IDENTIFIED WITH sha256_password BY 'secret'
+HOST ANY
+DEFAULT ROLE analyst;
 ```
 
 ## Row policies
@@ -78,7 +76,8 @@ ch_row_policies=[
     ChRowPolicySpec(
         name="analyst_filter",
         table="events",
-        as_restriction="event_date >= '2024-01-01'",
+        using="event_date >= '2024-01-01'",
+        to_roles=("analyst",),
     ),
 ]
 ```
@@ -99,7 +98,9 @@ TO analyst;
 ch_quotas=[
     ChQuotaSpec(
         name="monthly_reads",
-        interval={"month": [1000000, 0, 0]},
+        interval="1 MONTH",
+        limits={"queries": 1000000, "errors": 0, "result rows": 0},
+        to_roles=("analyst",),
     ),
 ]
 ```
@@ -119,8 +120,7 @@ TO analyst;
 ch_settings_profiles=[
     ChSettingsProfileSpec(
         name="strict",
-        settings={"max_memory_usage": 10000000000},
-        constraints={"max_memory_usage": "READONLY"},
+        settings={"max_memory_usage": "10000000000"},
     ),
 ]
 ```
@@ -129,7 +129,7 @@ Generated DDL:
 
 ```sql
 CREATE SETTINGS PROFILE IF NOT EXISTS strict
-SETTINGS max_memory_usage = 10000000000 CONSTRAINED READONLY;
+SETTINGS max_memory_usage = 10000000000;
 ```
 
 ## Grants
@@ -160,7 +160,7 @@ database_config(
     database_type="clickhouse",
     database_url_sync="clickhouse://localhost:9000",
     ch_named_collections=[
-        named_collection("ldap_corp", keys={"ldap_server": "ldap.corp.example.com"}),
+        named_collection("ldap_corp", ldap_server="ldap.corp.example.com"),
     ],
     ch_roles=[
         ChRoleSpec("readonly"),
@@ -171,40 +171,36 @@ database_config(
         ChSettingsProfileSpec(
             name="strict_read",
             settings={
-                "max_memory_usage": 5000000000,
-                "max_result_rows": 10000,
-            },
-            constraints={
-                "max_memory_usage": "READONLY",
-                "max_result_rows": "READONLY",
+                "max_memory_usage": "5000000000",
+                "max_result_rows": "10000",
             },
         ),
     ],
     ch_users=[
         ChUserSpec(
             name="alice",
-            named_collection="ldap_corp",
-            default_role="analyst",
+            auth="ldap BY 'ldap.corp.example.com'",
+            default_roles=("analyst",),
             settings_profile="strict_read",
         ),
         ChUserSpec(
             name="bob",
-            identified_by="sha256_password",
-            password="changeme",  # declare-only: not diffed after creation
-            default_role="readonly",
+            auth="sha256_password BY 'changeme'",  # declare-only: not diffed after creation
+            default_roles=("readonly",),
         ),
     ],
     ch_row_policies=[
         ChRowPolicySpec(
             name="analyst_filter",
             table="analytics.events",
-            as_restriction="event_date >= '2024-01-01'",
+            using="event_date >= '2024-01-01'",
         ),
     ],
     ch_quotas=[
         ChQuotaSpec(
             name="monthly_cap",
-            interval={"month": [100000, 0, 0]},
+            interval="1 MONTH",
+            limits={"queries": 100000, "errors": 0, "result rows": 0},
         ),
     ],
     ch_grants=[
@@ -225,9 +221,8 @@ database_config(
     ch_roles=[{"name": "analyst"}, {"name": "engineer"}],
     ch_users=[{
         "name": "carol",
-        "identified_by": "sha256_password",
-        "password": "s3cret",
-        "default_role": "engineer",
+        "auth": "sha256_password BY 's3cret'",
+        "default_roles": ("engineer",),
     }],
 )
 ```
