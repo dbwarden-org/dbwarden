@@ -248,6 +248,14 @@ def collapse_sqlite_ops(
             # be dropped again by the rebuild that follows.
             if op_type in ("add_index", "drop_index"):
                 return False
+            if op_type in ("add_column", "drop_column"):
+                # The rebuild renders the table's full before and after shape,
+                # so the column change is already folded into it. Keeping the
+                # op too emits it next to the rebuild: harmless-looking in the
+                # upgrade direction, but rollback statements run in reverse
+                # order, where the op would be applied a second time after the
+                # rebuild ("duplicate column name" / "no such column").
+                return False
             return not _needs_rebuild(op, from_entries, to_entries)
         return True
 
