@@ -2070,6 +2070,12 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 
 ## Unreleased
 
+## \[0.20.1\] - 2026-10-10
+
+### Fixed
+
+- **ClickHouse lock status updates use valid mutation syntax.** `update_heartbeat` and `update_state` emitted `ALTER TABLE dbwarden_lock UPDATE SET ...`, which ClickHouse rejects with a syntax error (code 62), so every ClickHouse migration failed while releasing its lock. The statements now emit `ALTER TABLE ... UPDATE col = expr`, matching the fencing token bump.
+
 ## \[0.20.0\] - 2026-10-10
 
 ### Added
