@@ -298,6 +298,23 @@ def attach_state_changes(ops: list[dict], before: dict, after: dict) -> None:
             if score:
                 candidates.append((score, index, op))
         if not candidates:
+            if path[0] == "configured_objects" and not change.get("after_exists"):
+                # The object disappeared from the declared spec. Managing
+                # that removal is the handler's choice: non-destructive
+                # handlers (e.g. cluster-wide roles) deliberately emit no
+                # op when an object is undeclared, so there is nothing to
+                # attach the change to. The object survives generation, so
+                # reflect that in the target the reproduction check
+                # compares against.
+                parent = after
+                for key in path[:-1]:
+                    if not isinstance(parent, dict):
+                        parent = None
+                        break
+                    parent = parent.setdefault(key, {})
+                if isinstance(parent, dict):
+                    parent[path[-1]] = deepcopy(change.get("before"))
+                continue
             raise ValueError(
                 f"Unrepresented schema change {'.'.join(path)}. hint: update the object handler before generating"
             )
