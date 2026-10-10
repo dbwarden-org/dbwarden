@@ -315,8 +315,10 @@ def generate_models_cmd(
                             col["pg_meta"] = meta
 
             ch_options: dict = {}
+            table_comment: str | None = None
             if actual_dialect == "clickhouse" and clickhouse_engines:
                 ch_options = _extract_ch_meta(connection, table_name)
+                table_comment = ch_options.pop("comment", None) if ch_options else None
                 # Mode B MVs (explicit TO target) must not declare columns in the
                 # class API; discard reflected columns so the generated model only
                 # carries the materialized_view(...) spec.
@@ -400,6 +402,7 @@ def generate_models_cmd(
                 "pg_meta": pg_meta,
                 "my_meta": my_meta,
                 "sq_meta": sq_meta,
+                "comment": table_comment,
             })
 
     output_dir = Path(output)

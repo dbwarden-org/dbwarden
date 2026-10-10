@@ -220,6 +220,76 @@ def get_all_ch_views(
     return results
 
 
+def _unwrap_mapped_annotation(annotation: Any) -> Any:
+    """Unwrap ``Mapped[X]``/``Annotated[X, ...]``/``X | None`` to ``X``."""
+    import typing
+
+    a = annotation
+    if hasattr(a, "__metadata__"):  # Annotated[X, ...]
+        a = a.__args__[0]
+    origin = getattr(a, "__origin__", None)
+    if origin is not None and getattr(origin, "__name__", "") == "Mapped":
+        a = a.__args__[0]
+    union_types = (typing.Union, getattr(__import__("types"), "UnionType", ()))
+    if getattr(a, "__origin__", None) in union_types:
+        args = [x for x in a.__args__ if x is not type(None)]
+        if len(args) == 1:
+            a = args[0]
+    return a
+
+
+def _annotation_is_optional(annotation: Any) -> bool:
+    """True when a mapped annotation allows ``None`` (``Mapped[X | None]``)."""
+    import typing
+
+    a = annotation
+    if hasattr(a, "__metadata__"):
+        a = a.__args__[0]
+    origin = getattr(a, "__origin__", None)
+    if origin is not None and getattr(origin, "__name__", "") == "Mapped":
+        a = a.__args__[0]
+    union_types = (typing.Union, getattr(__import__("types"), "UnionType", ()))
+    if getattr(a, "__origin__", None) in union_types:
+        return type(None) in a.__args__
+    return False
+
+
+def _ch_type_from_annotation(annotation: Any, nullable: bool) -> str:
+    """Resolve a ClickHouse DDL type for an unmapped ChView column.
+
+    ChView subclasses are deliberately NOT SQLAlchemy-mapped, so a
+    ``mapped_column()`` there carries a ``NullType`` until the class would be
+    mapped.  The declared annotation is the only type source, so map it here.
+    """
+    import datetime
+
+    from sqlalchemy import types as sat
+    from sqlalchemy.sql.type_api import TypeEngine
+
+    from dbwarden.engine.backends.clickhouse.extract import _render_ch_type_from_sa
+    from dbwarden.engine.backends.clickhouse.render import (
+        _apply_ch_nullable_low_cardinality,
+    )
+
+    inner = _unwrap_mapped_annotation(annotation)
+    if isinstance(inner, TypeEngine):
+        sa_type = inner
+    elif isinstance(inner, type) and issubclass(inner, TypeEngine):
+        sa_type = inner()
+    else:
+        sa_type = {
+            str: sat.String,
+            int: sat.Integer,
+            float: sat.Float,
+            bool: sat.Boolean,
+            bytes: sat.String,
+            datetime.datetime: sat.DateTime,
+            datetime.date: sat.Date,
+        }.get(inner, sat.String)()
+    ch_type = _render_ch_type_from_sa(sa_type, str(sa_type).upper().strip())
+    return _apply_ch_nullable_low_cardinality(ch_type, nullable, False)
+
+
 def ch_view_tables_from_models(
     model_paths: list[str] | None = None,
     db_name: str | None = None,
@@ -314,6 +384,7 @@ def ch_view_tables_from_models(
         columns: list[ModelColumn] = []
         from sqlalchemy import Column as _SAColumn
         from sqlalchemy.orm import MappedColumn as _MappedColumn
+        _annotations = getattr(model_class, "__annotations__", {})
         for attr_name, val in model_class.__dict__.items():
             if attr_name.startswith("_"):
                 continue
@@ -325,11 +396,18 @@ def ch_view_tables_from_models(
             elif isinstance(val, _SAColumn):
                 sa_col = val
             if sa_col is not None:
-                ch_type = _map_sa_type_to_clickhouse(sa_col) if sa_col is not None else "String"
+                nullable = getattr(sa_col, "nullable", True)
+                if type(sa_col.type).__name__ == "NullType":
+                    # Unmapped ChView: the annotation is the only type source.
+                    annotation = _annotations.get(attr_name)
+                    nullable = _annotation_is_optional(annotation)
+                    ch_type = _ch_type_from_annotation(annotation, nullable)
+                else:
+                    ch_type = _map_sa_type_to_clickhouse(sa_col)
                 columns.append(ModelColumn(
                     name=attr_name,
                     type=ch_type,
-                    nullable=getattr(sa_col, "nullable", True),
+                    nullable=nullable,
                     primary_key=getattr(sa_col, "primary_key", False),
                     unique=False, default=None, foreign_key=None,
                     ch_meta={"ch_type": ch_type},
@@ -348,7 +426,37 @@ def ch_view_tables_from_models(
             agg_mv = clickhouse_options.get("ch_agg_mv", {})
             mv_opts: dict[str, Any] = dict(agg_mv)
             mv_name = spec.mv_name
+        elif spec.to is None:
+            # Mode A: the class IS the target table; the MV is "<name>_mv" TO it.
+            # Emit the target table first (the MV needs it to exist).
+            target_opts = {
+                k: v
+                for k, v in clickhouse_options.items()
+                if k not in ("ch_select_statement", "ch_to_table", "ch_refresh")
+            }
+            target_opts["ch_object_type"] = "table"
+            tables.append(ModelTable(
+                name=tablename,
+                columns=columns,
+                clickhouse_options=target_opts,
+                object_type="table",
+            ))
+            mv_opts = {
+                "ch_object_type": "materialized_view",
+                "ch_to_table": tablename,
+                "ch_select_statement": clickhouse_options.get("ch_select_statement"),
+            }
+            if clickhouse_options.get("ch_refresh"):
+                mv_opts["ch_refresh"] = clickhouse_options["ch_refresh"]
+            tables.append(ModelTable(
+                name=f"{tablename}_mv",
+                columns=[],
+                clickhouse_options=mv_opts,
+                object_type="materialized_view",
+            ))
+            continue
         else:
+            # Mode B: the class IS the MV; the target already exists.
             mv_opts = clickhouse_options
             mv_name = tablename
         mv_opts.setdefault("ch_object_type", "materialized_view")

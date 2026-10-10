@@ -68,6 +68,7 @@ def _generate_table_code(
     my_meta: dict | None = None,
     base_class_name: str = "Base",
     sq_meta: dict | None = None,
+    comment: str | None = None,
 ) -> str:
     class_name = "".join(part.capitalize() for part in re.split(r"[_\s]", table_name) if part)
     if not class_name:
@@ -99,7 +100,7 @@ def _generate_table_code(
             lines.extend(_render_ch_mv_meta(columns, ch_options))
         else:
             lines.append(f"    class Meta({meta_class}):")
-            lines.extend(_render_ch_meta(columns, ch_options, object_type))
+            lines.extend(_render_ch_meta(columns, ch_options, object_type, comment))
     if pg_meta or any(col.get("pg_meta") for col in columns):
         lines.append("")
         lines.extend(_render_postgresql_meta(columns, pg_meta))

@@ -270,8 +270,6 @@ def generate_create_table_sql(table: ModelTable, db_name: str | None = None) -> 
                 val = col.ch_meta.get(key)
                 if val:
                     col_def += f" {keyword} {val}"
-            if is_ch_key_column:
-                col_def += " NOT NULL"
         if backend in ("mysql", "mariadb"):
             col_def += _mysql_auto_increment_clause(
                 col, is_sole_primary_key=not composite_primary_key,

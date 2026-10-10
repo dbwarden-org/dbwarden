@@ -57,6 +57,7 @@ def _write_models(
                     table.get("my_meta"),
                     base_class_name=base_class_name,
                     sq_meta=table.get("sq_meta"),
+                    comment=table.get("comment"),
                 )
             )
 
@@ -216,6 +217,7 @@ def _write_models(
                 table.get("my_meta"),
                 base_class_name=base_class_name,
                 sq_meta=table.get("sq_meta"),
+                comment=table.get("comment"),
             )
         )
         safe_name = re.sub(r"[^a-zA-Z0-9_]", "_", table["name"].lower()).strip("_") or "model"

@@ -824,11 +824,14 @@ class TestSQLGeneration:
         )
         sql = generate_create_table_sql(table)
 
-        assert "event_date Date NOT NULL" in sql
-        assert "id Int64 NOT NULL" in sql
+        # ClickHouse has no "NOT NULL": a non-nullable column is just its type,
+        # a nullable one is Nullable(T).  Key columns must drop Nullable(...).
+        assert "event_date Date" in sql
+        assert "id Int64" in sql
         assert "payload Nullable(String)" in sql
         assert "Nullable(event_date)" not in sql
         assert "Nullable(id)" not in sql
+        assert "NOT NULL" not in sql
 
     def test_generate_clickhouse_add_column_sql_comment_before_codec(self, monkeypatch):
         monkeypatch.setattr(model_discovery.type_mapping, "_get_backend_name", lambda db_name=None: "clickhouse")

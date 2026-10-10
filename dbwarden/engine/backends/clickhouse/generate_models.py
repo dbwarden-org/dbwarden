@@ -13,8 +13,11 @@ def _strip_codec_wrapper(codec_expr: str) -> str:
     return m.group(1) if m else codec_expr.strip()
 
 
-def _render_ch_meta(columns: list[dict], options: dict, object_type: str) -> list[str]:
+def _render_ch_meta(columns: list[dict], options: dict, object_type: str, comment: str | None = None) -> list[str]:
     lines: list[str] = []
+
+    if comment:
+        lines.append(f"        comment = {comment!r}")
 
     engine_raw = options.get("ch_engine_raw")
     if engine_raw is not None:
@@ -318,7 +321,7 @@ def _extract_ch_meta(connection, table_name: str) -> dict:
     tables_result = connection.execute(
         text(
             "SELECT engine, engine_full, sorting_key, primary_key, partition_key, "
-            "sampling_key, create_table_query, uuid "
+            "sampling_key, create_table_query, uuid, comment "
             "FROM system.tables WHERE database = currentDatabase() AND name = :name"
         ),
         parameters={"name": table_name},
@@ -340,6 +343,9 @@ def _extract_ch_meta(connection, table_name: str) -> dict:
     from dbwarden.engine.snapshot.extract_ch import _strip_clickhouse_db_qualifier
 
     options: dict = {}
+    table_comment = getattr(row, "comment", None) or None
+    if table_comment:
+        options["comment"] = table_comment
     engine = getattr(row, "engine", "") or ""
     engine_full = getattr(row, "engine_full", "") or ""
     create_query = getattr(row, "create_table_query", "") or ""
