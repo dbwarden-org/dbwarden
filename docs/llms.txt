@@ -39,6 +39,27 @@
 - [Production Patterns](https://docs.dbwarden.org/configuration/production-patterns/): Real-world patterns for SSL/TLS, connection pooling, environment variables
 - [Troubleshooting](https://docs.dbwarden.org/configuration/troubleshooting/): Solutions to common configuration issues
 
+## Data Migrations
+- [Overview](https://docs.dbwarden.org/data-migrations/): Declarative data migrations: reviewed changes to data that ship with a schema release
+- [Tutorial](https://docs.dbwarden.org/data-migrations/tutorial/): From-scratch, runnable walkthrough on SQLite
+- [1. Why and the mental model](https://docs.dbwarden.org/data-migrations/tutorial/01-why-and-mental-model/): The problem, the declaration-to-artifact pipeline, and the vocabulary
+- [2. Setup and first declaration](https://docs.dbwarden.org/data-migrations/tutorial/02-setup-and-first-declaration/): Project layout, `dbwarden init`, a `Country` seed, and the severity gate
+- [3. Managed rows](https://docs.dbwarden.org/data-migrations/tutorial/03-managed-rows/): The full `rows()` API: keys, ownership, `on_missing`, scope, rollback
+- [4. Static sources](https://docs.dbwarden.org/data-migrations/tutorial/04-static-sources/): Loading rows from CSV or JSON at compile time
+- [5. Expressions](https://docs.dbwarden.org/data-migrations/tutorial/05-expressions/): `derive()` and the typed expression AST
+- [6. Validation](https://docs.dbwarden.org/data-migrations/tutorial/06-validation/): `validate()` and `check --data`
+- [7. Historical transitions](https://docs.dbwarden.org/data-migrations/tutorial/07-historical-transitions/): Moving pinned snapshot rows into current models
+- [8. Splits and priority](https://docs.dbwarden.org/data-migrations/tutorial/08-splits-and-priority/): One source into many targets, with overlap and priority rules
+- [9. Merges](https://docs.dbwarden.org/data-migrations/tutorial/09-merges/): Many sources into one target with explicit grouping and field rules
+- [10. Capture, archive, and batching](https://docs.dbwarden.org/data-migrations/tutorial/10-capture-archive-batching/): Typed preimages, archive destinations, and ordered batches
+- [11. Review and generate](https://docs.dbwarden.org/data-migrations/tutorial/11-review-and-generate/): Inspecting compiled semantics and freezing artifacts
+- [12. Apply, rollback, reapply](https://docs.dbwarden.org/data-migrations/tutorial/12-apply-rollback-reapply/): The execution lifecycle and the journal
+- [13. Reconcile and convergence](https://docs.dbwarden.org/data-migrations/tutorial/13-reconcile-and-convergence/): Recovering from uncertain effects and proving convergence
+- [14. Safety and CI](https://docs.dbwarden.org/data-migrations/tutorial/14-safety-and-ci/): Severity gates and an offline pipeline
+- [Recap](https://docs.dbwarden.org/data-migrations/tutorial/recap/): Consolidation and where to go next
+- [Reference](https://docs.dbwarden.org/data-migrations/reference/): The full data-migration surface
+- [Design specification](https://docs.dbwarden.org/design/declarative-data-migrations/): Artifact and execution contract, capability matrix, and conformance status
+
 ## Core Concepts
 - [Migration File Format](https://docs.dbwarden.org/migration-files/): Execution contract - explicit SQL files that can be reviewed, tested, and rolled back
 - [SQLAlchemy Models Reference](https://docs.dbwarden.org/models/): Complete reference for all supported Meta attributes across every backend
@@ -77,7 +98,7 @@
 - [make-migrations](https://docs.dbwarden.org/commands/make-migrations/): Generate SQL migration files from model diffs
 - [migrate](https://docs.dbwarden.org/commands/migrate/): Apply pending migrations to a database
 - [downgrade](https://docs.dbwarden.org/commands/downgrade/): Revert applied migrations to a target version
-- [rollback](https://docs.dbwarden.org/commands/rollback/): Rollback applied migrations using -- rollback sections
+- [rollback](https://docs.dbwarden.org/commands/rollback/): Rollback applied migrations using the rollback section
 - [make-rollback](https://docs.dbwarden.org/commands/make-rollback/): Auto-generate rollback SQL from upgrade SQL
 - [generate-models](https://docs.dbwarden.org/commands/generate-models/): Reverse-engineer SQLAlchemy models from a live database
 - [snapshot](https://docs.dbwarden.org/commands/snapshot/): Output DDL schema of a specific table
@@ -88,6 +109,7 @@
 - [diff](https://docs.dbwarden.org/commands/diff/): Show structural differences between models and live database
 - [history](https://docs.dbwarden.org/commands/history/): Migration execution history for audit and incident analysis
 - [new](https://docs.dbwarden.org/commands/new/): Create manual migration files (versioned, runs-always, runs-on-change)
+- [data](https://docs.dbwarden.org/commands/data/): Render, describe, and document data migrations; generate data-only migrations with `make-data-migration`
 - [lock-status/unlock](https://docs.dbwarden.org/commands/lock/): Inspect and recover migration lock state
 - [seed](https://docs.dbwarden.org/commands/seed/): Manage seed data - create, apply, list, roll back, export
 - [settings](https://docs.dbwarden.org/commands/settings/): View current dbwarden configuration
