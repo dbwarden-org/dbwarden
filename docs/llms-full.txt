@@ -2070,6 +2070,8 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 
 ## Unreleased
 
+## \[0.19.1\] - 2026-10-10
+
 ### Added
 
 - **`DbwardenConfig` for project-wide migration policy.** A singleton class (`pre_migrate_safety`, `pre_migrate_impact`, `missing_plan`, `impact_paths`) that controls built-in safety and impact gates. Defaults preserve current behavior.
