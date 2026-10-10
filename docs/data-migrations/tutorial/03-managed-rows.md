@@ -190,7 +190,7 @@ No new migrations to generate - all models already covered by existing migration
 
 To actually remove the row, declare the deletion (Step 6): set `on_missing="delete"`,
 provide `scope`, and set `acknowledge_delete=True` in the same change. Deleting a
-whole declaration works the same way — first declare the deletion and generate its
+whole declaration works the same way - first declare the deletion and generate its
 migration, then remove the declaration.
 
 ## Recap
@@ -203,7 +203,7 @@ migration, then remove the declaration.
 - Deletion is `CRITICAL` and requires `--force`; the generated SQL is guarded by the
   ownership ledger.
 - `rollback="restore_previous"` reverses safely; `irreversible` refuses rollback.
-- Removing a declaration does not delete rows — declare the deletion explicitly.
+- Removing a declaration does not delete rows - declare the deletion explicitly.
 
 ## What's next
 

@@ -1,7 +1,7 @@
 # 5. Expressions
 
 A transformation owns one target column and fills it with a deterministic
-expression. Expressions are typed ASTs — not Python callbacks and not raw SQL — so
+expression. Expressions are typed ASTs - not Python callbacks and not raw SQL - so
 dbwarden can validate them and lower them to each backend.
 
 ## What you'll learn
@@ -68,7 +68,7 @@ derive(
 ```
 
 `rollback` is required. `slug` is nullable, which is what `rollback="clear"`
-needs — clearing sets the owned column back to `NULL`.
+needs - clearing sets the owned column back to `NULL`.
 
 ## Step 2: Build expressions
 
@@ -117,7 +117,7 @@ derive(
 )
 ```
 
-Python's `and`, `or`, and `not` cannot build expressions — an expression used as a
+Python's `and`, `or`, and `not` cannot build expressions - an expression used as a
 Python boolean raises `TypeError`. Use the operator forms instead.
 
 ## Step 5: Domain proofs

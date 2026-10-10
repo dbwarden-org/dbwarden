@@ -32,7 +32,7 @@ behavior. Execution reads the plan; it never classifies at deploy time.
 
 That is why the earlier pages ran `migrate --force`: seeds, backfills, and archives
 are `WARN` or `CRITICAL` by design. A passing compile and a successful guard prove
-only the declared checks ran — they do not prove application semantics or data
+only the declared checks ran - they do not prove application semantics or data
 quality outside declared ownership. Severity makes the risk visible and requires
 acknowledgement.
 

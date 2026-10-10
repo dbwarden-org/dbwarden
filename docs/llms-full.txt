@@ -15541,7 +15541,7 @@ Read it left to right:
 
 1. **Declaration.** You declare intent beside the model: which rows to own, which
    column to derive, which predicate must hold. The declaration is Python, but it
-   is not arbitrary code — it is a small typed surface.
+   is not arbitrary code - it is a small typed surface.
 2. **Compilation.** dbwarden discovers declarations, validates them, resolves
    static sources and snapshots, and produces a *canonical data specification*: a
    backend-independent, checksummed description of the work.
@@ -15584,8 +15584,8 @@ middle of a live system.
 
 Live declarations are trusted project Python. dbwarden imports them to discover
 them, so import side effects run before validation. The compiler pipeline is a
-correctness and mutation-safety boundary — it rejects unsupported expressions,
-ambiguous ownership, and unsafe operations — but it is not a sandbox. Code review,
+correctness and mutation-safety boundary - it rejects unsupported expressions,
+ambiguous ownership, and unsafe operations - but it is not a sandbox. Code review,
 process, credentials, and database permissions still bound what a declaration can
 do.
 
@@ -15848,8 +15848,8 @@ python3 -c "import sqlite3; print(sqlite3.connect('app.db').execute('SELECT code
 
 ## What's next
 
-Learn the full managed-row surface — keys, ownership, missing-row policies, scope,
-and rollback — in [3. Managed rows](./03-managed-rows.md).
+Learn the full managed-row surface - keys, ownership, missing-row policies, scope,
+and rollback - in [3. Managed rows](./03-managed-rows.md).
 
 ========================================================================
 PAGE: https://docs.dbwarden.org/data-migrations/tutorial/03-managed-rows/
@@ -16047,7 +16047,7 @@ No new migrations to generate - all models already covered by existing migration
 
 To actually remove the row, declare the deletion (Step 6): set `on_missing="delete"`,
 provide `scope`, and set `acknowledge_delete=True` in the same change. Deleting a
-whole declaration works the same way — first declare the deletion and generate its
+whole declaration works the same way - first declare the deletion and generate its
 migration, then remove the declaration.
 
 ## Recap
@@ -16060,7 +16060,7 @@ migration, then remove the declaration.
 - Deletion is `CRITICAL` and requires `--force`; the generated SQL is guarded by the
   ownership ledger.
 - `rollback="restore_previous"` reverses safely; `irreversible` refuses rollback.
-- Removing a declaration does not delete rows — declare the deletion explicitly.
+- Removing a declaration does not delete rows - declare the deletion explicitly.
 
 ## What's next
 
@@ -16196,7 +16196,7 @@ rather than being written as the wrong type.
 The checksum is computed over the normalized, typed values, not the raw bytes of
 the file. Reordering rows, switching between LF and CRLF line endings, or
 requoting a field does not change it. Confirm by reordering the CSV and re-running
-`data describe` — the checksum stays
+`data describe` - the checksum stays
 `14b859166349952ca861a72a101a554d6720e115e00edcd91f612853c0058b81`.
 
 `source=` also accepts JSON. A JSON array of objects works like the CSV:
@@ -16235,7 +16235,7 @@ PAGE: https://docs.dbwarden.org/data-migrations/tutorial/05-expressions/
 # 5. Expressions
 
 A transformation owns one target column and fills it with a deterministic
-expression. Expressions are typed ASTs — not Python callbacks and not raw SQL — so
+expression. Expressions are typed ASTs - not Python callbacks and not raw SQL - so
 dbwarden can validate them and lower them to each backend.
 
 ## What you'll learn
@@ -16302,7 +16302,7 @@ derive(
 ```
 
 `rollback` is required. `slug` is nullable, which is what `rollback="clear"`
-needs — clearing sets the owned column back to `NULL`.
+needs - clearing sets the owned column back to `NULL`.
 
 ## Step 2: Build expressions
 
@@ -16351,7 +16351,7 @@ derive(
 )
 ```
 
-Python's `and`, `or`, and `not` cannot build expressions — an expression used as a
+Python's `and`, `or`, and `not` cannot build expressions - an expression used as a
 Python boolean raises `TypeError`. Use the operator forms instead.
 
 ## Step 5: Domain proofs
@@ -16928,14 +16928,14 @@ declaration order.
 - How `overlap="priority"` with `coverage="all_assigned_once"` routes each row to exactly one target
 - Why every priority target needs a distinct integer `priority=`, and what the effective predicates look like
 - How target foreign keys order the writes
-- Which failures — ambiguous identities, uncovered rows, foreign-key cycles — are caught before any write
+- Which failures - ambiguous identities, uncovered rows, foreign-key cycles - are caught before any write
 
 ## Prerequisites
 
 - Completed [7. Historical transitions](./07-historical-transitions.md).
 - The runnable [transitions example](../../../examples/data-migrations/transitions/).
 
-## Step 1: `fan_out` — one row, several targets
+## Step 1: `fan_out`: one row, several targets
 
 The transitions example sets `overlap="fan_out"` and leaves `coverage` at its
 default `all`:
@@ -16957,7 +16957,7 @@ both `person` and `customer`. `coverage="all"` still requires every source row t
 match *at least one* target. `fan_out` permits only the edges you actually list;
 it is not "match anything".
 
-## Step 2: `priority` — one row, one of several targets
+## Step 2: `priority`: one row, one of several targets
 
 When targets have predicates that can both be true, and a row must land in exactly
 one, use priority. It requires two settings together: `coverage="all_assigned_once"`
@@ -17174,7 +17174,7 @@ from_source(
 - `identity` names non-null, unique source keys. They must be integer or string
   columns so byte ordering is stable; cast anything else explicitly.
 - `map` names the fields this input contributes. Every input must project the
-  **same set of names** with compatible types — here `id`, `amount`, `name`.
+  **same set of names** with compatible types - here `id`, `amount`, `name`.
 - `priority` is an integer, and priorities must be distinct across inputs. Lower
   numbers win for `winner`.
 
@@ -17294,7 +17294,7 @@ transition-owned table, not a desired model.
 
 The compiler rejects a merge that cannot be reproduced deterministically:
 
-- a revision that reuses the old declaration — changed grouping, sources, or
+- a revision that reuses the old declaration - changed grouping, sources, or
   field rules require a **new** declaration with pinned retained sources;
 - different projection fields between inputs, or ambiguous field rules;
 - nullable or duplicate source identities, or missing grouping keys;
@@ -17387,7 +17387,7 @@ otherwise.
 | `clear` | Sets the owned column back to null | Target column must be nullable |
 | `recompute` | Restores the previous frozen desired expression | A prior declaration with compatible ownership |
 | `capture` | Restores the authenticated typed preimage | Target has a primary key |
-| `irreversible` | Nothing; rollback refuses | — |
+| `irreversible` | Nothing; rollback refuses | - |
 
 Generic inverse reconstruction is unsupported. If you cannot name how to reverse a
 write, declare `irreversible` and mean it.
@@ -17467,7 +17467,7 @@ Backend support differs, and unsupported controls fail during planning:
 | SQLite | Duration, statement interruption, and lock timeout; rejects replication-lag limits (`SQLite has no replication-lag measurement`). |
 | ClickHouse | Rejects keyset batching. |
 
-## Step 5: Run scripts 01 and 02 — base schema, capture, seed
+## Step 5: Run scripts 01 and 02: base schema, capture, seed
 
 ```bash
 cd lifecycle
@@ -17476,8 +17476,8 @@ bash scripts/02-capture-and-seed.sh
 ```
 
 Script `01` creates `item(id, source, value)` and `country(code, name)` and seeds
-three items. Script `02` adopts the capture revision — `value` becomes
-`col("source") + 1` with capture rollback and `batch(size=1, key=["id"])` — and
+three items. Script `02` adopts the capture revision - `value` becomes
+`col("source") + 1` with capture rollback and `batch(size=1, key=["id"])` - and
 declares `UY` and `AR` as managed rows:
 
 ```text
@@ -17488,10 +17488,10 @@ item (value = source + 1): [(1, 7, 8), (2, 10, 11), (3, 20, 21)]
 country:                  [('AR', 'Argentina'), ('UY', 'Uruguay')]
 ```
 
-Three item rows run as three chunks — one per row — inside one statement
+Three item rows run as three chunks - one per row - inside one statement
 transaction, and each overwritten `value` gets a captured preimage.
 
-## Step 6: Run script 03 — archive a retired row
+## Step 6: Run script 03: archive a retired row
 
 Script `03` drops `AR` from the declaration. With `on_missing="archive"`, the
 migration moves `AR` to `country_archive` instead of deleting it or leaving it in
@@ -17505,7 +17505,7 @@ country:         [('UY', 'Uruguay')]
 country_archive: [('AR', 'Argentina')]
 ```
 
-## Step 7: Run script 04 — roll back, reapply, converge
+## Step 7: Run script 04: roll back, reapply, converge
 
 ```text
 === 04: Rollback, reapply, converge ===
@@ -17632,7 +17632,7 @@ lengths, and SHA-256 checksums for all three members.
 
 Values are redacted by default. `--show-managed-values` reveals declaration
 literals in plans and rendered output. SQL output intentionally shows literals
-because it is meant for review — that is the `.sql` file's job.
+because it is meant for review - that is the `.sql` file's job.
 
 ## Step 2: Render the compiled operations
 
@@ -17712,7 +17712,7 @@ Data declarations are valid.
 statements. `dry-run --probes` executes only read-only guards and reports the
 observed counts, scope checksums, database identity, isolation level, thresholds,
 and evidence checksums. It does not predict post-write values when the target
-schema or rows do not exist yet — you may see:
+schema or rows do not exist yet - you may see:
 
 ```text
 (sqlite3.OperationalError) no such table: customer
@@ -17749,7 +17749,7 @@ dbwarden make-migrations "seed reference data" --param region='"EU"' --param min
 ```
 
 Missing or duplicate names fail, and the resolved canonical values are stored in
-the frozen artifacts — execution never rereads parameters.
+the frozen artifacts - execution never rereads parameters.
 
 Offline generation reads saved model state, declarations, and pinned snapshots
 without a target database connection:
@@ -17880,7 +17880,7 @@ Rollback completed successfully: 1 migration(s) reverted.
 
 A completed rollback records `ROLLED_BACK`. A `capture` transformation restores
 the recorded typed preimage, but only while the current value still matches the
-recorded postimage — later application edits cause a conflict instead of being
+recorded postimage - later application edits cause a conflict instead of being
 overwritten. Irreversible data operations refuse rollback outright; a comment or
 empty SQL section is not a successful reversal.
 
@@ -18179,7 +18179,7 @@ behavior. Execution reads the plan; it never classifies at deploy time.
 
 That is why the earlier pages ran `migrate --force`: seeds, backfills, and archives
 are `WARN` or `CRITICAL` by design. A passing compile and a successful guard prove
-only the declared checks ran — they do not prove application semantics or data
+only the declared checks ran - they do not prove application semantics or data
 quality outside declared ownership. Severity makes the risk visible and requires
 acknowledgement.
 
@@ -18409,31 +18409,29 @@ users:      [(1, '  Ada Lovelace  ', 'ada lovelace')]
 
 Each chapter is self-contained and builds on the previous one.
 
-- [1. Why and the mental model](./01-why-and-mental-model.md) — the problem, the
+- [1. Why and the mental model](./01-why-and-mental-model.md): the problem, the
   declaration-to-artifact pipeline, and the vocabulary.
-- [2. Setup and your first declaration](./02-setup-and-first-declaration.md) —
-  project layout, `dbwarden init`, a `Country` seed, and the severity gate.
-- [3. Managed rows](./03-managed-rows.md) — the full `rows()` API: keys, ownership,
+- [2. Setup and your first declaration](./02-setup-and-first-declaration.md): project layout, `dbwarden init`, a `Country` seed, and the severity gate.
+- [3. Managed rows](./03-managed-rows.md): the full `rows()` API: keys, ownership,
   `on_missing`, scope, and rollback.
-- [4. Static sources](./04-static-sources.md) — loading rows from CSV or JSON at
+- [4. Static sources](./04-static-sources.md): loading rows from CSV or JSON at
   compile time.
-- [5. Expressions](./05-expressions.md) — `derive()` and the typed expression AST.
-- [6. Validation](./06-validation.md) — `validate()` and `check --data`.
-- [7. Historical transitions](./07-historical-transitions.md) — moving pinned
+- [5. Expressions](./05-expressions.md): `derive()` and the typed expression AST.
+- [6. Validation](./06-validation.md): `validate()` and `check --data`.
+- [7. Historical transitions](./07-historical-transitions.md): moving pinned
   snapshot rows into current models.
-- [8. Splits and priority](./08-splits-and-priority.md) — one source into many
+- [8. Splits and priority](./08-splits-and-priority.md): one source into many
   targets, with overlap and priority rules.
-- [9. Merges](./09-merges.md) — many sources into one target with explicit
+- [9. Merges](./09-merges.md): many sources into one target with explicit
   grouping and field rules.
-- [10. Capture, archive, and batching](./10-capture-archive-batching.md) —
-  typed preimages, archive destinations, and ordered batches.
-- [11. Review and generate](./11-review-and-generate.md) — inspecting compiled
+- [10. Capture, archive, and batching](./10-capture-archive-batching.md): typed preimages, archive destinations, and ordered batches.
+- [11. Review and generate](./11-review-and-generate.md): inspecting compiled
   semantics and freezing artifacts.
-- [12. Apply, roll back, and reapply](./12-apply-rollback-reapply.md) — the
+- [12. Apply, roll back, and reapply](./12-apply-rollback-reapply.md): the
   execution lifecycle and the journal.
-- [13. Reconcile and convergence](./13-reconcile-and-convergence.md) — recovering
+- [13. Reconcile and convergence](./13-reconcile-and-convergence.md): recovering
   from uncertain effects and proving convergence.
-- [14. Safety and CI](./14-safety-and-ci.md) — severity gates and an offline
+- [14. Safety and CI](./14-safety-and-ci.md): severity gates and an offline
   pipeline.
 
 ## Recap
@@ -18471,7 +18469,7 @@ command cheat-sheet, and points you back to the reference material.
 
 Declarative data migrations are versioned migration operations with canonical
 identity, ownership, rollback policy, guards, a durable journal, and frozen
-source artifacts. That is more machinery than a seed file — use it when a data
+source artifacts. That is more machinery than a seed file - use it when a data
 change belongs to the same release contract as a schema change.
 
 | Approach | Declares | Identity and ownership | Rollback | Use when |
@@ -18542,10 +18540,9 @@ dbwarden data transition reconcile <migration_id> --apply --decision verified_re
 
 ## Where to go next
 
-- [Reference: Declarative data migrations](../reference.md) — the full surface of
+- [Reference: Declarative data migrations](../reference.md): the full surface of
   declarations, commands, artifacts, and recovery.
-- [Design specification: Declarative data migrations](../../design/declarative-data-migrations.md)
-  — the normative contract for identity, planning, journals, and rollback.
+- [Design specification: Declarative data migrations](../../design/declarative-data-migrations.md): the normative contract for identity, planning, journals, and rollback.
 - Runnable examples under
   [`examples/data-migrations/`](../../../examples/data-migrations/):
   [basics](../../../examples/data-migrations/basics/),
@@ -18564,8 +18561,8 @@ dbwarden data transition reconcile <migration_id> --apply --decision verified_re
   above tell you what each one guarantees.
 - Generation compiles to frozen artifacts; apply consumes them; convergence and
   reconciliation verify the result.
-- Keep the review gates — `check --data`, `migrate --dry-run --data`, and severity
-  caps — between generation and a single serialized deploy job.
+- Keep the review gates - `check --data`, `migrate --dry-run --data`, and severity
+  caps - between generation and a single serialized deploy job.
 
 ========================================================================
 PAGE: https://docs.dbwarden.org/databases/clickhouse/aggregating-views/

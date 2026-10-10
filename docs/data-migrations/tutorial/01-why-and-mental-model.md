@@ -70,7 +70,7 @@ Read it left to right:
 
 1. **Declaration.** You declare intent beside the model: which rows to own, which
    column to derive, which predicate must hold. The declaration is Python, but it
-   is not arbitrary code — it is a small typed surface.
+   is not arbitrary code - it is a small typed surface.
 2. **Compilation.** dbwarden discovers declarations, validates them, resolves
    static sources and snapshots, and produces a *canonical data specification*: a
    backend-independent, checksummed description of the work.
@@ -113,8 +113,8 @@ middle of a live system.
 
 Live declarations are trusted project Python. dbwarden imports them to discover
 them, so import side effects run before validation. The compiler pipeline is a
-correctness and mutation-safety boundary — it rejects unsupported expressions,
-ambiguous ownership, and unsafe operations — but it is not a sandbox. Code review,
+correctness and mutation-safety boundary - it rejects unsupported expressions,
+ambiguous ownership, and unsafe operations - but it is not a sandbox. Code review,
 process, credentials, and database permissions still bound what a declaration can
 do.
 

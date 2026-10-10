@@ -92,7 +92,7 @@ Rollback completed successfully: 1 migration(s) reverted.
 
 A completed rollback records `ROLLED_BACK`. A `capture` transformation restores
 the recorded typed preimage, but only while the current value still matches the
-recorded postimage — later application edits cause a conflict instead of being
+recorded postimage - later application edits cause a conflict instead of being
 overwritten. Irreversible data operations refuse rollback outright; a comment or
 empty SQL section is not a successful reversal.
 

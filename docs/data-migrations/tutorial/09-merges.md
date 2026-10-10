@@ -64,7 +64,7 @@ from_source(
 - `identity` names non-null, unique source keys. They must be integer or string
   columns so byte ordering is stable; cast anything else explicitly.
 - `map` names the fields this input contributes. Every input must project the
-  **same set of names** with compatible types — here `id`, `amount`, `name`.
+  **same set of names** with compatible types - here `id`, `amount`, `name`.
 - `priority` is an integer, and priorities must be distinct across inputs. Lower
   numbers win for `winner`.
 
@@ -184,7 +184,7 @@ transition-owned table, not a desired model.
 
 The compiler rejects a merge that cannot be reproduced deterministically:
 
-- a revision that reuses the old declaration — changed grouping, sources, or
+- a revision that reuses the old declaration - changed grouping, sources, or
   field rules require a **new** declaration with pinned retained sources;
 - different projection fields between inputs, or ambiguous field rules;
 - nullable or duplicate source identities, or missing grouping keys;

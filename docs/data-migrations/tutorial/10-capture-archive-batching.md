@@ -56,7 +56,7 @@ otherwise.
 | `clear` | Sets the owned column back to null | Target column must be nullable |
 | `recompute` | Restores the previous frozen desired expression | A prior declaration with compatible ownership |
 | `capture` | Restores the authenticated typed preimage | Target has a primary key |
-| `irreversible` | Nothing; rollback refuses | — |
+| `irreversible` | Nothing; rollback refuses | - |
 
 Generic inverse reconstruction is unsupported. If you cannot name how to reverse a
 write, declare `irreversible` and mean it.
@@ -136,7 +136,7 @@ Backend support differs, and unsupported controls fail during planning:
 | SQLite | Duration, statement interruption, and lock timeout; rejects replication-lag limits (`SQLite has no replication-lag measurement`). |
 | ClickHouse | Rejects keyset batching. |
 
-## Step 5: Run scripts 01 and 02 — base schema, capture, seed
+## Step 5: Run scripts 01 and 02: base schema, capture, seed
 
 ```bash
 cd lifecycle
@@ -145,8 +145,8 @@ bash scripts/02-capture-and-seed.sh
 ```
 
 Script `01` creates `item(id, source, value)` and `country(code, name)` and seeds
-three items. Script `02` adopts the capture revision — `value` becomes
-`col("source") + 1` with capture rollback and `batch(size=1, key=["id"])` — and
+three items. Script `02` adopts the capture revision - `value` becomes
+`col("source") + 1` with capture rollback and `batch(size=1, key=["id"])` - and
 declares `UY` and `AR` as managed rows:
 
 ```text
@@ -157,10 +157,10 @@ item (value = source + 1): [(1, 7, 8), (2, 10, 11), (3, 20, 21)]
 country:                  [('AR', 'Argentina'), ('UY', 'Uruguay')]
 ```
 
-Three item rows run as three chunks — one per row — inside one statement
+Three item rows run as three chunks - one per row - inside one statement
 transaction, and each overwritten `value` gets a captured preimage.
 
-## Step 6: Run script 03 — archive a retired row
+## Step 6: Run script 03: archive a retired row
 
 Script `03` drops `AR` from the declaration. With `on_missing="archive"`, the
 migration moves `AR` to `country_archive` instead of deleting it or leaving it in
@@ -174,7 +174,7 @@ country:         [('UY', 'Uruguay')]
 country_archive: [('AR', 'Argentina')]
 ```
 
-## Step 7: Run script 04 — roll back, reapply, converge
+## Step 7: Run script 04: roll back, reapply, converge
 
 ```text
 === 04: Rollback, reapply, converge ===

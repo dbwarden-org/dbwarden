@@ -90,31 +90,29 @@ users:      [(1, '  Ada Lovelace  ', 'ada lovelace')]
 
 Each chapter is self-contained and builds on the previous one.
 
-- [1. Why and the mental model](./01-why-and-mental-model.md) — the problem, the
+- [1. Why and the mental model](./01-why-and-mental-model.md): the problem, the
   declaration-to-artifact pipeline, and the vocabulary.
-- [2. Setup and your first declaration](./02-setup-and-first-declaration.md) —
-  project layout, `dbwarden init`, a `Country` seed, and the severity gate.
-- [3. Managed rows](./03-managed-rows.md) — the full `rows()` API: keys, ownership,
+- [2. Setup and your first declaration](./02-setup-and-first-declaration.md): project layout, `dbwarden init`, a `Country` seed, and the severity gate.
+- [3. Managed rows](./03-managed-rows.md): the full `rows()` API: keys, ownership,
   `on_missing`, scope, and rollback.
-- [4. Static sources](./04-static-sources.md) — loading rows from CSV or JSON at
+- [4. Static sources](./04-static-sources.md): loading rows from CSV or JSON at
   compile time.
-- [5. Expressions](./05-expressions.md) — `derive()` and the typed expression AST.
-- [6. Validation](./06-validation.md) — `validate()` and `check --data`.
-- [7. Historical transitions](./07-historical-transitions.md) — moving pinned
+- [5. Expressions](./05-expressions.md): `derive()` and the typed expression AST.
+- [6. Validation](./06-validation.md): `validate()` and `check --data`.
+- [7. Historical transitions](./07-historical-transitions.md): moving pinned
   snapshot rows into current models.
-- [8. Splits and priority](./08-splits-and-priority.md) — one source into many
+- [8. Splits and priority](./08-splits-and-priority.md): one source into many
   targets, with overlap and priority rules.
-- [9. Merges](./09-merges.md) — many sources into one target with explicit
+- [9. Merges](./09-merges.md): many sources into one target with explicit
   grouping and field rules.
-- [10. Capture, archive, and batching](./10-capture-archive-batching.md) —
-  typed preimages, archive destinations, and ordered batches.
-- [11. Review and generate](./11-review-and-generate.md) — inspecting compiled
+- [10. Capture, archive, and batching](./10-capture-archive-batching.md): typed preimages, archive destinations, and ordered batches.
+- [11. Review and generate](./11-review-and-generate.md): inspecting compiled
   semantics and freezing artifacts.
-- [12. Apply, roll back, and reapply](./12-apply-rollback-reapply.md) — the
+- [12. Apply, roll back, and reapply](./12-apply-rollback-reapply.md): the
   execution lifecycle and the journal.
-- [13. Reconcile and convergence](./13-reconcile-and-convergence.md) — recovering
+- [13. Reconcile and convergence](./13-reconcile-and-convergence.md): recovering
   from uncertain effects and proving convergence.
-- [14. Safety and CI](./14-safety-and-ci.md) — severity gates and an offline
+- [14. Safety and CI](./14-safety-and-ci.md): severity gates and an offline
   pipeline.
 
 ## Recap

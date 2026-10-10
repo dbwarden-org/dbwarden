@@ -45,15 +45,15 @@ models, so `app/data/` only holds its package marker.
 
 ## What each stage demonstrates
 
-**Capture rollback** — `derive("value", col("source") + 1, rollback="capture")`
+**Capture rollback**: `derive("value", col("source") + 1, rollback="capture")`
 records the typed preimage before the write. `rollback --count 2` restores
 `value` to its original `source` value.
 
-**Batching** — `execution=batch(size=1, key=["id"])` walks the rows in
+**Batching**: `execution=batch(size=1, key=["id"])` walks the rows in
 ascending keyset chunks. Three seeded rows run as three chunks in one
 statement transaction.
 
-**Archive** — after revision `02` owns `UY` and `AR`, revision `03` drops
+**Archive**: after revision `02` owns `UY` and `AR`, revision `03` drops
 `AR` from the declaration. `on_missing="archive"` with
 `archive_to=archive_table("country_archive")` and `acknowledge_archive=True`
 moves the retired row instead of dropping it. Rolling back `03` restores it.

@@ -222,5 +222,5 @@ python3 -c "import sqlite3; print(sqlite3.connect('app.db').execute('SELECT code
 
 ## What's next
 
-Learn the full managed-row surface — keys, ownership, missing-row policies, scope,
-and rollback — in [3. Managed rows](./03-managed-rows.md).
+Learn the full managed-row surface - keys, ownership, missing-row policies, scope,
+and rollback - in [3. Managed rows](./03-managed-rows.md).

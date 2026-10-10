@@ -80,7 +80,7 @@ lengths, and SHA-256 checksums for all three members.
 
 Values are redacted by default. `--show-managed-values` reveals declaration
 literals in plans and rendered output. SQL output intentionally shows literals
-because it is meant for review — that is the `.sql` file's job.
+because it is meant for review - that is the `.sql` file's job.
 
 ## Step 2: Render the compiled operations
 
@@ -160,7 +160,7 @@ Data declarations are valid.
 statements. `dry-run --probes` executes only read-only guards and reports the
 observed counts, scope checksums, database identity, isolation level, thresholds,
 and evidence checksums. It does not predict post-write values when the target
-schema or rows do not exist yet — you may see:
+schema or rows do not exist yet - you may see:
 
 ```text
 (sqlite3.OperationalError) no such table: customer
@@ -197,7 +197,7 @@ dbwarden make-migrations "seed reference data" --param region='"EU"' --param min
 ```
 
 Missing or duplicate names fail, and the resolved canonical values are stored in
-the frozen artifacts — execution never rereads parameters.
+the frozen artifacts - execution never rereads parameters.
 
 Offline generation reads saved model state, declarations, and pinned snapshots
 without a target database connection:

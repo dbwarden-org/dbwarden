@@ -11,14 +11,14 @@ declaration order.
 - How `overlap="priority"` with `coverage="all_assigned_once"` routes each row to exactly one target
 - Why every priority target needs a distinct integer `priority=`, and what the effective predicates look like
 - How target foreign keys order the writes
-- Which failures — ambiguous identities, uncovered rows, foreign-key cycles — are caught before any write
+- Which failures - ambiguous identities, uncovered rows, foreign-key cycles - are caught before any write
 
 ## Prerequisites
 
 - Completed [7. Historical transitions](./07-historical-transitions.md).
 - The runnable [transitions example](../../../examples/data-migrations/transitions/).
 
-## Step 1: `fan_out` — one row, several targets
+## Step 1: `fan_out`: one row, several targets
 
 The transitions example sets `overlap="fan_out"` and leaves `coverage` at its
 default `all`:
@@ -40,7 +40,7 @@ both `person` and `customer`. `coverage="all"` still requires every source row t
 match *at least one* target. `fan_out` permits only the edges you actually list;
 it is not "match anything".
 
-## Step 2: `priority` — one row, one of several targets
+## Step 2: `priority`: one row, one of several targets
 
 When targets have predicates that can both be true, and a row must land in exactly
 one, use priority. It requires two settings together: `coverage="all_assigned_once"`

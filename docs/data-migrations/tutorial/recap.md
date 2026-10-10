@@ -14,7 +14,7 @@ command cheat-sheet, and points you back to the reference material.
 
 Declarative data migrations are versioned migration operations with canonical
 identity, ownership, rollback policy, guards, a durable journal, and frozen
-source artifacts. That is more machinery than a seed file — use it when a data
+source artifacts. That is more machinery than a seed file - use it when a data
 change belongs to the same release contract as a schema change.
 
 | Approach | Declares | Identity and ownership | Rollback | Use when |
@@ -85,10 +85,9 @@ dbwarden data transition reconcile <migration_id> --apply --decision verified_re
 
 ## Where to go next
 
-- [Reference: Declarative data migrations](../reference.md) — the full surface of
+- [Reference: Declarative data migrations](../reference.md): the full surface of
   declarations, commands, artifacts, and recovery.
-- [Design specification: Declarative data migrations](../../design/declarative-data-migrations.md)
-  — the normative contract for identity, planning, journals, and rollback.
+- [Design specification: Declarative data migrations](../../design/declarative-data-migrations.md): the normative contract for identity, planning, journals, and rollback.
 - Runnable examples under
   [`examples/data-migrations/`](../../../examples/data-migrations/):
   [basics](../../../examples/data-migrations/basics/),
@@ -107,5 +106,5 @@ dbwarden data transition reconcile <migration_id> --apply --decision verified_re
   above tell you what each one guarantees.
 - Generation compiles to frozen artifacts; apply consumes them; convergence and
   reconciliation verify the result.
-- Keep the review gates — `check --data`, `migrate --dry-run --data`, and severity
-  caps — between generation and a single serialized deploy job.
+- Keep the review gates - `check --data`, `migrate --dry-run --data`, and severity
+  caps - between generation and a single serialized deploy job.

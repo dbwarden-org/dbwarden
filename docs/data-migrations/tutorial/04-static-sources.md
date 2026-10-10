@@ -123,7 +123,7 @@ rather than being written as the wrong type.
 The checksum is computed over the normalized, typed values, not the raw bytes of
 the file. Reordering rows, switching between LF and CRLF line endings, or
 requoting a field does not change it. Confirm by reordering the CSV and re-running
-`data describe` — the checksum stays
+`data describe` - the checksum stays
 `14b859166349952ca861a72a101a554d6720e115e00edcd91f612853c0058b81`.
 
 `source=` also accepts JSON. A JSON array of objects works like the CSV:
