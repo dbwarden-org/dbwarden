@@ -9,6 +9,20 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 
 ## Unreleased
 
+## \[0.20.2\] - 2026-10-10
+
+### Fixed
+
+- **ClickHouse CREATE TABLE DDL is valid.** ClickHouse has no `NOT NULL`, and key columns now drop `Nullable(...)` without appending a literal `NOT NULL`, which the server rejected with a syntax error (code 62). This unblocked creating materialized-view and aggregating-view tables.
+- **ClickHouse materialized views are created correctly.** A Mode A view class now expands into its target table plus the `<name>_mv` view `TO` it, instead of one malformed implicit-storage view. Unmapped `ChView` columns resolve their type and nullability from the class annotation, and table comments are emitted.
+- **ClickHouse `generate-models` round-trips native types and DDL options.** Columns whose ClickHouse type SQLAlchemy cannot reproduce (`DateTime64`, `Enum8`, `FixedString`, `UUID`, `UInt*`, `AggregateFunction`, and similar) now emit an explicit `ch_type`. Table and column TTLs, codecs, engine settings, skip indexes (`ChIndexSpec`), and refreshable-view `REFRESH` are captured again, and aggregating-view group-by columns use the bare column name.
+- **ClickHouse lock release clears the lease.** `update_state` set only the state and left `expires_at` in the future, so the next acquire saw a still-valid lease and failed with "Could not verify ClickHouse lease acquisition". The release statement now clears `expires_at`.
+
+### Documentation
+
+- **New Data Migrations section.** A section landing page, a sixteen page from-scratch tutorial, and four runnable SQLite example projects (`basics`, `transitions`, `merges`, `lifecycle`) under `examples/data-migrations/`. The reference gained the mental model, the expression surface, the backend capability matrix, execution states, and the product boundary, and its signatures were reconciled with the code.
+- **Reference and index updates.** Added `docs/commands/data.md`, completed the CLI option and Python API inventories (including the `dbwarden.data.*` submodules), added glossary terms and cross-links, and registered a Data Migrations section in the llms index.
+
 ## \[0.20.1\] - 2026-10-10
 
 ### Fixed
