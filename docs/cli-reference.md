@@ -229,6 +229,50 @@ $ dbwarden snapshot users --database primary
 
 Outputs the DDL schema of the specified table.
 
+## Declarative data migrations
+
+### `make-data-migration`
+
+```bash
+$ dbwarden make-data-migration "backfill country names" --database primary
+$ dbwarden make-data-migration "seed lookup rows" --plan --show-managed-values
+$ dbwarden make-data-migration "offline data change" --offline
+```
+
+Generate versioned managed-row and transformation migrations. It runs the shared generation pipeline in data-only mode and writes the paired `.sql`, `.plan.json`, and `.data.py` artifacts.
+
+Options: `--database`/`-d`, `--offline`, `--dry-run`, `--plan`, `--sql`, `--param`, `--show-managed-values`, `--split-at-severity`
+
+### `data render` / `data describe` / `data docs`
+
+```bash
+$ dbwarden data render --database primary
+$ dbwarden data render --format sql --show-managed-values
+$ dbwarden data describe --format markdown --output data-docs
+$ dbwarden data docs --output data-docs --diagrams mermaid
+```
+
+Render the compiled data plan, describe declarations, or write per-model and per-transition Markdown documentation.
+
+Options: `--database`/`-d`, `--model`, `--format`, `--include`, `--only-with-data`, `--relationship-depth`, `--show-managed-values`, `--param`, and `--output`/`--diagrams` for `describe`/`docs`
+
+`--format` accepts `text`, `json`, `mapping`, `sql`, or `operations` for `render`, and `text`, `json`, or `markdown` for `describe`. `--include` accepts `schema`, `constraints`, `relationships`, `data`, and `transitions`.
+
+### `data transition ...` / `data-transition ...`
+
+```bash
+$ dbwarden data transition validate move_legacy_rows --database primary
+$ dbwarden data transition plan move_legacy_rows --format sql
+$ dbwarden data transition dry-run move_legacy_rows --probes
+$ dbwarden data transition audit 0001_move_legacy_rows
+$ dbwarden data transition reconcile 0001_move_legacy_rows --apply --decision verified_retry
+$ dbwarden data transition new move_legacy_rows --manual
+```
+
+`data transition` (alias `data-transition`) exposes `validate`, `plan`, `dry-run`, `render`, `describe`, `audit`, `reconcile`, and `new` for individual historical transitions. See [data](commands/data.md) for each command's arguments and options.
+
+Execution itself does not have a dedicated command: generated data migrations apply through `migrate` under the normal migration lock, and rolled-back data requires `--reapply-data`. See the [declarative data migrations reference](data-migrations/reference.md) for declarations, journals, ownership, backend limits, and recovery.
+
 ## Seed management
 
 ### `seed create`

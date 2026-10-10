@@ -65,6 +65,7 @@ Use the [feature map](reference/feature-map.md) to find each workflow and its im
 - Multi-database support: PostgreSQL, MySQL, ClickHouse, MariaDB, SQLite
 - Extensible plugin system with official plugins for seeds, RBAC, FastAPI, sandbox testing, and PostgreSQL/ClickHouse extensions
 - Reverse-engineer live databases into models with `generate-models`
+- [Declarative data migrations](data-migrations/index.md): managed rows, derived values, and historical transitions compiled into versioned, frozen, reversible SQL
 
 ## Why dbwarden
 
@@ -399,6 +400,7 @@ dbwarden is built for teams that want declarative, reviewable, reproducible data
 
 - Start with [Features](features.md)
 - Follow the guides in [Get Started](getting-started/setup.md)
+- Learn [Declarative Data Migrations](data-migrations/index.md)
 - Explore [Cookbook & Examples](cookbook/index.md)
 - Browse [Plugins](plugins/) to extend dbwarden's capabilities
 - Use [CLI Reference](cli-reference.md) as command lookup

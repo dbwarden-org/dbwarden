@@ -15,7 +15,7 @@ object; plugin boundaries are listed below.
 | Multiple databases and model ownership | [Multiple databases](../configuration/multi-database.md) | Separate targets and migration directories; overlap requires explicit configuration |
 | SQLAlchemy models, table/column Meta, backend specs | [Models](../models.md) | Accepted fields and emitted operations vary by backend |
 | Model discovery and selective tables | [Discovery](../configuration/model-discovery.md) | Importable mapped classes; avoid application startup side effects |
-| Declarative managed rows, derivations, validations, historical transitions, frozen artifacts, and data journal | [Declarative data migrations](../declarative-data-migrations.md) | Versioned bundles use transactional or checkpointed execution; backend conformance evidence is separate from SQL generation |
+| Declarative managed rows, derivations, validations, historical transitions, frozen artifacts, and data journal | [Declarative data migrations](../data-migrations/reference.md) | Versioned bundles use transactional or checkpointed execution; backend conformance evidence is separate from SQL generation |
 | Reverse engineering with `generate-models` | [Schema inspection](../cookbook/05-schema-inspection.md) | Review inferred types, defaults, and unsupported objects |
 | Pydantic schema generation with `auto_schema` | [Auto schemas](../cookbook/10-auto-schemas.md) | Runtime validation schemas are separate from migration state |
 
@@ -39,7 +39,7 @@ object; plugin boundaries are listed below.
 | Apply, rollback, downgrade, and make-rollback | [Apply and inspect](../cookbook/03-apply-and-inspect.md) | An inverse schema change cannot recover deleted data |
 | Execution severity ceilings and repeatables | [Safety-scoped migrations](../correctness/safety-scoped-migrations.md) | A ceiling stops at a version prefix; `--force` does not raise it |
 | Read-only diff, check-db, check-impact | [Safety and impact](../cookbook/06-safety-impact.md) | Reports use available schema/code evidence, not application correctness proofs |
-| Data probes, convergence, journal reconciliation, and explicit reapply | [Declarative data migrations](../declarative-data-migrations.md) | `--data` adds live data checks; rolled-back data needs explicit reapply; uncertain durable effects require proof before retry |
+| Data probes, convergence, journal reconciliation, and explicit reapply | [Declarative data migrations](../data-migrations/reference.md) | `--data` adds live data checks; rolled-back data needs explicit reapply; uncertain durable effects require proof before retry |
 | Lock-status, unlock, native locks, ClickHouse leases | [Locking](../advanced/migration-locking.md) | ClickHouse lease checks have weaker guarantees than native mutual exclusion |
 | Sandboxed migration replay | [Workflows](../getting-started/workflows.md) | Core includes SQLite; external database providers require plugins |
 | SQLite dev mode and SQL translation | [SQL translation](../sql-translation.md) | SQLite execution does not verify another server's behavior |

@@ -4,6 +4,35 @@ Declarative data migrations describe intended rows and transformations beside SQ
 
 Use this for reviewed changes to data that belongs with a schema release. Declarations generate versioned migrations; they cannot be placed in repeatable migration files. Keep one-off repair SQL and application backfills separate.
 
+## Mental model and identity
+
+A declaration compiles once and executes only from frozen artifacts:
+
+```text
+declaration -> IR -> artifacts -> execution
+```
+
+- **Declaration.** Python beside the model or under `data_paths`: managed rows, expressions, validations, or a transition.
+- **IR.** Discovery, validation, resolution, canonicalization, identity analysis, coverage and conflict analysis, dependency planning, and backend negotiation produce the versioned canonical data specification.
+- **Artifacts.** Generation writes paired SQL, plan, and frozen `.data.py` files bound by one manifest.
+- **Execution.** Apply verifies the frozen bundle and runs it; it never re-imports live declarations.
+
+Every artifact carries several distinct identities. They are domain-separated and versioned, so a hash in one role never collides with another:
+
+| Identity | Scope |
+|---|---|
+| declaration ID | Stable logical owner; defaults to the project-relative module path and class name. |
+| declaration checksum | Content digest of canonical declaration semantics. |
+| transition ID | Database identity, declaration ID, and declaration checksum. |
+| migration ID | The artifact filename stem. |
+| operation ID | Operation kind and canonical declaration payload. |
+| execution-step ID | Parent operation ID, direction, and local step index. |
+| edge-definition ID | Transition, source key, target reference, target key definitions, mapping, and predicate. |
+| edge-instance hash | HMAC over one typed source-key and target-key tuple. |
+| run ID / application epoch | One attempt and one application generation in the journal. |
+
+Live declarations are trusted project Python. Discovery imports them, so import side effects happen before validation. The compiler pipeline is a correctness and mutation-safety boundary, not a sandbox: code review, the process, credentials, and database permissions still bound what a declaration can do. Frozen artifacts are read with static AST parsing by default; importing one raises `FrozenDataArtifactImportError` unless explicitly allowed (see [Artifacts and integrity](#artifacts-and-integrity)).
+
 ## Configure discovery
 
 `model_paths` contains mapped SQLAlchemy models. `data_paths` optionally contains modules with `DataTransition` declarations. DBWarden does not treat `*.data.py` files as live declarations.
@@ -25,7 +54,21 @@ database_config(
 
 `model_paths` and `data_paths` name Python files or directories, not dotted module names. Missing configured paths fail discovery. Symlink paths, duplicate declaration IDs, duplicate owners of a table, and reserved DBWarden tables are rejected. `model_tables` restricts model discovery, including model data declarations. Two database entries cannot use the same live data path unless their existing `overlap_models=True` opt-in permits it. `data_snapshot_dir` and `snapshot_registry` are relative paths. They hold compiled data snapshots and historical schema registry metadata.
 
-Declaration IDs default to the project-relative module path and class name. Set `declaration_id` on a mapped model or transition to retain its identity when moving code. Keep an ID only for the same logical owner. Changing managed key columns or owned columns under an existing ID fails planning.
+Declaration IDs default to the project-relative module path and class name, for example `app.models:Country.Data.managed_rows`. Set `declaration_id` on a mapped model or transition to retain its identity when moving or renaming code. Keep an ID only for the same logical owner: changing managed key columns, owned columns, or a transition's logical source under an existing ID fails planning, so create a new declaration instead.
+
+```python
+class Country(Base):
+    __tablename__ = "countries"
+    declaration_id = "reference.countries"   # stable across file moves
+
+    class Data(DataMeta):
+        managed_rows = rows(
+            key="code",
+            rows=[{"code": "UY", "name": "Uruguay"}],
+            owned_columns=["name"],
+            rollback="restore_previous",
+        )
+```
 
 ## Managed rows
 
@@ -74,7 +117,43 @@ class Data(DataMeta):
 
 Use `col(name, table=None)`, `literal(value)`, `param(name)`, `case(...)`, `cast(...)`, `mapping(...)`, and `func.<name>(...)` to build expressions. Arithmetic, comparisons, null tests, membership, and Boolean composition are supported. Combine predicates with `&`, `|`, and `~`; Python `and`, `or`, and `not` cannot build expressions. The function allowlist is `lower`, `upper`, `trim`, `concat`, `coalesce`, `json_extract`, `split_part`, and PostgreSQL `date_trunc`. Arbitrary functions, Python callbacks, raw SQL, volatile values, and unsupported casts fail compilation.
 
-The compiler checks column types, nullability, ownership, and expression domains. A partial `case` or `mapping` needs an explicit fallback or a domain that proves it complete. `derive(..., when=..., on_unmatched="error" | "keep", max_rows=...)` controls its domain and affected-row limit. Rollback is required: `clear` requires a nullable target; `recompute` requires a previous expression that can be restored; `capture` records a guarded typed preimage; `irreversible` blocks rollback.
+Expression shapes:
+
+```python
+from dbwarden.data import case, cast, col, func, literal, mapping, param
+
+literal("fixed")                         # a frozen constant
+param("threshold", "INTEGER")            # bound at generation via --param
+cast(col("amount"), "DECIMAL(12,2)")     # explicit, versioned cast
+case(
+    (col("status") == "A", "active"),
+    (col("status") == "I", "inactive"),
+    else_="unknown",
+)
+mapping(col("country"), {"UY": "Uruguay", "AR": "Argentina"}, else_="Other")
+```
+
+Functions, with their arity and behavior:
+
+| Expression | Arity | Behavior |
+|---|---|---|
+| `func.lower(value)` | 1 | Lowercase under the pinned backend collation. |
+| `func.upper(value)` | 1 | Uppercase. |
+| `func.trim(value)` | 1 | Trim surrounding whitespace. |
+| `func.concat(a, b, ...)` | 2+ | Concatenate string arguments. |
+| `func.coalesce(a, b, ...)` | 2+ | First non-null argument. |
+| `func.json_extract(value, path)` | 2 | Scalar JSON extraction; literal path beginning with `$`. |
+| `func.split_part(value, delimiter, index)` | 3 | One-based string component; literal delimiter, index 1–64. |
+| `func.date_trunc(value, unit, timezone)` | 3 | PostgreSQL only; unit and timezone are string literals and pinned settings are required. |
+
+Operator rules:
+
+- Arithmetic is `+`, `-`, `*`, `/`, `%`; comparisons are `==`, `!=`, `<`, `<=`, `>`, `>=`.
+- Null tests use `.is_(None)` and `.is_not(None)`; membership uses `.in_([...])` over an ordered list.
+- Boolean composition uses `&`, `|`, and `~`. `__bool__` raises, so an expression can never be evaluated as Python truth.
+- Version 1 preserves AST operand order. It never reassociates operations; null, type, collation, overflow, timezone, and backend-coercion changes require a later semantic version with an explicit proof.
+
+The compiler checks column types, nullability, ownership, and expression domains. A partial `case` or `mapping` needs an explicit fallback or a domain that proves it complete: without `else_` the expression is incomplete, so `derive` must supply a `when=` predicate and `on_unmatched="keep"` to cover unmatched rows, or the declaration fails compilation. `derive(..., when=..., on_unmatched="error" | "keep", max_rows=...)` controls its domain and affected-row limit. Rollback is required: `clear` requires a nullable target; `recompute` requires a previous expression that can be restored; `capture` records a guarded typed preimage; `irreversible` blocks rollback.
 
 `date_trunc` requires `settings` containing nonempty `backend_version`, `timezone`, `collation`, `search_path`, and `encoding` strings. These settings become part of expression identity and are checked against PostgreSQL before execution. A numeric version pin matches the server major version; other version strings must match exactly.
 
@@ -89,6 +168,12 @@ null stays null and a missing component returns an empty string. `split_part`
 works on all five backends. DBWarden freezes both canonical expressions.
 
 Supply parameters through repeated `--param NAME=VALUE` options on generation and data inspection commands, or through the Python generation API's `parameters` mapping. Values parse as JSON when possible, otherwise as strings. Missing or duplicate names fail. Frozen artifacts contain resolved canonical values, so execution does not reread parameters.
+
+```console
+$ dbwarden make-data-migration "set inactive threshold" --database primary --param threshold=10
+```
+
+A `param(name, type=None)` may declare a type; the bound value must then match it (`INTEGER`, `BIGINT`, `SMALLINT`, `FLOAT`, `REAL`, `DOUBLE`, `DECIMAL`, `NUMERIC`, `BOOLEAN`, `TEXT`, `VARCHAR`, `DATE`, `DATETIME`, or `TIMESTAMP`). A parameter whose type is declared inconsistently across the expression fails. A frozen binding whose value disagrees with another frozen declaration requires an explicit `--param`.
 
 ## Validation rules
 
@@ -140,7 +225,7 @@ drop it only with the declaration's explicit completion and rollback rules. The
 unified generation path removes the duplicate schema `drop_table` operation
 when the transition owns that source removal.
 
-Python target mappings use `{Target.column: source_expression}`. Target keys must identify stable rows. `on_conflict` is `error`, `ignore_if_equivalent`, or `overwrite`; overwrite requires `acknowledge_overwrite=True`. Equivalent pre-existing rows remain unowned, so rollback does not delete them. Identity ledgers bind each source key to its target key and mapped values.
+Python target mappings use `{Target.column: source_expression}`. Target keys must identify stable rows. `on_conflict` is `error`, `ignore_if_equivalent`, or `overwrite`; overwrite requires `acknowledge_overwrite=True`. Equivalent pre-existing rows remain unowned, so rollback does not delete them. Identity ledgers bind each source key to its target key and mapped values. The plan records the relationship cardinality: `one_to_one` for a single target and `one_to_many` when one source fans out across several targets. `many_to_one` is reserved for `merge_sources()`; unstructured many-to-one mappings are rejected.
 
 | Setting | Behavior |
 |---|---|
@@ -359,7 +444,36 @@ heads, multiple newest compatible candidates, a missing table, or invalid
 lineage fails and asks for `snapshot=`. Execution never performs this search or
 substitutes another snapshot. `latest_previous` is not an accepted alias.
 
-For external snapshot import, use `dbwarden.data.snapshots.register_snapshot(snapshot_id, schema_state, database=..., backend=..., parent_snapshot_ids=..., registry_path=...)`. `resolve_snapshot(snapshot_id, database=..., backend=..., registry_path=..., schema_dir=...)` reads the pinned entry without changing the registry. Reusing an ID with different content fails. Existing schema snapshot files must carry their own valid checksum before they can be resolved without a registry entry.
+For external snapshot import, `dbwarden.data.snapshots.register_snapshot` writes a registry entry:
+
+```text
+register_snapshot(
+    snapshot_id,
+    schema_state=None,
+    *,
+    database=None,
+    backend=None,
+    parent_snapshot_ids=(),
+    data_checksum=None,
+    created_by_migration=None,
+    registry_path=None,
+)
+```
+
+`resolve_snapshot` reads the pinned entry without changing the registry:
+
+```text
+resolve_snapshot(
+    snapshot_id,
+    *,
+    database,
+    backend,
+    registry_path=None,
+    schema_dir=None,
+)
+```
+
+`register_snapshot` also accepts a snapshot dictionary as its first argument, in which case `database`, `backend`, and `snapshot_id` are read from it. Reusing an ID with different content fails. Existing schema snapshot files must carry their own valid checksum before they can be resolved without a registry entry.
 
 Registry writes use a local operating-system file lock and atomic replacement, including offline imports. Parent IDs are sorted and must identify registered snapshots in the same database and backend. Resolution rejects missing parents, cycles, and duplicate IDs. Pass both branch snapshot IDs as parents when importing a merge or squash snapshot; an imported root may have no parents.
 
@@ -398,6 +512,8 @@ when source removal needs acknowledgement. `dbwarden make-data-migration` and
 parameters.
 
 Offline generation reads saved model state, declarations, and pinned snapshots. It does not need a target database connection. A historical source without a valid snapshot fails before SQL generation. `make-data-migration` uses the same generator with schema changes excluded. Use `make-migrations` when target tables or columns must change with the data.
+
+Safety and parameter flags apply across generation and execution. `--split-at-severity SAFE|INFO|WARN|CRITICAL` defers operations at or above the threshold into a separate file with its own verified bundle. `--strict-pending` (or `--no-strict-pending`) refuses generation when pending files lack composable plans. `--max-severity` caps `migrate` and exits 3 on the first higher-severity or unknown file. `--show-managed-values` reveals declaration literals in render, describe, and make output; `--param NAME=VALUE` freezes expression parameters.
 
 ## Complete review and execution flow
 
@@ -515,9 +631,11 @@ A data migration writes three paired files:
 - `.plan.json` contains typed operations, canonical data specification, execution steps, safety information, and integrity manifest.
 - `.data.py` contains the frozen canonical declaration data.
 
-The manifest binds ordered member names, media types, byte lengths, and SHA-256 checksums for SQL, plan, and frozen artifact. The plan records semantic identity separately from probe evidence. Canonical JSON normalizes Unicode and rejects duplicate normalized keys, non-finite values, and unsupported literal types. Static input rows are embedded; replay does not depend on the original CSV or JSON file.
+The manifest binds ordered member names, media types, byte lengths, and SHA-256 checksums for SQL, plan, and frozen artifact. The plan has separate `semantics` and `review_evidence` sections. `semantics` carries the data-spec checksum, operation IDs, and backend, and is the only input to identity and SQL shape; `review_evidence` carries probe observations, thresholds, and status. Live probes may populate evidence, but they never change mappings, expressions, policies, identity, or SQL shape. Canonical JSON normalizes Unicode and rejects duplicate normalized keys, non-finite values, and unsupported literal types. Static input rows are embedded; replay does not depend on the original CSV or JSON file.
 
 The plan member's hash and length cover its canonical JSON payload with `data_bundle` omitted; they do not measure the indented file that also stores the manifest. SQL and frozen Python hashes cover their UTF-8 text. This keeps each checksum outside its own hash input.
+
+The frozen `.data.py` imports and immediately calls `guard_frozen_data_artifact(migration_id)` from `dbwarden.data.frozen`, then assigns one literal `DATA_SPEC`. A normal import raises `FrozenDataArtifactImportError`. Intentional audit tooling may use the `allow_frozen_data_imports()` context manager; the process-wide override is enabled only when `DBWARDEN_ALLOW_FROZEN_DATA_IMPORT=1`, and every allowed import logs a warning. When a sealed bundle is present the file also carries `DATA_EXECUTION_HMAC`, an HMAC over the data execution steps keyed by the project plan key. Verification recomputes it from the plan, so edited batch rows cannot survive a recomputed manifest.
 
 `transition audit` reads the frozen file with the AST reader, verifies the bundle, and does not import it. A merge that supersedes a data bundle leaves its SQL unchanged and writes a `.superseded.json` sidecar bound to the complete original SQL checksum. Tampering makes the marker fail closed. File publication restores prior contents on failure and publishes the plan last.
 
@@ -567,7 +685,7 @@ Dry-run probes read the original source name without renaming it. Apply-only DDL
 
 ClickHouse managed-row deletion is rejected because the backend does not provide the atomic ownership receipt needed to distinguish migration inserts from concurrent application inserts. Historical transitions are also rejected: its nonblocking rename cannot establish the source-write barrier needed for complete capture and safe source retirement.
 
-Retained identity edges bind source identity, target identity, and mapped values with HMAC authentication using a per-database key. Convergence and rollback verify those edges against current target rows. Treat the key and journal tables as part of the database backup. Baseline application records `baseline=True` plus an acknowledgement, reason, and skipped check identifiers in its event. The Python executor accepts `baseline_reason`; the CLI records that baseline was explicitly requested. This does not prove that declared data already exists.
+Retained identity edges bind source identity, target identity, and mapped values with HMAC-SHA-256 using a per-database key. Each edge record stores the `key_id` and an encoding version so it stays verifiable across key rotation; verification tries every registered key, and old keys remain available for the journal retention lifetime. Treat the key and journal tables as part of the database backup. Baseline application records `baseline=True` plus an acknowledgement, reason, and skipped check identifiers in its event. The Python executor accepts `baseline_reason`; the CLI records that baseline was explicitly requested. This does not prove that declared data already exists.
 
 Distinct source keys that collapse to the same normalized identity are rejected. On transactional backends, that failure rolls back the transition. On a nontransactional backend, any durable effects still require reconciliation.
 
@@ -585,11 +703,109 @@ Data guards are read-only count queries run before or after a step. They enforce
 
 `migrate --dry-run --data` inspects pending frozen bundles after version and severity selection. It reports unavailable probes without creating a missing SQLite database. Probe success describes the observed database at that time; apply reruns guards inside its execution boundary.
 
+## Backend capability negotiation
+
+Lowering evaluates the complete plan against one backend and rejects any operation whose transaction, lock, receipt, preservation, or convergence requirement it cannot meet, rather than emitting placeholder SQL. Backend name alone never proves atomicity. The initial capability matrix is:
+
+| Capability | PostgreSQL | MySQL / MariaDB | SQLite | ClickHouse |
+|---|---|---|---|---|
+| Support level | Production | Backend-observed lifecycle subset; crash and version gates open | Development, CI, sandbox | Limited subset; live conformance pending |
+| Managed rows | Full initial policies | Full with journal | Full | Insert and synchronous update mutations; irreversible rollback only; scoped deletion rejected |
+| Transformations | Full | Full with journal | Supported subset | Synchronous `ALTER ... UPDATE` mutations; irreversible rollback only |
+| Historical transitions | Full | Full with edge checkpoints | Full | Rejected; source-write barrier unavailable |
+| Deterministic merges | Full after source locks | Full with atomic multi-source freeze | Full | Rejected; source-write barrier unavailable |
+| Capture rollback | Full | Full with transactional receipt | Full | Rejected |
+| Archive | Full in one transaction | Journaled receipt before source removal | Full | Rejected |
+| Keyset batching | Transactional chunks | Transactional DML chunks; no MySQL statement timeout | Transactional chunks; no replication-lag control | Rejected |
+| `json_extract` | Yes | Yes | Yes | Rejected; missing and empty cannot be preserved |
+| `date_trunc` | Yes, pinned settings | No | No | No |
+| `split_part` | Yes | Yes | Yes | Yes |
+| Statement timeout | Yes | MariaDB only | Progress-handler interrupt | n/a |
+| Lock timeout | Yes | Yes | `busy_timeout` | n/a |
+| Duration budget | Yes | Yes | Yes | n/a |
+| Replication-lag limit | Yes | Yes | Rejected | n/a |
+| Atomic ownership receipt | Yes | InnoDB DML plus checkpoint | Yes | Rejected |
+| `ignore_if_equivalent` | Yes | Yes | Yes | Transitions unsupported |
+| `overwrite` | Acknowledged owned values only | Same, journaled | Same | No |
+
+The negotiation checklist covers atomic DML and metadata commit; transactional DDL; ordered mixed transactional and autocommit execution; conditional write and equivalence support; durable operation checkpoints; synchronous effect visibility; source preservation; convergence-query support; backend-specific statement, lock, duration, and replication-lag limits; and a per-database HMAC key for identity edges. One autocommit, external, or asynchronous operation makes the affected segment non-transactional.
+
+## Execution states and journal
+
+Execution records an immutable artifact record keyed by migration ID and manifest checksum, an append-only event journal identifying each run and application epoch, and durable operation checkpoints with authenticated identity-edge records. A current-state projection supports inspection but never replaces history.
+
+Migration states are:
+
+```text
+NOT_STARTED
+APPLYING
+FAILED_RETRYABLE
+FAILED_FINAL
+UNKNOWN_REQUIRES_RECONCILIATION
+APPLIED_SUCCESS
+ABANDONED
+ROLLING_BACK
+ROLLED_BACK
+```
+
+Normal transitions are `NOT_STARTED -> APPLYING`, then from `APPLYING` to `APPLIED_SUCCESS`, `FAILED_RETRYABLE`, `FAILED_FINAL`, or `UNKNOWN_REQUIRES_RECONCILIATION`; `UNKNOWN_REQUIRES_RECONCILIATION` resolves to `FAILED_RETRYABLE` or `FAILED_FINAL`; `FAILED_RETRYABLE` returns to `APPLYING`; and `APPLIED_SUCCESS -> ROLLING_BACK -> ROLLED_BACK`. `APPLIED_SUCCESS`, `ROLLED_BACK`, `FAILED_FINAL`, and `ABANDONED` are terminal inside one epoch; reapply after rollback creates a new linked epoch.
+
+The SQL-backend journal tables are:
+
+- `_dbwarden_data_runs`: `migration_id`, `epoch`, `checksum`, `status`, `run_id`, `direction`, `last_operation`, `error`, `baseline`, `started_at`, `finished_at`, keyed by `migration_id` and `epoch`.
+- `_dbwarden_data_events`: `event_id`, `migration_id`, `epoch`, `run_id`, `event_type`, `status`, `operation_id`, `checksum`, `details`, `created_at`.
+- `_dbwarden_data_operations`: `migration_id`, `epoch`, `run_id`, `direction`, `operation_id`, `statement_index`, `statement_checksum`, `status`, `started_at`, `finished_at`.
+- `_dbwarden_data_keys`: `key_id`, `key_material`, `status`, `created_at`.
+- `_dbwarden_data_edges`: `edge_id`, `migration_id`, `epoch`, `run_id`, `operation_id`, `definition_id`, `source_identity_hash`, `target_identity_hash`, `value_hash`, `owned_write`, `key_id`, `encoding_version`, `status`, `verification_checksum`, `created_at`.
+
+The minimum checkpoint fields are migration ID, manifest checksum, epoch, run ID, operation ID, transition ID where applicable, edge-definition ID, source and target edge-instance hashes where applicable, state, record checksum, key ID, and encoding version. ClickHouse stores append-only run and checkpoint versions in `ReplacingMergeTree` tables and validates a chained record checksum.
+
+## Unsupported by design
+
+The compiler fails validation for operations that cannot be made deterministic, owned, and reversible:
+
+- arbitrary merge reducers, implicit winners, or merges without complete source provenance;
+- independently committed or resumable batch chunks;
+- generic source reconstruction or inverse-mapping rollback without a preserved or captured source;
+- plain conflict `ignore`;
+- cross-database transitions;
+- execution-scoped expressions;
+- unregistered user-defined functions;
+- execution above an explicitly declared row limit.
+
+A compiler preview for an unsupported backend is allowed, but it is labelled preview, never emits an applicable artifact set, and does not count as backend conformance.
+
+## Troubleshooting
+
+Common compile and convergence failures and where to look:
+
+| Symptom | Cause and fix |
+|---|---|
+| Unsupported expression | A function, operator, cast, or Python callback outside expression language version 1. Replace it with an allowlisted shape; see [Derived values and expressions](#derived-values-and-expressions). |
+| Ambiguous ownership | Two declarations write the same table row or column. Give one a deterministic ownership order, or split the declarations. |
+| Missing snapshot | A `historical_table(...)` has no pinned `snapshot=` and generation cannot pick one unambiguously. Register the snapshot or pass an exact ID. |
+| Coverage or conflict failure | `coverage="all"` or `exactly_once_match` found an unmatched source, or `on_conflict="error"` found an existing identity. Adjust coverage, or use `ignore_if_equivalent` only when every owned value already matches. |
+| Ownership conflict on rollback | Current owned values no longer match the recorded postimage. Inspect before retrying; never overwrite a later application edit. |
+| `UNKNOWN_REQUIRES_RECONCILIATION` | A durable effect may have occurred. Ordinary migrate stops. Inspect with `dbwarden data transition reconcile MIGRATION_ID --database primary`, then record only the decision the reported state permits. |
+
+`dbwarden check --database primary --data` and `dbwarden diff --database primary --data` report data drift, missing tables, unapplied or unverifiable transitions, and missing archive, capture, or preserved-source evidence. Offline review cannot prove live convergence; use `dbwarden data render` for an offline declaration review instead.
+
 ## Safety and convergence
 
 Data operations carry INFO, WARN, or CRITICAL severity based on their declaration and rollback behavior. Destructive source handling, overwrite behavior, or irreversible work deserve CRITICAL review. A passing compile and a successful guard prove only the declared checks ran. They do not prove application semantics or data quality outside declared ownership.
 
-`category=` on `rows`, `derive`, or `DataTransition` selects a named migration group. Groups use the existing category and CLI plugin API; they do not add severity levels. SAFE, INFO, WARN, and CRITICAL retain their ordering. Safety-scoped generation defers dependent data and schema operations together, and each generated group has its own verified bundle. See [safety-scoped migrations](correctness/safety-scoped-migrations.md) and [plugin API](plugins/developing/overview.md).
+`category=` on `rows`, `derive`, or `DataTransition` selects a named migration group. Groups use the existing category and CLI plugin API; they do not add severity levels. SAFE, INFO, WARN, and CRITICAL retain their ordering. Safety-scoped generation defers dependent data and schema operations together, and each generated group has its own verified bundle. See [safety-scoped migrations](../correctness/safety-scoped-migrations.md) and [plugin API](../plugins/developing/overview.md).
+
+```python
+class Data(DataMeta):
+    managed_rows = rows(
+        key="code",
+        rows=[{"code": "UY", "name": "Uruguay"}],
+        owned_columns=["name"],
+        rollback="restore_previous",
+        category="reference",
+    )
+```
 
 `check --data` and `diff --data` add managed-row, derived-value, validation,
 transition, merge, archive, and capture convergence checks to schema drift
@@ -607,4 +823,4 @@ Re-run `data render`, `transition plan`, and bundle audit after a declaration ch
 
 Seed files are useful for optional initial content and ad hoc loading. Declarative data migrations are versioned migration operations with canonical identity, ownership, rollback policy, guards, a durable journal, and frozen source artifacts. Use them when data change belongs to the same release contract as schema change.
 
-The [design specification](design/declarative-data-migrations.md) defines the artifact and execution contract. The generated [Python API reference](reference/python-api.md) and [CLI option reference](reference/cli-options.md) list signatures and command options.
+The [design specification](../design/declarative-data-migrations.md) defines the artifact and execution contract. The generated [Python API reference](../reference/python-api.md) and [CLI option reference](../reference/cli-options.md) list signatures and command options.

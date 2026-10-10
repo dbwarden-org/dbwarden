@@ -7,6 +7,9 @@ description: Key terms and concepts used throughout the dbwarden documentation, 
 
 ## A
 
+**Archive**
+: A declarative data policy that copies rows removed or replaced by a migration into an archive table before the change, preserving a reversible receipt. Controlled by `archive_to`/`on_missing`/`on_complete`.
+
 **Auto Schema**
 : A feature that generates Pydantic schemas from SQLAlchemy model annotations using `@auto_schema` (from the `dbwarden-fastapi` plugin), eliminating duplication between ORM and API layers in FastAPI applications.
 
@@ -18,7 +21,13 @@ description: Key terms and concepts used throughout the dbwarden documentation, 
 **Baseline**
 : A migration version used as a starting point, marking the point up to which existing migrations are considered already applied without executing the upgrade SQL.
 
+**Baseline (data migration)**
+: A data execution recorded as accepted without running its SQL, used when the target rows already match the declaration. A baseline is an acknowledgement, not a convergence proof, and a baseline run cannot be rolled back through the data plan.
+
 ## C
+
+**Capture**
+: A declarative data rollback policy that records the preimage of changed rows so a rollback can restore exact prior values. Applies to transformations and historical transitions.
 
 **Checksum**
 : A SHA-256 hash stored when a migration file is applied. On subsequent runs, the checksum is recalculated to detect file tampering or accidental edits.
@@ -34,8 +43,20 @@ description: Key terms and concepts used throughout the dbwarden documentation, 
 
 ## D
 
+**Data Bundle**
+: The integrity manifest that binds a data migration's `.sql`, `.plan.json`, and `.data.py` artifacts by checksum. Verification recomputes the manifest and, when sealed, the execution HMAC.
+
+**Data Drift**
+: Live rows that no longer match the declarations of the most recently applied data migrations. Reported by `check --data` and `data transition` convergence checks; drift is blocking and cannot be forced away.
+
 **Database Config**
 : A concrete `DbwardenDatabase` class, or equivalent `database_config()` call, that defines one database. Each config includes the database name, type, connection URL, model paths, and optional dev mode settings.
+
+**Declarative Data Migration**
+: A change to data declared beside SQLAlchemy models (managed rows, transformations, validations, and historical transitions). It compiles into a canonical specification, reviewable SQL, and a frozen artifact that executes under the migration lock.
+
+**Derivation (transformation)**
+: A declaration that computes a target column value from an expression over existing rows, with an explicit rollback policy and optional row limits. See `derive(...)`.
 
 **Dev Mode**
 : Using a different database type (typically SQLite) for local development while targeting a production database (e.g., PostgreSQL) in deployment, enabled via the `dev_database_type` and `dev_database_url` config options.
@@ -51,6 +72,9 @@ description: Key terms and concepts used throughout the dbwarden documentation, 
 **FastAPI Integration**
 : Support for FastAPI including async sessions, health endpoints, migration endpoints, Prometheus metrics, and distributed locking. Provided by the [`dbwarden-fastapi`](https://pypi.org/p/dbwarden-fastapi) plugin. Configured once via a `DbwardenDatabase` class or the equivalent `database_config()` function.
 
+**Frozen Artifact**
+: The `.data.py` file generated with a data migration. It carries a literal, guarded `DATA_SPEC` (and optionally a sealed execution HMAC) and imports only under an explicit audit override. Execution reads the frozen artifact, never the current declarations.
+
 ## G
 
 **generate-models**
@@ -60,6 +84,9 @@ description: Key terms and concepts used throughout the dbwarden documentation, 
 
 **Health Endpoints**
 : Production-ready HTTP endpoints for database connectivity checks, migration state monitoring, and Kubernetes liveness/readiness probes.
+
+**Historical Transition**
+: A declarative move of rows from a pinned historical (or merged) source into one or more current-model targets, with explicit coverage, conflict, completion, and rollback policies. Declared with a `DataTransition` class.
 
 ## I
 
@@ -79,8 +106,14 @@ description: Key terms and concepts used throughout the dbwarden documentation, 
 **make-migrations**
 : The command that generates SQL migration files by comparing current SQLAlchemy model definitions against either a live database or stored schema snapshots.
 
+**Managed Rows**
+: A declarative data declaration that owns specific keyed rows and their listed columns, reconciling missing or changed rows on apply and restoring or archiving them on rollback. See `rows(...)`.
+
 **Manual Migration**
 : A migration file created by hand (via `dbwarden new`) rather than auto-generated. Useful for data migrations, stored procedures, or any DDL outside model diffs.
+
+**Merge (data)**
+: A declarative combination of two or more pinned historical sources into one grouped target, resolving value conflicts with explicit aggregate policies (`sum`, `min`, `max`, `count`, `avg`, `require_equal`) or a `winner`.
 
 **Meta (class Meta)**
 : An inner class on SQLAlchemy models that provides dbwarden with backend-specific metadata like table comments, indexes, partitioning, engine options, and more.
@@ -99,12 +132,21 @@ description: Key terms and concepts used throughout the dbwarden documentation, 
 **Offline Mode**
 : Generating migrations using stored JSON schema snapshots instead of connecting to a live database, enabling CI/CD pipelines without database access.
 
+**Ownership**
+: The proof that a data migration inserted or changed exactly the rows it claims. Insert ownership proofs compare affected-row counts, and identity edges verify source-to-target correspondences before a rollback proceeds.
+
 ## P
 
 **Pydantic Schema (auto-generated)**
 : Request/response schemas automatically generated from SQLAlchemy model annotations using `@auto_schema` (from the `dbwarden-fastapi` plugin), keeping API contracts in sync with database models.
 
 ## R
+
+**Reapply Epoch**
+: A new execution attempt for a data migration whose prior run was rolled back. Reapply is explicit (`migrate --reapply-data`) and cannot be authorized by `--force`; a successful run is never reapplied.
+
+**Reconciliation**
+: The recovery path for a data execution whose outcome is uncertain. `data transition reconcile` reports the recorded run and, with an explicit `abandon` or `verified_retry` decision, safely resolves it before a retry.
 
 **Rename Detection**
 : dbwarden can detect column and table renames by comparing schema snapshots, generating `ALTER TABLE ... RENAME` instead of `DROP` + `ADD`.
@@ -135,11 +177,17 @@ description: Key terms and concepts used throughout the dbwarden documentation, 
 **Seed**
 : Data population mechanism using either Python code seeds (recommended) or file-based SQL/Python seeds. Seeds are tracked and versioned like migrations.
 
+**Split**
+: A historical transition that routes rows from one source to one of several targets, selected by each target's `where` predicate. Coverage controls whether every source row must match exactly once.
+
 **SQL-First**
 : A design philosophy where all schema changes are expressed as explicit SQL files that can be reviewed, tested, and rolled back, rather than being abstracted away by an ORM.
 
 **SQL Translation**
 : The ability to generate SQL for one dialect (e.g., PostgreSQL) while operating against a different development database (e.g., SQLite), enabling local development without full infrastructure.
+
+**Static Source**
+: A data row source supplied as literal rows (`rows=`) or a version-controlled CSV/JSON file (`source=`), rather than read from a live table. Static sources are hashed into the canonical data spec.
 
 ## T
 
@@ -150,3 +198,8 @@ description: Key terms and concepts used throughout the dbwarden documentation, 
 
 **Unlock**
 : The `dbwarden unlock` command to recover from a stale migration lock when no migration is actually running and the lock was not released properly.
+
+## V
+
+**Validation (data)**
+: A declarative assertion over a target table that must hold after a data migration applies and during convergence checks. Declared with `validate(expression, message=...)`.

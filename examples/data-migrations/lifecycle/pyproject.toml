@@ -1,0 +1,6 @@
+[project]
+name = "dbwarden-data-lifecycle-example"
+version = "0.1.0"
+description = "dbwarden capture, archive, and batching lifecycle example"
+requires-python = ">=3.12"
+dependencies = ["dbwarden", "sqlalchemy>=2.0"]

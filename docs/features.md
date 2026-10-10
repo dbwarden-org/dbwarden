@@ -65,7 +65,7 @@ Created migration: migrations/primary/primary__0002_add_posts_table.sql
 
 ## Declarative Data Migrations
 
-Managed rows, typed derived values, and historical table transitions compile into versioned SQL plus a canonical frozen data artifact. The executor journals each application and checks guards in the migration transaction. See [Declarative data migrations](declarative-data-migrations.md) for declarations, artifacts, rollback, and reconciliation.
+Managed rows, typed derived values, and historical table transitions compile into versioned SQL plus a canonical frozen data artifact. The executor journals each application and checks guards in the migration transaction. See [Data migrations](data-migrations/index.md) for declarations, artifacts, rollback, and reconciliation, and follow the [tutorial](data-migrations/tutorial/index.md) for a runnable walkthrough.
 
 ## Backend-Specific Metadata
 

@@ -105,10 +105,33 @@ Overview = [
   {"Migration Files" = "migration-files.md"},
   {"SQLAlchemy Models" = "models.md"},
   {Seeds = "seeds.md"},
-  {"Declarative data migrations" = "declarative-data-migrations.md"},
   {"SQL Translation" = "sql-translation.md"},
   {Observability = "observability.md"},
   {Architecture = "architecture-deep-dive.md"},
+]
+
+[[project.nav]]
+"Data Migrations" = [
+  {Overview = "data-migrations/index.md"},
+  {"Tutorial" = [
+    {Introduction = "data-migrations/tutorial/index.md"},
+    {"1. Why data migrations" = "data-migrations/tutorial/01-why-and-mental-model.md"},
+    {"2. Setup and first declaration" = "data-migrations/tutorial/02-setup-and-first-declaration.md"},
+    {"3. Managed rows" = "data-migrations/tutorial/03-managed-rows.md"},
+    {"4. Static sources" = "data-migrations/tutorial/04-static-sources.md"},
+    {"5. Expressions" = "data-migrations/tutorial/05-expressions.md"},
+    {"6. Validation" = "data-migrations/tutorial/06-validation.md"},
+    {"7. Historical transitions" = "data-migrations/tutorial/07-historical-transitions.md"},
+    {"8. Splits and priority" = "data-migrations/tutorial/08-splits-and-priority.md"},
+    {"9. Merges" = "data-migrations/tutorial/09-merges.md"},
+    {"10. Capture, archive, batching" = "data-migrations/tutorial/10-capture-archive-batching.md"},
+    {"11. Review and generate" = "data-migrations/tutorial/11-review-and-generate.md"},
+    {"12. Apply, rollback, reapply" = "data-migrations/tutorial/12-apply-rollback-reapply.md"},
+    {"13. Reconcile and convergence" = "data-migrations/tutorial/13-reconcile-and-convergence.md"},
+    {"14. Safety and CI" = "data-migrations/tutorial/14-safety-and-ci.md"},
+    {Recap = "data-migrations/tutorial/recap.md"},
+  ]},
+  {Reference = "data-migrations/reference.md"},
 ]
 
 [[project.nav]]
@@ -225,6 +248,7 @@ Reference = [
     {init = "commands/init.md"},
     {"make-migrations" = "commands/make-migrations.md"},
     {migrate = "commands/migrate.md"},
+    {data = "commands/data.md"},
     {downgrade = "commands/downgrade.md"},
     {rollback = "commands/rollback.md"},
     {"make-rollback" = "commands/make-rollback.md"},

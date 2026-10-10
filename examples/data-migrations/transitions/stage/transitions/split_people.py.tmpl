@@ -1,0 +1,42 @@
+# Template for the split transition. scripts/02-split-people.sh substitutes
+# the real snapshot id for __SNAPSHOT__ and writes the result to
+# app/data/split_people.py, where dbwarden discovers it via data_paths.
+from app.models import Customer, Person
+from dbwarden.data import DataTransition, func, historical_table, into
+
+# Pin the exact schema snapshot that still contains legacy_people. The
+# snapshot is registered when the first migration is applied.
+legacy = historical_table("legacy_people", snapshot="__SNAPSHOT__")
+
+
+class SplitLegacyPeople(DataTransition):
+    source = legacy
+    source_identity = [legacy.id]
+
+    # One legacy row fans out into two tables (person + customer).
+    overlap = "fan_out"
+
+    # Drop the legacy table when the copy completes. Dropping is destructive,
+    # so it must be acknowledged and the rollback is irreversible.
+    on_complete = "drop"
+    acknowledge_drop = True
+    rollback = "irreversible"
+
+    targets = [
+        into(
+            Person,
+            map={Person.id: legacy.id, Person.name: legacy.full_name},
+            key=[Person.id],
+            on_conflict="ignore_if_equivalent",
+        ),
+        into(
+            Customer,
+            map={
+                Customer.person_id: legacy.id,
+                # tier is derived from the email domain, e.g. "example.com".
+                Customer.tier: func.lower(func.split_part(legacy.email, "@", 2)),
+            },
+            key=[Customer.person_id],
+            on_conflict="ignore_if_equivalent",
+        ),
+    ]

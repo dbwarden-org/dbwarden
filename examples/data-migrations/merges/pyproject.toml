@@ -1,0 +1,6 @@
+[project]
+name = "dbwarden-data-merges-example"
+version = "0.1.0"
+description = "dbwarden many-source merge example"
+requires-python = ">=3.12"
+dependencies = ["dbwarden", "sqlalchemy>=2.0"]

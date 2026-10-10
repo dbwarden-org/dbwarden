@@ -116,7 +116,7 @@ def database_config(
     """Register a database in dbwarden and return a handle with session dependencies."""
 ```
 
-`data_paths` names live modules containing `DataTransition` declarations. `*.data.py` artifacts are frozen migration inputs and are excluded from normal model discovery. `data_snapshot_dir` and `snapshot_registry` must be relative project paths. See [Declarative data migrations](../declarative-data-migrations.md).
+`data_paths` names live modules containing `DataTransition` declarations. `*.data.py` artifacts are frozen migration inputs and are excluded from normal model discovery. `data_snapshot_dir` and `snapshot_registry` must be relative project paths. See [Declarative data migrations](../data-migrations/reference.md).
 
 ## Required arguments
 

@@ -42,7 +42,7 @@ $ dbwarden migrate --database primary --baseline --to-version 0005
 - verifies paired SQL, plan, and frozen artifacts before applying declarative data
 - records explicit data baseline acknowledgement and skipped checks; baseline is not a convergence proof
 
-Rolled-back declarative data requires `--reapply-data` before execution can start a new epoch. `--force` does not authorize data reapply. Successful migrations remain skipped even with `--reapply-data`. See [declarative data migrations](../declarative-data-migrations.md) for journals, ownership, backend limits, and recovery after uncertain effects.
+Rolled-back declarative data requires `--reapply-data` before execution can start a new epoch. `--force` does not authorize data reapply. Successful migrations remain skipped even with `--reapply-data`. See [declarative data migrations](../data-migrations/reference.md) for journals, ownership, backend limits, and recovery after uncertain effects.
 
 ## Dirty environment detection
 

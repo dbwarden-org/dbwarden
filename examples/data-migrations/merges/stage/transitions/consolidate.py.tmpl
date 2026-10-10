@@ -1,0 +1,60 @@
+# Template for the consolidation merge. scripts/02-consolidate.sh substitutes
+# the real snapshot id for __SNAPSHOT__ and writes the result to
+# app/data/consolidate.py, where dbwarden discovers it via data_paths.
+from app.models import Account
+from dbwarden.data import (
+    DataTransition,
+    aggregate,
+    batch,
+    col,
+    from_source,
+    historical_table,
+    into,
+    merge_sources,
+    winner,
+)
+
+# Both inputs are pinned to the same snapshot that still contains them.
+left = historical_table("legacy_a", snapshot="__SNAPSHOT__")
+right = historical_table("legacy_b", snapshot="__SNAPSHOT__")
+
+# Group rows by account, summing amounts and keeping the highest-priority
+# name. from_source projects a common field set; priority orders the winner.
+source = merge_sources(
+    from_source(
+        left,
+        identity=["id"],
+        map={"id": col("account"), "amount": col("amount"), "name": col("name")},
+        priority=0,
+    ),
+    from_source(
+        right,
+        identity=["id"],
+        map={"id": col("account"), "amount": col("amount"), "name": col("name")},
+        priority=1,
+    ),
+    key=["id"],
+    values={"total": aggregate("sum", col("amount")), "name": winner(col("name"))},
+    # Refuse to retire the sources if every input is empty.
+    allow_empty=False,
+)
+
+
+class ConsolidateAccounts(DataTransition):
+    source = source
+    targets = [
+        into(
+            Account,
+            map={
+                Account.id: col("id"),
+                Account.total: col("total"),
+                Account.name: col("name"),
+            },
+            key=[Account.id],
+            on_conflict="ignore_if_equivalent",
+        )
+    ]
+    # Process the merge in batches keyed by the grouping key.
+    execution = batch(size=2, key=["id"])
+    on_complete = "preserve"
+    rollback = "restore_preserved_source"

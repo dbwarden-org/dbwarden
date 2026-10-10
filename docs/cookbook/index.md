@@ -30,6 +30,10 @@ examples/
 | 10 | [Auto Schemas](10-auto-schemas.md) | `@auto_schema`, `CreateSchema`, `UpdateSchema`, `PublicSchema` (requires `dbwarden-fastapi` plugin) | `examples/fastapi-app/` |
 | 11 | [Observability](11-observability.md) | Prometheus metrics, structured logging, query tracing | `examples/observability/` |
 
+## Declarative Data Migrations
+
+The [data migrations tutorial](../data-migrations/tutorial/index.md) is a from-scratch, runnable walkthrough of the declarative data surface: managed rows, static sources, expressions, validation, historical transitions, splits, merges, capture, archive, batching, and the apply, rollback, reapply, and reconcile lifecycle. Its self-contained projects live under `examples/data-migrations/` (`basics/`, `transitions/`, `merges/`, `lifecycle/`), with the full declaration surface in the [reference](../data-migrations/reference.md).
+
 ## Quick Start (Core)
 
 ```bash

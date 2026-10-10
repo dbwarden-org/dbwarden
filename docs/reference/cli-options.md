@@ -585,7 +585,7 @@ Render and document declarative data migrations
 
 ## `dbwarden data render`
 
-Command group.
+Render the compiled data specification.
 
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
@@ -602,7 +602,7 @@ Command group.
 
 ## `dbwarden data describe`
 
-Command group.
+Describe models, constraints, and declared data.
 
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
@@ -620,7 +620,7 @@ Command group.
 
 ## `dbwarden data docs`
 
-Command group.
+Write generated data documentation and checksums.
 
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
@@ -643,7 +643,7 @@ Validate, plan, and audit data transitions
 
 ## `dbwarden data transition validate`
 
-Command group.
+Validate data declarations and transitions.
 
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
@@ -655,7 +655,7 @@ Command group.
 
 ## `dbwarden data transition plan`
 
-Command group.
+Render the plan for one transition.
 
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
@@ -668,7 +668,7 @@ Command group.
 
 ## `dbwarden data transition dry-run`
 
-Command group.
+Resolve a transition and optionally run read-only probes.
 
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
@@ -681,7 +681,7 @@ Command group.
 
 ## `dbwarden data transition render`
 
-Command group.
+Render one transition from the compiled plan.
 
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
@@ -695,7 +695,7 @@ Command group.
 
 ## `dbwarden data transition describe`
 
-Command group.
+Describe one transition.
 
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
@@ -709,7 +709,7 @@ Command group.
 
 ## `dbwarden data transition audit`
 
-Command group.
+Audit a frozen data bundle without importing it.
 
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
@@ -721,7 +721,7 @@ Command group.
 
 ## `dbwarden data transition reconcile`
 
-Command group.
+Inspect or resolve an uncertain data migration.
 
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
@@ -734,7 +734,7 @@ Command group.
 
 ## `dbwarden data transition new`
 
-Command group.
+Scaffold a new transition declaration.
 
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
@@ -768,7 +768,7 @@ Validate, plan, and audit data transitions
 
 ## `dbwarden data-transition validate`
 
-Command group.
+Validate data declarations and transitions.
 
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
@@ -780,7 +780,7 @@ Command group.
 
 ## `dbwarden data-transition plan`
 
-Command group.
+Render the plan for one transition.
 
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
@@ -793,7 +793,7 @@ Command group.
 
 ## `dbwarden data-transition dry-run`
 
-Command group.
+Resolve a transition and optionally run read-only probes.
 
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
@@ -806,7 +806,7 @@ Command group.
 
 ## `dbwarden data-transition render`
 
-Command group.
+Render one transition from the compiled plan.
 
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
@@ -820,7 +820,7 @@ Command group.
 
 ## `dbwarden data-transition describe`
 
-Command group.
+Describe one transition.
 
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
@@ -834,7 +834,7 @@ Command group.
 
 ## `dbwarden data-transition audit`
 
-Command group.
+Audit a frozen data bundle without importing it.
 
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
@@ -846,7 +846,7 @@ Command group.
 
 ## `dbwarden data-transition reconcile`
 
-Command group.
+Inspect or resolve an uncertain data migration.
 
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
@@ -859,7 +859,7 @@ Command group.
 
 ## `dbwarden data-transition new`
 
-Command group.
+Scaffold a new transition declaration.
 
 | Argument or option | Type | Default | Description |
 |---|---|---|---|

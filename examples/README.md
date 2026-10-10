@@ -24,6 +24,7 @@ bash scripts/03-apply-inspect.sh
 | `multi-database/` | 8 | PostgreSQL + ClickHouse in one project with separate model paths and migration directories | Docker |
 | `fastapi-app/` | 9–10 | FastAPI integration + auto-generated Pydantic schemas via `@auto_schema` (requires `dbwarden-fastapi` plugin) | Docker (PostgreSQL) |
 | `observability/` | 11 | Prometheus metrics, structured JSON logging, query tracing middleware | Docker |
+| `data-migrations/` | Data Migrations | Declarative data migrations: managed rows, static sources, expressions, validation, transitions, merges, capture, archive, batching, rollback | Nothing (SQLite) |
 
 ## How these examples work
 

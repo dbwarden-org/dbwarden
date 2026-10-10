@@ -1,0 +1,6 @@
+[project]
+name = "dbwarden-data-transitions-example"
+version = "0.1.0"
+description = "dbwarden historical transition example"
+requires-python = ">=3.12"
+dependencies = ["dbwarden", "sqlalchemy>=2.0"]

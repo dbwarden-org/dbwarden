@@ -396,7 +396,7 @@ def _filtered_plan(plan: dict, spec: dict) -> dict:
     }
 
 
-@data_app.command("render")
+@data_app.command("render", help="Render the compiled data specification.")
 def render_data(
     database: str | None = typer.Option(None, "--database", "-d"),
     model: str | None = typer.Option(None, "--model"),
@@ -421,7 +421,7 @@ def render_data(
     _emit(plan, format, show_values=show_managed_values or format == "sql")
 
 
-@data_app.command("describe")
+@data_app.command("describe", help="Describe models, constraints, and declared data.")
 def describe_data(
     database: str | None = typer.Option(None, "--database", "-d"),
     model: str | None = typer.Option(None, "--model"),
@@ -461,7 +461,7 @@ def describe_data(
         typer.echo(body)
 
 
-@data_app.command("docs")
+@data_app.command("docs", help="Write generated data documentation and checksums.")
 def docs_data(
     output: Annotated[Path, typer.Option("--output")],
     database: str | None = typer.Option(None, "--database", "-d"),
@@ -564,7 +564,7 @@ def _transition(plan: dict, name: str) -> dict:
     }
 
 
-@transition_app.command("validate")
+@transition_app.command("validate", help="Validate data declarations and transitions.")
 def validate_transition(
     name: str | None = typer.Argument(None),
     database: str | None = typer.Option(None, "--database", "-d"),
@@ -576,7 +576,7 @@ def validate_transition(
     typer.echo("Data declarations are valid.")
 
 
-@transition_app.command("plan")
+@transition_app.command("plan", help="Render the plan for one transition.")
 def plan_transition(
     name: str,
     database: str | None = typer.Option(None, "--database", "-d"),
@@ -589,7 +589,7 @@ def plan_transition(
     _emit(_transition(plan, name), format)
 
 
-@transition_app.command("dry-run")
+@transition_app.command("dry-run", help="Resolve a transition and optionally run read-only probes.")
 def dry_run_transition(
     name: str,
     database: str | None = typer.Option(None, "--database", "-d"),
@@ -615,7 +615,7 @@ def dry_run_transition(
     )
 
 
-@transition_app.command("render")
+@transition_app.command("render", help="Render one transition from the compiled plan.")
 def render_transition(
     name: str,
     database: str | None = typer.Option(None, "--database", "-d"),
@@ -631,7 +631,7 @@ def render_transition(
     )
 
 
-@transition_app.command("describe")
+@transition_app.command("describe", help="Describe one transition.")
 def describe_transition(
     name: str,
     database: str | None = typer.Option(None, "--database", "-d"),
@@ -657,7 +657,7 @@ def describe_transition(
         typer.echo(body)
 
 
-@transition_app.command("audit")
+@transition_app.command("audit", help="Audit a frozen data bundle without importing it.")
 def audit_transition(
     name: str,
     database: str | None = typer.Option(None, "--database", "-d"),
@@ -707,7 +707,7 @@ def audit_transition(
     )
 
 
-@transition_app.command("reconcile")
+@transition_app.command("reconcile", help="Inspect or resolve an uncertain data migration.")
 def reconcile_transition(
     migration_id: str,
     database: str | None = typer.Option(None, "--database", "-d"),
@@ -777,7 +777,7 @@ def reconcile_transition(
     typer.echo(json.dumps(result, indent=2, sort_keys=True, default=str))
 
 
-@transition_app.command("new")
+@transition_app.command("new", help="Scaffold a new transition declaration.")
 def new_transition(
     name: str,
     database: str | None = typer.Option(None, "--database", "-d"),

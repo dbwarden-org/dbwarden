@@ -73,7 +73,7 @@ A model may declare a finite set of owned rows. A managed-row declaration contai
 - canonical inline rows or a frozen static source;
 - owned columns;
 - an explicit row scope predicate;
-- `on_missing`, initially `keep` or `delete`;
+- `on_missing`, one of `keep`, `delete`, or `archive`;
 - adoption and conflict policy;
 - destructive acknowledgement when deletion or overwrite is possible;
 - rollback policy.
@@ -155,7 +155,7 @@ A transition declares:
 - rollback policy;
 - execution limits.
 
-Single-source cardinalities are `one_to_one` and `one_to_many_split`.
+Single-source cardinalities are `one_to_one` and `one_to_many`.
 `many_to_one` is admitted only through the deterministic `merge_sources()`
 contract below. Unstructured many-to-one mappings remain rejected.
 
@@ -378,6 +378,7 @@ The implementation API is:
 ```text
 resolve_snapshot(
     snapshot_id,
+    *,
     database,
     backend,
     registry_path=None,
@@ -715,19 +716,22 @@ Sandbox execution requires an explicit fixture, sanitized clone, or separately a
 The initial safety-critical commands are:
 
 ```text
-dbwarden data-transition validate
-dbwarden data-transition plan
-dbwarden data-transition dry-run
-dbwarden data-transition render
-dbwarden data-transition audit
+dbwarden data transition validate
+dbwarden data transition plan
+dbwarden data transition dry-run
+dbwarden data transition render
+dbwarden data transition audit
 dbwarden make-data-migration
 dbwarden make-migrations
 dbwarden migrate --dry-run
 dbwarden migrate
-dbwarden data-transition reconcile
+dbwarden data transition reconcile
 dbwarden diff --data
 dbwarden check --data
 ```
+
+`dbwarden data transition ...` is the canonical form. The compatibility group
+`dbwarden data-transition ...` exposes the same commands.
 
 Dry run resolves and reports one exact snapshot, validates the canonical IR, runs allowed read-only probes, negotiates backend capabilities, renders the operation DAG, and mutates no file, metadata, or database row.
 

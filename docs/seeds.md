@@ -403,6 +403,12 @@ The `dbwarden status` command and the FastAPI `GET /status` endpoint report both
 
 ---
 
+## Seeds vs. declarative data migrations
+
+Use **seeds** for reference and lookup data, repeatable environment setup, or logic-based population that can run every time it is applied. Use **[declarative data migrations](data-migrations/index.md)** when a change to data belongs to a schema release: owned rows, deterministic backfills, and one-shot moves of legacy rows into normalised tables, all compiled into versioned, frozen, reversible SQL with ownership and convergence proofs. A quick rule: if the data should be re-runnable and idempotent on its own, seed it; if it must ship once, atomically, with the migration that reshapes the schema, declare it as a data migration.
+
+---
+
 ## Seeds in FastAPI
 
 The `DBWardenRouter` includes seed status in its `GET /status` response:
