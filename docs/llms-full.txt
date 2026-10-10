@@ -15368,6 +15368,8 @@ Lowering evaluates the complete plan against one backend and rejects any operati
 
 The negotiation checklist covers atomic DML and metadata commit; transactional DDL; ordered mixed transactional and autocommit execution; conditional write and equivalence support; durable operation checkpoints; synchronous effect visibility; source preservation; convergence-query support; backend-specific statement, lock, duration, and replication-lag limits; and a per-database HMAC key for identity edges. One autocommit, external, or asynchronous operation makes the affected segment non-transactional.
 
+The matrix states the contract each backend must satisfy. Execution evidence is backend-specific and produced by the harness integration suite (the round-trip, semantics, plugin, and backend-matrix runs), not by this document. The [tutorial](tutorial/index.md) runs entirely on SQLite.
+
 ## Execution states and journal
 
 Execution records an immutable artifact record keyed by migration ID and manifest checksum, an append-only event journal identifying each run and application epoch, and durable operation checkpoints with authenticated identity-edge records. A current-state projection supports inspection but never replaces history.
@@ -16998,9 +17000,12 @@ class RouteLegacyPeople(DataTransition):
     ]
 ```
 
-The example project ships only the `fan_out` form; this variant is the same split
-with routing added. Here the `Customer` target claims `example.com` addresses at
-priority 10, and `Person` is the priority-20 default (no `where`, so always true).
+The example project ships both routing forms: `scripts/02-split-people.sh`
+runs the `fan_out` split above, and `scripts/03-route-people.sh` runs this
+priority variant. Run `01-legacy-schema.sh` first, then either script (they are
+alternatives over the same source). Here the `Customer` target claims
+`example.com` addresses at priority 10, and `Person` is the priority-20 default
+(no `where`, so always true).
 
 Priority is not a tie-breaker applied after the fact. The compiler rewrites each
 target's *effective* predicate to exclude rows already claimed by a lower-priority
@@ -18322,6 +18327,11 @@ Think of a declarative data migration as a *reviewed change to data that ships w
 a schema release*. It is versioned, owned, reversible where declared, and frozen
 before it runs. That is a different contract from a seed file or a one-off
 backfill script.
+
+The tutorial runs entirely on SQLite. PostgreSQL, MySQL, MariaDB, and ClickHouse
+are covered at the contract level in the [reference](../reference.md), and their
+execution evidence comes from the harness integration suite rather than from this
+tutorial.
 
 ## What you'll learn
 
@@ -34615,14 +34625,14 @@ Render the compiled data specification.
 
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
-| --database, -d | str | None |  |
-| --model | str | None |  |
-| --format | str | 'text' |  |
-| --include | str | 'schema,constraints,relationships,data,transitions' |  |
-| --only-with-data | boolean | False |  |
-| --relationship-depth | int range | 0 |  |
-| --show-managed-values | boolean | False |  |
-| --param | str (repeatable) | None |  |
+| --database, -d | str | None | Target database name |
+| --model | str | None | Restrict output to one model |
+| --format | str | 'text' | text, json, mapping, sql, or operations |
+| --include | str | 'schema,constraints,relationships,data,transitions' | Comma-separated sections: schema, constraints, relationships, data, transitions |
+| --only-with-data | boolean | False | Only include models or transitions that declare data |
+| --relationship-depth | int range | 0 | Relationship expansion depth (0-5) |
+| --show-managed-values | boolean | False | Reveal managed-row literals in the output |
+| --param | str (repeatable) | None | Freeze a data parameter as name=JSON or name=text (repeatable) |
 
 `--help` displays command help.
 
@@ -34632,15 +34642,15 @@ Describe models, constraints, and declared data.
 
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
-| --database, -d | str | None |  |
-| --model | str | None |  |
-| --format | str | 'text' |  |
-| --output | path | None |  |
-| --include | str | 'schema,constraints,relationships,data,transitions' |  |
-| --only-with-data | boolean | False |  |
-| --relationship-depth | int range | 0 |  |
-| --show-managed-values | boolean | False |  |
-| --param | str (repeatable) | None |  |
+| --database, -d | str | None | Target database name |
+| --model | str | None | Restrict output to one model |
+| --format | str | 'text' | text, json, or markdown |
+| --output | path | None | Write the output to this path |
+| --include | str | 'schema,constraints,relationships,data,transitions' | Comma-separated sections: schema, constraints, relationships, data, transitions |
+| --only-with-data | boolean | False | Only include models or transitions that declare data |
+| --relationship-depth | int range | 0 | Relationship expansion depth (0-5) |
+| --show-managed-values | boolean | False | Reveal managed-row literals in the output |
+| --param | str (repeatable) | None | Freeze a data parameter as name=JSON or name=text (repeatable) |
 
 `--help` displays command help.
 
@@ -34650,11 +34660,11 @@ Write generated data documentation and checksums.
 
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
-| --output | path | required |  |
-| --database, -d | str | None |  |
-| --diagrams | str | None |  |
-| --show-managed-values | boolean | False |  |
-| --param | str (repeatable) | None |  |
+| --output | path | required | Write the output to this path |
+| --database, -d | str | None | Target database name |
+| --diagrams | str | None | Diagram format to embed; mermaid is supported |
+| --show-managed-values | boolean | False | Reveal managed-row literals in the output |
+| --param | str (repeatable) | None | Freeze a data parameter as name=JSON or name=text (repeatable) |
 
 `--help` displays command help.
 
@@ -34674,8 +34684,8 @@ Validate data declarations and transitions.
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
 | name | str | None |  |
-| --database, -d | str | None |  |
-| --param | str (repeatable) | None |  |
+| --database, -d | str | None | Target database name |
+| --param | str (repeatable) | None | Freeze a data parameter as name=JSON or name=text (repeatable) |
 
 `--help` displays command help.
 
@@ -34686,9 +34696,9 @@ Render the plan for one transition.
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
 | name | str | required |  |
-| --database, -d | str | None |  |
-| --format | str | 'text' |  |
-| --param | str (repeatable) | None |  |
+| --database, -d | str | None | Target database name |
+| --format | str | 'text' | text, json, sql, operations, or mapping |
+| --param | str (repeatable) | None | Freeze a data parameter as name=JSON or name=text (repeatable) |
 
 `--help` displays command help.
 
@@ -34699,9 +34709,9 @@ Resolve a transition and optionally run read-only probes.
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
 | name | str | required |  |
-| --database, -d | str | None |  |
-| --probes | boolean | False |  |
-| --param | str (repeatable) | None |  |
+| --database, -d | str | None | Target database name |
+| --probes | boolean | False | Run read-only probe queries and record evidence |
+| --param | str (repeatable) | None | Freeze a data parameter as name=JSON or name=text (repeatable) |
 
 `--help` displays command help.
 
@@ -34712,10 +34722,10 @@ Render one transition from the compiled plan.
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
 | name | str | required |  |
-| --database, -d | str | None |  |
-| --format | str | 'text' |  |
-| --show-managed-values | boolean | False |  |
-| --param | str (repeatable) | None |  |
+| --database, -d | str | None | Target database name |
+| --format | str | 'text' | text, json, mapping, sql, or operations |
+| --show-managed-values | boolean | False | Reveal managed-row literals in the output |
+| --param | str (repeatable) | None | Freeze a data parameter as name=JSON or name=text (repeatable) |
 
 `--help` displays command help.
 
@@ -34726,10 +34736,10 @@ Describe one transition.
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
 | name | str | required |  |
-| --database, -d | str | None |  |
-| --format | str | 'text' |  |
-| --output | path | None |  |
-| --param | str (repeatable) | None |  |
+| --database, -d | str | None | Target database name |
+| --format | str | 'text' | text, json, or markdown |
+| --output | path | None | Write the output to this path |
+| --param | str (repeatable) | None | Freeze a data parameter as name=JSON or name=text (repeatable) |
 
 `--help` displays command help.
 
@@ -34740,8 +34750,8 @@ Audit a frozen data bundle without importing it.
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
 | name | str | required |  |
-| --database, -d | str | None |  |
-| --format | str | 'json' |  |
+| --database, -d | str | None | Target database name |
+| --format | str | 'json' | json or text |
 
 `--help` displays command help.
 
@@ -34752,9 +34762,9 @@ Inspect or resolve an uncertain data migration.
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
 | migration_id | str | required |  |
-| --database, -d | str | None |  |
-| --apply | boolean | False |  |
-| --decision | str | None |  |
+| --database, -d | str | None | Target database name |
+| --apply | boolean | False | Apply the recorded reconciliation decision |
+| --decision | str | None | Decision: verified_retry or abandon |
 
 `--help` displays command help.
 
@@ -34765,21 +34775,21 @@ Scaffold a new transition declaration.
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
 | name | str | required |  |
-| --database, -d | str | None |  |
-| --manual | boolean | False |  |
-| --from-table | str | None |  |
-| --from-model | str | None |  |
-| --source-snapshot | str | None |  |
-| --to-model | str (repeatable) | None |  |
-| --map | str (repeatable) | None |  |
-| --source-key | str | None |  |
-| --key | str (repeatable) | None |  |
-| --where | str (repeatable) | None |  |
-| --preserve-source, --drop-source | boolean | True |  |
-| --acknowledge-drop | boolean | False |  |
-| --coverage | str | 'all' |  |
-| --overlap | str | 'error' |  |
-| --priority | str (repeatable) | None |  |
+| --database, -d | str | None | Target database name |
+| --manual | boolean | False | Write a disabled manual draft instead of a bridging transition |
+| --from-table | str | None | Historical source table name |
+| --from-model | str | None | Current source model name |
+| --source-snapshot | str | None | Pin the exact source schema snapshot id |
+| --to-model | str (repeatable) | None | Target model name (repeatable) |
+| --map | str (repeatable) | None | Column mapping source:Model.target (repeatable) |
+| --source-key | str | None | Source identity column |
+| --key | str (repeatable) | None | Target key column (repeatable) |
+| --where | str (repeatable) | None | Source predicate column=literal (repeatable) |
+| --preserve-source, --drop-source | boolean | True | Preserve or drop the source on completion |
+| --acknowledge-drop | boolean | False | Acknowledge dropping the source in the draft |
+| --coverage | str | 'all' | Coverage: all, subset, exactly_once_match, or all_assigned_once |
+| --overlap | str | 'error' | Overlap: error, fan_out, or priority |
+| --priority | str (repeatable) | None | Per-target routing priority Model:INTEGER (repeatable) |
 
 `--help` displays command help.
 
@@ -34799,8 +34809,8 @@ Validate data declarations and transitions.
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
 | name | str | None |  |
-| --database, -d | str | None |  |
-| --param | str (repeatable) | None |  |
+| --database, -d | str | None | Target database name |
+| --param | str (repeatable) | None | Freeze a data parameter as name=JSON or name=text (repeatable) |
 
 `--help` displays command help.
 
@@ -34811,9 +34821,9 @@ Render the plan for one transition.
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
 | name | str | required |  |
-| --database, -d | str | None |  |
-| --format | str | 'text' |  |
-| --param | str (repeatable) | None |  |
+| --database, -d | str | None | Target database name |
+| --format | str | 'text' | text, json, sql, operations, or mapping |
+| --param | str (repeatable) | None | Freeze a data parameter as name=JSON or name=text (repeatable) |
 
 `--help` displays command help.
 
@@ -34824,9 +34834,9 @@ Resolve a transition and optionally run read-only probes.
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
 | name | str | required |  |
-| --database, -d | str | None |  |
-| --probes | boolean | False |  |
-| --param | str (repeatable) | None |  |
+| --database, -d | str | None | Target database name |
+| --probes | boolean | False | Run read-only probe queries and record evidence |
+| --param | str (repeatable) | None | Freeze a data parameter as name=JSON or name=text (repeatable) |
 
 `--help` displays command help.
 
@@ -34837,10 +34847,10 @@ Render one transition from the compiled plan.
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
 | name | str | required |  |
-| --database, -d | str | None |  |
-| --format | str | 'text' |  |
-| --show-managed-values | boolean | False |  |
-| --param | str (repeatable) | None |  |
+| --database, -d | str | None | Target database name |
+| --format | str | 'text' | text, json, mapping, sql, or operations |
+| --show-managed-values | boolean | False | Reveal managed-row literals in the output |
+| --param | str (repeatable) | None | Freeze a data parameter as name=JSON or name=text (repeatable) |
 
 `--help` displays command help.
 
@@ -34851,10 +34861,10 @@ Describe one transition.
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
 | name | str | required |  |
-| --database, -d | str | None |  |
-| --format | str | 'text' |  |
-| --output | path | None |  |
-| --param | str (repeatable) | None |  |
+| --database, -d | str | None | Target database name |
+| --format | str | 'text' | text, json, or markdown |
+| --output | path | None | Write the output to this path |
+| --param | str (repeatable) | None | Freeze a data parameter as name=JSON or name=text (repeatable) |
 
 `--help` displays command help.
 
@@ -34865,8 +34875,8 @@ Audit a frozen data bundle without importing it.
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
 | name | str | required |  |
-| --database, -d | str | None |  |
-| --format | str | 'json' |  |
+| --database, -d | str | None | Target database name |
+| --format | str | 'json' | json or text |
 
 `--help` displays command help.
 
@@ -34877,9 +34887,9 @@ Inspect or resolve an uncertain data migration.
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
 | migration_id | str | required |  |
-| --database, -d | str | None |  |
-| --apply | boolean | False |  |
-| --decision | str | None |  |
+| --database, -d | str | None | Target database name |
+| --apply | boolean | False | Apply the recorded reconciliation decision |
+| --decision | str | None | Decision: verified_retry or abandon |
 
 `--help` displays command help.
 
@@ -34890,21 +34900,21 @@ Scaffold a new transition declaration.
 | Argument or option | Type | Default | Description |
 |---|---|---|---|
 | name | str | required |  |
-| --database, -d | str | None |  |
-| --manual | boolean | False |  |
-| --from-table | str | None |  |
-| --from-model | str | None |  |
-| --source-snapshot | str | None |  |
-| --to-model | str (repeatable) | None |  |
-| --map | str (repeatable) | None |  |
-| --source-key | str | None |  |
-| --key | str (repeatable) | None |  |
-| --where | str (repeatable) | None |  |
-| --preserve-source, --drop-source | boolean | True |  |
-| --acknowledge-drop | boolean | False |  |
-| --coverage | str | 'all' |  |
-| --overlap | str | 'error' |  |
-| --priority | str (repeatable) | None |  |
+| --database, -d | str | None | Target database name |
+| --manual | boolean | False | Write a disabled manual draft instead of a bridging transition |
+| --from-table | str | None | Historical source table name |
+| --from-model | str | None | Current source model name |
+| --source-snapshot | str | None | Pin the exact source schema snapshot id |
+| --to-model | str (repeatable) | None | Target model name (repeatable) |
+| --map | str (repeatable) | None | Column mapping source:Model.target (repeatable) |
+| --source-key | str | None | Source identity column |
+| --key | str (repeatable) | None | Target key column (repeatable) |
+| --where | str (repeatable) | None | Source predicate column=literal (repeatable) |
+| --preserve-source, --drop-source | boolean | True | Preserve or drop the source on completion |
+| --acknowledge-drop | boolean | False | Acknowledge dropping the source in the draft |
+| --coverage | str | 'all' | Coverage: all, subset, exactly_once_match, or all_assigned_once |
+| --overlap | str | 'error' | Overlap: error, fan_out, or priority |
+| --priority | str (repeatable) | None | Per-target routing priority Model:INTEGER (repeatable) |
 
 `--help` displays command help.
 
@@ -36481,6 +36491,222 @@ validate(expression, *, message='Data validation failed') -> 'Validation'
 
 ```text
 winner(expression)
+```
+
+## `dbwarden.data.artifacts`
+
+### `build_manifest`
+
+```text
+build_manifest(sql_content: 'str', plan: 'dict', frozen_content: 'str') -> 'dict'
+```
+
+### `verify_bundle`
+
+```text
+verify_bundle(sql_path, plan=None) -> 'dict'
+```
+
+## `dbwarden.data.convergence`
+
+### `check_convergence`
+
+```text
+check_convergence(connection, spec, *, plans=()) -> 'list[dict]'
+```
+
+### `project_data_findings`
+
+```text
+project_data_findings(database=None, *, offline=False)
+```
+
+### `verify_sandbox_convergence`
+
+```text
+verify_sandbox_convergence(database)
+```
+
+## `dbwarden.data.execution`
+
+### `DataExecutionError`
+
+```text
+DataExecutionError
+```
+
+### `DataOwnershipError`
+
+```text
+DataOwnershipError
+```
+
+### `execute_data_plan`
+
+```text
+execute_data_plan(connection, plan: 'dict[str, Any]', *, migration_id: 'str', direction: 'str' = 'upgrade', record_success=None, baseline: 'bool' = False, baseline_reason: 'str | None' = None, reapply: 'bool' = False, before_statement=None, after_statement=None) -> 'dict[str, Any]'
+```
+
+### `reconcile_data_plan`
+
+```text
+reconcile_data_plan(connection, migration_id: 'str', *, apply: 'bool' = False, decision: 'str | None' = None, plan: 'dict[str, Any] | None' = None) -> 'dict[str, Any]'
+```
+
+### `verify_identity_edges`
+
+```text
+verify_identity_edges(connection, step, migration_id, epoch, *, verify_target=True) -> 'dict[str, Any]'
+```
+
+## `dbwarden.data.expressions`
+
+### `ExpressionError`
+
+```text
+ExpressionError
+```
+
+### `canonical_expression`
+
+```text
+canonical_expression(value: 'Any', *, columns: 'Iterable[str]', parameters: 'Mapping[str, Any] | None' = None, backend: 'str' = 'sqlite', settings: 'Mapping[str, Any] | None' = None) -> 'dict[str, Any]'
+```
+
+### `lower_expression`
+
+```text
+lower_expression(spec_or_ast: 'Expr | Mapping[str, Any]', backend: 'str', *, aliases: 'Mapping[str | None, str] | None' = None) -> 'str'
+```
+
+## `dbwarden.data.frozen`
+
+### `FrozenDataArtifactImportError`
+
+```text
+FrozenDataArtifactImportError
+```
+
+### `allow_frozen_data_imports`
+
+```text
+allow_frozen_data_imports()
+```
+
+### `guard_frozen_data_artifact`
+
+```text
+guard_frozen_data_artifact(migration_id: 'str') -> 'None'
+```
+
+### `render_frozen`
+
+```text
+render_frozen(data_spec: 'dict', migration_id: 'str', *, execution: 'dict | None' = None, project_root=None) -> 'str'
+```
+
+### `read_frozen`
+
+```text
+read_frozen(path) -> 'dict'
+```
+
+## `dbwarden.data.handler`
+
+### `DataHandler`
+
+```text
+DataHandler()
+```
+
+Methods declared on this class:
+
+```text
+emit(self, op, *, db_name=None)
+```
+
+## `dbwarden.data.integration`
+
+### `applied_data_spec`
+
+```text
+applied_data_spec(connection, paths, *, database, backend)
+```
+
+### `execute_migration_bundle`
+
+```text
+execute_migration_bundle(connection, plan, *, version, filename, migration_type, direction, sql_statements, db_name, baseline=False, baseline_reason=None, reapply=False, before_statement=None, after_statement=None)
+```
+
+### `filter_data_tables`
+
+```text
+filter_data_tables(snapshot, database=None)
+```
+
+### `load_data_plan`
+
+```text
+load_data_plan(filename, db_name=None)
+```
+
+## `dbwarden.data.ir`
+
+### `canonical_bytes`
+
+```text
+canonical_bytes(value) -> 'bytes'
+```
+
+### `canonical_value`
+
+```text
+canonical_value(value)
+```
+
+### `digest`
+
+```text
+digest(value, domain='data') -> 'str'
+```
+
+### `empty_spec`
+
+```text
+empty_spec(database: 'str', backend: 'str') -> 'dict'
+```
+
+### `parse_json`
+
+```text
+parse_json(content)
+```
+
+### `seal_spec`
+
+```text
+seal_spec(spec: 'dict') -> 'dict'
+```
+
+### `validate_spec`
+
+```text
+validate_spec(spec: 'dict') -> 'dict'
+```
+
+## `dbwarden.data.snapshots`
+
+### `resolve_snapshot`
+
+```text
+resolve_snapshot(snapshot_id: 'str', *, database: 'str', backend: 'str', registry_path=None, schema_dir=None) -> 'dict'
+```
+
+### `register_snapshot`
+
+```text
+register_snapshot(snapshot_id, schema_state=None, *, database: 'str | None' = None, backend: 'str | None' = None, parent_snapshot_ids=(), data_checksum: 'str | None' = None, created_by_migration: 'str | None' = None, registry_path=None) -> 'dict'
 ```
 
 ## `dbwarden.database`

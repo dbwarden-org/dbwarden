@@ -9,6 +9,11 @@ a schema release*. It is versioned, owned, reversible where declared, and frozen
 before it runs. That is a different contract from a seed file or a one-off
 backfill script.
 
+The tutorial runs entirely on SQLite. PostgreSQL, MySQL, MariaDB, and ClickHouse
+are covered at the contract level in the [reference](../reference.md), and their
+execution evidence comes from the harness integration suite rather than from this
+tutorial.
+
 ## What you'll learn
 
 - Why data changes deserve the same versioned, reviewed treatment as schema changes

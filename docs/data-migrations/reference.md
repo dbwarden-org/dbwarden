@@ -730,6 +730,8 @@ Lowering evaluates the complete plan against one backend and rejects any operati
 
 The negotiation checklist covers atomic DML and metadata commit; transactional DDL; ordered mixed transactional and autocommit execution; conditional write and equivalence support; durable operation checkpoints; synchronous effect visibility; source preservation; convergence-query support; backend-specific statement, lock, duration, and replication-lag limits; and a per-database HMAC key for identity edges. One autocommit, external, or asynchronous operation makes the affected segment non-transactional.
 
+The matrix states the contract each backend must satisfy. Execution evidence is backend-specific and produced by the harness integration suite (the round-trip, semantics, plugin, and backend-matrix runs), not by this document. The [tutorial](tutorial/index.md) runs entirely on SQLite.
+
 ## Execution states and journal
 
 Execution records an immutable artifact record keyed by migration ID and manifest checksum, an append-only event journal identifying each run and application epoch, and durable operation checkpoints with authenticated identity-edge records. A current-state projection supports inspection but never replaces history.

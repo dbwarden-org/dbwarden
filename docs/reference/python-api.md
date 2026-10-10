@@ -452,6 +452,222 @@ validate(expression, *, message='Data validation failed') -> 'Validation'
 winner(expression)
 ```
 
+## `dbwarden.data.artifacts`
+
+### `build_manifest`
+
+```text
+build_manifest(sql_content: 'str', plan: 'dict', frozen_content: 'str') -> 'dict'
+```
+
+### `verify_bundle`
+
+```text
+verify_bundle(sql_path, plan=None) -> 'dict'
+```
+
+## `dbwarden.data.convergence`
+
+### `check_convergence`
+
+```text
+check_convergence(connection, spec, *, plans=()) -> 'list[dict]'
+```
+
+### `project_data_findings`
+
+```text
+project_data_findings(database=None, *, offline=False)
+```
+
+### `verify_sandbox_convergence`
+
+```text
+verify_sandbox_convergence(database)
+```
+
+## `dbwarden.data.execution`
+
+### `DataExecutionError`
+
+```text
+DataExecutionError
+```
+
+### `DataOwnershipError`
+
+```text
+DataOwnershipError
+```
+
+### `execute_data_plan`
+
+```text
+execute_data_plan(connection, plan: 'dict[str, Any]', *, migration_id: 'str', direction: 'str' = 'upgrade', record_success=None, baseline: 'bool' = False, baseline_reason: 'str | None' = None, reapply: 'bool' = False, before_statement=None, after_statement=None) -> 'dict[str, Any]'
+```
+
+### `reconcile_data_plan`
+
+```text
+reconcile_data_plan(connection, migration_id: 'str', *, apply: 'bool' = False, decision: 'str | None' = None, plan: 'dict[str, Any] | None' = None) -> 'dict[str, Any]'
+```
+
+### `verify_identity_edges`
+
+```text
+verify_identity_edges(connection, step, migration_id, epoch, *, verify_target=True) -> 'dict[str, Any]'
+```
+
+## `dbwarden.data.expressions`
+
+### `ExpressionError`
+
+```text
+ExpressionError
+```
+
+### `canonical_expression`
+
+```text
+canonical_expression(value: 'Any', *, columns: 'Iterable[str]', parameters: 'Mapping[str, Any] | None' = None, backend: 'str' = 'sqlite', settings: 'Mapping[str, Any] | None' = None) -> 'dict[str, Any]'
+```
+
+### `lower_expression`
+
+```text
+lower_expression(spec_or_ast: 'Expr | Mapping[str, Any]', backend: 'str', *, aliases: 'Mapping[str | None, str] | None' = None) -> 'str'
+```
+
+## `dbwarden.data.frozen`
+
+### `FrozenDataArtifactImportError`
+
+```text
+FrozenDataArtifactImportError
+```
+
+### `allow_frozen_data_imports`
+
+```text
+allow_frozen_data_imports()
+```
+
+### `guard_frozen_data_artifact`
+
+```text
+guard_frozen_data_artifact(migration_id: 'str') -> 'None'
+```
+
+### `render_frozen`
+
+```text
+render_frozen(data_spec: 'dict', migration_id: 'str', *, execution: 'dict | None' = None, project_root=None) -> 'str'
+```
+
+### `read_frozen`
+
+```text
+read_frozen(path) -> 'dict'
+```
+
+## `dbwarden.data.handler`
+
+### `DataHandler`
+
+```text
+DataHandler()
+```
+
+Methods declared on this class:
+
+```text
+emit(self, op, *, db_name=None)
+```
+
+## `dbwarden.data.integration`
+
+### `applied_data_spec`
+
+```text
+applied_data_spec(connection, paths, *, database, backend)
+```
+
+### `execute_migration_bundle`
+
+```text
+execute_migration_bundle(connection, plan, *, version, filename, migration_type, direction, sql_statements, db_name, baseline=False, baseline_reason=None, reapply=False, before_statement=None, after_statement=None)
+```
+
+### `filter_data_tables`
+
+```text
+filter_data_tables(snapshot, database=None)
+```
+
+### `load_data_plan`
+
+```text
+load_data_plan(filename, db_name=None)
+```
+
+## `dbwarden.data.ir`
+
+### `canonical_bytes`
+
+```text
+canonical_bytes(value) -> 'bytes'
+```
+
+### `canonical_value`
+
+```text
+canonical_value(value)
+```
+
+### `digest`
+
+```text
+digest(value, domain='data') -> 'str'
+```
+
+### `empty_spec`
+
+```text
+empty_spec(database: 'str', backend: 'str') -> 'dict'
+```
+
+### `parse_json`
+
+```text
+parse_json(content)
+```
+
+### `seal_spec`
+
+```text
+seal_spec(spec: 'dict') -> 'dict'
+```
+
+### `validate_spec`
+
+```text
+validate_spec(spec: 'dict') -> 'dict'
+```
+
+## `dbwarden.data.snapshots`
+
+### `resolve_snapshot`
+
+```text
+resolve_snapshot(snapshot_id: 'str', *, database: 'str', backend: 'str', registry_path=None, schema_dir=None) -> 'dict'
+```
+
+### `register_snapshot`
+
+```text
+register_snapshot(snapshot_id, schema_state=None, *, database: 'str | None' = None, backend: 'str | None' = None, parent_snapshot_ids=(), data_checksum: 'str | None' = None, created_by_migration: 'str | None' = None, registry_path=None) -> 'dict'
+```
+
 ## `dbwarden.database`
 
 ### `get_db_connection`

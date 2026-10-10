@@ -77,9 +77,40 @@ def api_reference():
     modules = exported_modules()
     for name in ("dbwarden.config_registry", "dbwarden.config_schema", "dbwarden.db_handle", "dbwarden.models", "dbwarden.schema.table_meta"):
         modules[name] = importlib.import_module(name)
+    # Contributor-facing data submodules do not declare __all__; list the
+    # public surface explicitly so the inventory documents it.
+    submodule_exports = {
+        "dbwarden.data.snapshots": ["resolve_snapshot", "register_snapshot"],
+        "dbwarden.data.frozen": [
+            "FrozenDataArtifactImportError", "allow_frozen_data_imports",
+            "guard_frozen_data_artifact", "render_frozen", "read_frozen",
+        ],
+        "dbwarden.data.artifacts": ["build_manifest", "verify_bundle"],
+        "dbwarden.data.execution": [
+            "DataExecutionError", "DataOwnershipError",
+            "execute_data_plan", "reconcile_data_plan", "verify_identity_edges",
+        ],
+        "dbwarden.data.integration": [
+            "applied_data_spec", "execute_migration_bundle",
+            "filter_data_tables", "load_data_plan",
+        ],
+        "dbwarden.data.convergence": [
+            "check_convergence", "project_data_findings", "verify_sandbox_convergence",
+        ],
+        "dbwarden.data.handler": ["DataHandler"],
+        "dbwarden.data.ir": [
+            "canonical_bytes", "canonical_value", "digest", "empty_spec",
+            "parse_json", "seal_spec", "validate_spec",
+        ],
+        "dbwarden.data.expressions": [
+            "ExpressionError", "canonical_expression", "lower_expression",
+        ],
+    }
+    for name in submodule_exports:
+        modules[name] = importlib.import_module(name)
     seen = set()
     for name, module in sorted(modules.items()):
-        names = getattr(module, "__all__", None)
+        names = submodule_exports.get(name) or getattr(module, "__all__", None)
         if names is None:
             names = [key for key, value in vars(module).items()
                      if not key.startswith("_") and getattr(value, "__module__", None) == name]

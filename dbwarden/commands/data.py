@@ -398,16 +398,17 @@ def _filtered_plan(plan: dict, spec: dict) -> dict:
 
 @data_app.command("render", help="Render the compiled data specification.")
 def render_data(
-    database: str | None = typer.Option(None, "--database", "-d"),
-    model: str | None = typer.Option(None, "--model"),
-    format: str = typer.Option("text", "--format"),
+    database: str | None = typer.Option(None, "--database", "-d", help="Target database name"),
+    model: str | None = typer.Option(None, "--model", help="Restrict output to one model"),
+    format: str = typer.Option("text", "--format", help="text, json, mapping, sql, or operations"),
     include: str = typer.Option(
-        "schema,constraints,relationships,data,transitions", "--include"
+        "schema,constraints,relationships,data,transitions", "--include",
+        help="Comma-separated sections: schema, constraints, relationships, data, transitions",
     ),
-    only_with_data: bool = typer.Option(False, "--only-with-data"),
-    relationship_depth: int = typer.Option(0, "--relationship-depth", min=0),
-    show_managed_values: bool = typer.Option(False, "--show-managed-values"),
-    param: Annotated[list[str] | None, typer.Option("--param")] = None,
+    only_with_data: bool = typer.Option(False, "--only-with-data", help="Only include models or transitions that declare data"),
+    relationship_depth: int = typer.Option(0, "--relationship-depth", min=0, help="Relationship expansion depth (0-5)"),
+    show_managed_values: bool = typer.Option(False, "--show-managed-values", help="Reveal managed-row literals in the output"),
+    param: Annotated[list[str] | None, typer.Option("--param", help="Freeze a data parameter as name=JSON or name=text (repeatable)")] = None,
 ) -> None:
     if format not in {"text", "json", "mapping", "sql", "operations"}:
         raise typer.BadParameter(
@@ -423,17 +424,18 @@ def render_data(
 
 @data_app.command("describe", help="Describe models, constraints, and declared data.")
 def describe_data(
-    database: str | None = typer.Option(None, "--database", "-d"),
-    model: str | None = typer.Option(None, "--model"),
-    format: str = typer.Option("text", "--format"),
-    output: Annotated[Path | None, typer.Option("--output")] = None,
+    database: str | None = typer.Option(None, "--database", "-d", help="Target database name"),
+    model: str | None = typer.Option(None, "--model", help="Restrict output to one model"),
+    format: str = typer.Option("text", "--format", help="text, json, or markdown"),
+    output: Annotated[Path | None, typer.Option("--output", help="Write the output to this path")] = None,
     include: str = typer.Option(
-        "schema,constraints,relationships,data,transitions", "--include"
+        "schema,constraints,relationships,data,transitions", "--include",
+        help="Comma-separated sections: schema, constraints, relationships, data, transitions",
     ),
-    only_with_data: bool = typer.Option(False, "--only-with-data"),
-    relationship_depth: int = typer.Option(0, "--relationship-depth", min=0),
-    show_managed_values: bool = typer.Option(False, "--show-managed-values"),
-    param: Annotated[list[str] | None, typer.Option("--param")] = None,
+    only_with_data: bool = typer.Option(False, "--only-with-data", help="Only include models or transitions that declare data"),
+    relationship_depth: int = typer.Option(0, "--relationship-depth", min=0, help="Relationship expansion depth (0-5)"),
+    show_managed_values: bool = typer.Option(False, "--show-managed-values", help="Reveal managed-row literals in the output"),
+    param: Annotated[list[str] | None, typer.Option("--param", help="Freeze a data parameter as name=JSON or name=text (repeatable)")] = None,
 ) -> None:
     if format not in {"text", "json", "markdown"}:
         raise typer.BadParameter("format must be text, json, or markdown")
@@ -463,11 +465,11 @@ def describe_data(
 
 @data_app.command("docs", help="Write generated data documentation and checksums.")
 def docs_data(
-    output: Annotated[Path, typer.Option("--output")],
-    database: str | None = typer.Option(None, "--database", "-d"),
-    diagrams: str | None = typer.Option(None, "--diagrams"),
-    show_managed_values: bool = typer.Option(False, "--show-managed-values"),
-    param: Annotated[list[str] | None, typer.Option("--param")] = None,
+    output: Annotated[Path, typer.Option("--output", help="Write the output to this path")],
+    database: str | None = typer.Option(None, "--database", "-d", help="Target database name"),
+    diagrams: str | None = typer.Option(None, "--diagrams", help="Diagram format to embed; mermaid is supported"),
+    show_managed_values: bool = typer.Option(False, "--show-managed-values", help="Reveal managed-row literals in the output"),
+    param: Annotated[list[str] | None, typer.Option("--param", help="Freeze a data parameter as name=JSON or name=text (repeatable)")] = None,
 ) -> None:
     if diagrams not in {None, "mermaid"}:
         raise typer.BadParameter("diagrams supports only mermaid")
@@ -567,8 +569,8 @@ def _transition(plan: dict, name: str) -> dict:
 @transition_app.command("validate", help="Validate data declarations and transitions.")
 def validate_transition(
     name: str | None = typer.Argument(None),
-    database: str | None = typer.Option(None, "--database", "-d"),
-    param: Annotated[list[str] | None, typer.Option("--param")] = None,
+    database: str | None = typer.Option(None, "--database", "-d", help="Target database name"),
+    param: Annotated[list[str] | None, typer.Option("--param", help="Freeze a data parameter as name=JSON or name=text (repeatable)")] = None,
 ) -> None:
     _, _, _, plan = _compiled(database, _parameters(param))
     if name:
@@ -579,9 +581,9 @@ def validate_transition(
 @transition_app.command("plan", help="Render the plan for one transition.")
 def plan_transition(
     name: str,
-    database: str | None = typer.Option(None, "--database", "-d"),
-    format: str = typer.Option("text", "--format"),
-    param: Annotated[list[str] | None, typer.Option("--param")] = None,
+    database: str | None = typer.Option(None, "--database", "-d", help="Target database name"),
+    format: str = typer.Option("text", "--format", help="text, json, sql, operations, or mapping"),
+    param: Annotated[list[str] | None, typer.Option("--param", help="Freeze a data parameter as name=JSON or name=text (repeatable)")] = None,
 ) -> None:
     if format not in {"text", "json", "sql", "operations", "mapping"}:
         raise typer.BadParameter("Unsupported plan format")
@@ -592,9 +594,9 @@ def plan_transition(
 @transition_app.command("dry-run", help="Resolve a transition and optionally run read-only probes.")
 def dry_run_transition(
     name: str,
-    database: str | None = typer.Option(None, "--database", "-d"),
-    probes: bool = typer.Option(False, "--probes"),
-    param: Annotated[list[str] | None, typer.Option("--param")] = None,
+    database: str | None = typer.Option(None, "--database", "-d", help="Target database name"),
+    probes: bool = typer.Option(False, "--probes", help="Run read-only probe queries and record evidence"),
+    param: Annotated[list[str] | None, typer.Option("--param", help="Freeze a data parameter as name=JSON or name=text (repeatable)")] = None,
 ) -> None:
     _, _, _, plan = _compiled(database, _parameters(param))
     selected = _transition(plan, name)
@@ -618,10 +620,10 @@ def dry_run_transition(
 @transition_app.command("render", help="Render one transition from the compiled plan.")
 def render_transition(
     name: str,
-    database: str | None = typer.Option(None, "--database", "-d"),
-    format: str = typer.Option("text", "--format"),
-    show_managed_values: bool = typer.Option(False, "--show-managed-values"),
-    param: Annotated[list[str] | None, typer.Option("--param")] = None,
+    database: str | None = typer.Option(None, "--database", "-d", help="Target database name"),
+    format: str = typer.Option("text", "--format", help="text, json, mapping, sql, or operations"),
+    show_managed_values: bool = typer.Option(False, "--show-managed-values", help="Reveal managed-row literals in the output"),
+    param: Annotated[list[str] | None, typer.Option("--param", help="Freeze a data parameter as name=JSON or name=text (repeatable)")] = None,
 ) -> None:
     _, _, _, plan = _compiled(database, _parameters(param), frozen_fallback=True)
     _emit(
@@ -634,10 +636,10 @@ def render_transition(
 @transition_app.command("describe", help="Describe one transition.")
 def describe_transition(
     name: str,
-    database: str | None = typer.Option(None, "--database", "-d"),
-    format: str = typer.Option("text", "--format"),
-    output: Annotated[Path | None, typer.Option("--output")] = None,
-    param: Annotated[list[str] | None, typer.Option("--param")] = None,
+    database: str | None = typer.Option(None, "--database", "-d", help="Target database name"),
+    format: str = typer.Option("text", "--format", help="text, json, or markdown"),
+    output: Annotated[Path | None, typer.Option("--output", help="Write the output to this path")] = None,
+    param: Annotated[list[str] | None, typer.Option("--param", help="Freeze a data parameter as name=JSON or name=text (repeatable)")] = None,
 ) -> None:
     if format not in {"text", "json", "markdown"}:
         raise typer.BadParameter("format must be text, json, or markdown")
@@ -660,8 +662,8 @@ def describe_transition(
 @transition_app.command("audit", help="Audit a frozen data bundle without importing it.")
 def audit_transition(
     name: str,
-    database: str | None = typer.Option(None, "--database", "-d"),
-    format: str = typer.Option("json", "--format"),
+    database: str | None = typer.Option(None, "--database", "-d", help="Target database name"),
+    format: str = typer.Option("json", "--format", help="json or text"),
 ) -> None:
     if format not in {"json", "text"}:
         raise typer.BadParameter("format must be json or text")
@@ -710,9 +712,9 @@ def audit_transition(
 @transition_app.command("reconcile", help="Inspect or resolve an uncertain data migration.")
 def reconcile_transition(
     migration_id: str,
-    database: str | None = typer.Option(None, "--database", "-d"),
-    apply: bool = typer.Option(False, "--apply"),
-    decision: str | None = typer.Option(None, "--decision"),
+    database: str | None = typer.Option(None, "--database", "-d", help="Target database name"),
+    apply: bool = typer.Option(False, "--apply", help="Apply the recorded reconciliation decision"),
+    decision: str | None = typer.Option(None, "--decision", help="Decision: verified_retry or abandon"),
 ) -> None:
     if apply and decision not in {"abandon", "verified_retry"}:
         raise typer.BadParameter(
@@ -780,21 +782,21 @@ def reconcile_transition(
 @transition_app.command("new", help="Scaffold a new transition declaration.")
 def new_transition(
     name: str,
-    database: str | None = typer.Option(None, "--database", "-d"),
-    manual: bool = typer.Option(False, "--manual"),
-    from_table: str | None = typer.Option(None, "--from-table"),
-    from_model: str | None = typer.Option(None, "--from-model"),
-    source_snapshot: str | None = typer.Option(None, "--source-snapshot"),
-    to_model: Annotated[list[str] | None, typer.Option("--to-model")] = None,
-    map: Annotated[list[str] | None, typer.Option("--map")] = None,
-    source_key: str | None = typer.Option(None, "--source-key"),
-    key: Annotated[list[str] | None, typer.Option("--key")] = None,
-    where: Annotated[list[str] | None, typer.Option("--where")] = None,
-    preserve_source: bool = typer.Option(True, "--preserve-source/--drop-source"),
-    acknowledge_drop: bool = typer.Option(False, "--acknowledge-drop"),
-    coverage: str = typer.Option("all", "--coverage"),
-    overlap: str = typer.Option("error", "--overlap"),
-    priority: Annotated[list[str] | None, typer.Option("--priority")] = None,
+    database: str | None = typer.Option(None, "--database", "-d", help="Target database name"),
+    manual: bool = typer.Option(False, "--manual", help="Write a disabled manual draft instead of a bridging transition"),
+    from_table: str | None = typer.Option(None, "--from-table", help="Historical source table name"),
+    from_model: str | None = typer.Option(None, "--from-model", help="Current source model name"),
+    source_snapshot: str | None = typer.Option(None, "--source-snapshot", help="Pin the exact source schema snapshot id"),
+    to_model: Annotated[list[str] | None, typer.Option("--to-model", help="Target model name (repeatable)")] = None,
+    map: Annotated[list[str] | None, typer.Option("--map", help="Column mapping source:Model.target (repeatable)")] = None,
+    source_key: str | None = typer.Option(None, "--source-key", help="Source identity column"),
+    key: Annotated[list[str] | None, typer.Option("--key", help="Target key column (repeatable)")] = None,
+    where: Annotated[list[str] | None, typer.Option("--where", help="Source predicate column=literal (repeatable)")] = None,
+    preserve_source: bool = typer.Option(True, "--preserve-source/--drop-source", help="Preserve or drop the source on completion"),
+    acknowledge_drop: bool = typer.Option(False, "--acknowledge-drop", help="Acknowledge dropping the source in the draft"),
+    coverage: str = typer.Option("all", "--coverage", help="Coverage: all, subset, exactly_once_match, or all_assigned_once"),
+    overlap: str = typer.Option("error", "--overlap", help="Overlap: error, fan_out, or priority"),
+    priority: Annotated[list[str] | None, typer.Option("--priority", help="Per-target routing priority Model:INTEGER (repeatable)")] = None,
 ) -> None:
     to_model, map, key, where = to_model or [], map or [], key or [], where or []
     if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):

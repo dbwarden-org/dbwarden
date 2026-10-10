@@ -83,9 +83,12 @@ class RouteLegacyPeople(DataTransition):
     ]
 ```
 
-The example project ships only the `fan_out` form; this variant is the same split
-with routing added. Here the `Customer` target claims `example.com` addresses at
-priority 10, and `Person` is the priority-20 default (no `where`, so always true).
+The example project ships both routing forms: `scripts/02-split-people.sh`
+runs the `fan_out` split above, and `scripts/03-route-people.sh` runs this
+priority variant. Run `01-legacy-schema.sh` first, then either script (they are
+alternatives over the same source). Here the `Customer` target claims
+`example.com` addresses at priority 10, and `Person` is the priority-20 default
+(no `where`, so always true).
 
 Priority is not a tie-breaker applied after the fact. The compiler rewrites each
 target's *effective* predicate to exclude rows already claimed by a lower-priority

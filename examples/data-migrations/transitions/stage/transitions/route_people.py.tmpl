@@ -1,0 +1,49 @@
+# Template for the priority-routed transition. scripts/03-route-people.sh
+# substitutes the real snapshot id for __SNAPSHOT__ and writes the result to
+# app/data/route_people.py, where dbwarden discovers it via data_paths.
+from app.models import Customer, Person
+from dbwarden.data import DataTransition, func, historical_table, into, literal
+
+legacy = historical_table("legacy_people", snapshot="__SNAPSHOT__")
+
+# A predicate that is true for example.com addresses.
+IS_EXAMPLE = func.lower(func.split_part(legacy.email, "@", 2)) == literal("example.com")
+
+
+class RouteLegacyPeople(DataTransition):
+    source = legacy
+    source_identity = [legacy.id]
+
+    # Each source row is assigned to exactly one target. Priority resolves the
+    # overlap: the lowest number wins when two predicates both match.
+    coverage = "all_assigned_once"
+    overlap = "priority"
+
+    # Preserve the source under its deterministic preservation table instead of
+    # dropping it, so the move is reversible.
+    on_complete = "preserve"
+    rollback = "restore_preserved_source"
+
+    targets = [
+        # example.com addresses are claimed at priority 10.
+        into(
+            Customer,
+            map={
+                Customer.person_id: legacy.id,
+                Customer.tier: func.lower(func.split_part(legacy.email, "@", 2)),
+            },
+            key=[Customer.person_id],
+            where=IS_EXAMPLE,
+            priority=10,
+            on_conflict="ignore_if_equivalent",
+        ),
+        # No predicate, so this always matches; it is the priority-20 default
+        # for every row not already claimed by the example.com target.
+        into(
+            Person,
+            map={Person.id: legacy.id, Person.name: legacy.full_name},
+            key=[Person.id],
+            priority=20,
+            on_conflict="ignore_if_equivalent",
+        ),
+    ]
