@@ -190,7 +190,7 @@ _UPDATE_HEARTBEAT = {
     """,
     "clickhouse": """
         ALTER TABLE dbwarden_lock UPDATE
-        SET last_heartbeat_at = :now, expires_at = :expires_at
+        last_heartbeat_at = :now, expires_at = :expires_at
         WHERE namespace = :namespace AND execution_id = :execution_id
           AND owner_id = :owner_id AND fencing_token = :fencing_token
     """,
@@ -214,7 +214,7 @@ _UPDATE_STATE = {
     """,
     "clickhouse": """
         ALTER TABLE dbwarden_lock UPDATE
-        SET state = :state
+        state = :state
         WHERE namespace = :namespace
     """,
 }

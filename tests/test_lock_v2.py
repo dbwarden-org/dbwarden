@@ -545,6 +545,22 @@ class TestClickHouseLockEngine:
         assert " FINAL" not in conn.sql_text()
         assert "argMax" in conn.sql_text()
 
+    def test_clickhouse_mutations_omit_set_keyword(self):
+        # ClickHouse mutations are "ALTER TABLE ... UPDATE col = expr"; a SET
+        # keyword is a syntax error (code 62) that the server rejects.
+        from dbwarden.lock.table import _UPDATE_HEARTBEAT, _UPDATE_STATE
+
+        for template in (_UPDATE_HEARTBEAT["clickhouse"], _UPDATE_STATE["clickhouse"]):
+            assert " SET " not in template.upper()
+
+        conn = FakeCHConnection()
+        from dbwarden.lock.table import update_state
+
+        update_state(conn, namespace="default", state="COMPLETE", db_type="clickhouse")
+        sql = conn.sql_text().upper()
+        assert "ALTER TABLE DBWARDEN_LOCK UPDATE" in sql
+        assert " SET " not in sql
+
 
 class TestClickHouseAcquisition:
     """CH-0 lease acquisition: no FINAL in generated SQL, competing
