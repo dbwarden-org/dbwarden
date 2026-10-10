@@ -214,7 +214,7 @@ _UPDATE_STATE = {
     """,
     "clickhouse": """
         ALTER TABLE dbwarden_lock UPDATE
-        state = :state
+        state = :state, expires_at = NULL
         WHERE namespace = :namespace
     """,
 }
