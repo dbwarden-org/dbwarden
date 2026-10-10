@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import time
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch, PropertyMock
 
 import pytest
@@ -397,3 +398,248 @@ class TestClickHouseIdempotency:
         is_idempotent, reason = check_statement_idempotency("SOME UNKNOWN STATEMENT")
         assert is_idempotent is False
         assert "Unclassified" in reason
+
+
+class _FakeResult:
+    """Minimal result facade mimicking SQLAlchemy's Result API surface."""
+
+    def __init__(self, scalar=None, first=None, rows=None):
+        self._scalar = scalar
+        self._first = first
+        self._rows = rows or []
+
+    def scalar(self):
+        return self._scalar
+
+    def mappings(self):
+        return self
+
+    def first(self):
+        return self._first
+
+    def fetchall(self):
+        return self._rows
+
+
+class FakeCHConnection:
+    """Fake ClickHouse connection for SQL-generation/logic tests.
+
+    Records every executed statement and returns canned results for
+    engine detection, now(), and status-row reads.
+    """
+
+    def __init__(
+        self,
+        engine="ReplacingMergeTree(fencing_token)",
+        status_row=None,
+        now="2026-10-09T12:00:00+00:00",
+    ):
+        self.dialect = SimpleNamespace(name="clickhouse")
+        self._engine = engine
+        self._status_row = status_row
+        self._now = now
+        self.statements = []
+        self.fail_on_rename = False
+
+    def execute(self, stmt, params=None):
+        sql = str(stmt)
+        self.statements.append(sql)
+        if "SELECT engine FROM system.tables" in sql:
+            return _FakeResult(scalar=self._engine)
+        if sql.strip().startswith("SELECT now()"):
+            return _FakeResult(scalar=self._now)
+        if self.fail_on_rename and "RENAME TABLE" in sql:
+            raise RuntimeError("simulated RENAME failure")
+        # Status-row reads (FINAL or argMax flavor) and INSERTs.
+        return _FakeResult(first=self._status_row)
+
+    def sql_text(self):
+        return "\n".join(self.statements)
+
+
+class TestClickHouseLockEngine:
+    """dbwarden_lock must be ReplacingMergeTree; plain-MergeTree tables
+    in the wild must be migrated and read with argMax semantics."""
+
+    def test_ddl_uses_replacing_merge_tree(self):
+        from dbwarden.lock.table import _LOCK_TABLE_V2_DDL
+
+        ddl = _LOCK_TABLE_V2_DDL["clickhouse"]
+        assert "ENGINE = ReplacingMergeTree(fencing_token)" in ddl
+        assert "MergeTree()" not in ddl.replace("ReplacingMergeTree(fencing_token)", "")
+
+    def test_ensure_skips_migration_when_already_replacing(self):
+        from dbwarden.lock.table import ensure_lock_table
+
+        conn = FakeCHConnection(engine="ReplacingMergeTree(fencing_token)")
+        ensure_lock_table(conn, "clickhouse")
+        assert "RENAME TABLE" not in conn.sql_text()
+        assert "CREATE TABLE IF NOT EXISTS dbwarden_lock" in conn.sql_text()
+
+    def test_ensure_migrates_plain_mergine_tree(self):
+        from dbwarden.lock.table import ensure_lock_table
+
+        conn = FakeCHConnection(engine="MergeTree")
+        ensure_lock_table(conn, "clickhouse")
+
+        sql = conn.sql_text()
+        # Migration table created with the ReplacingMergeTree DDL
+        assert "CREATE TABLE IF NOT EXISTS dbwarden_lock_migration" in sql
+        assert "ENGINE = ReplacingMergeTree(fencing_token)" in sql
+        # Authoritative rows preserved via argMax dedup by fencing_token
+        insert_idx = sql.index("INSERT INTO dbwarden_lock_migration")
+        assert "argMax(execution_id, fencing_token)" in sql[insert_idx:]
+        assert "max(fencing_token)" in sql[insert_idx:]
+        # Atomic swap and cleanup of the legacy table
+        assert "RENAME TABLE dbwarden_lock TO dbwarden_lock_legacy" in sql
+        assert "DROP TABLE dbwarden_lock_legacy" in sql
+        # Engine cache updated: a second ensure does not re-migrate
+        conn.statements.clear()
+        ensure_lock_table(conn, "clickhouse")
+        assert "RENAME TABLE" not in conn.sql_text()
+
+    def test_ensure_survives_migration_failure_and_reads_stay_correct(self):
+        from dbwarden.lock.table import ensure_lock_table, read_status_row
+
+        conn = FakeCHConnection(
+            engine="MergeTree",
+            status_row={"namespace": "default", "fencing_token": 3},
+        )
+        conn.fail_on_rename = True
+        # Migration failure must not break ensure (retried next time)
+        ensure_lock_table(conn, "clickhouse")
+        # Reads fall back to the engine-agnostic argMax query
+        conn.statements.clear()
+        row = read_status_row(conn, namespace="default", db_type="clickhouse")
+        sql = conn.sql_text()
+        assert "argMax" in sql
+        assert " FINAL" not in sql
+        assert row["fencing_token"] == 3
+
+    def test_read_uses_final_only_for_replacing_engine(self):
+        from dbwarden.lock.table import read_status_row
+
+        replacing = FakeCHConnection(
+            engine="ReplacingMergeTree(fencing_token)",
+            status_row={"namespace": "default", "fencing_token": 7},
+        )
+        read_status_row(replacing, namespace="default", db_type="clickhouse")
+        assert " FINAL" in replacing.sql_text()
+        assert "argMax" not in replacing.sql_text()
+
+        plain = FakeCHConnection(
+            engine="MergeTree",
+            status_row={"namespace": "default", "fencing_token": 7},
+        )
+        read_status_row(plain, namespace="default", db_type="clickhouse")
+        assert " FINAL" not in plain.sql_text()
+        assert "argMax(execution_id, fencing_token)" in plain.sql_text()
+
+    def test_read_unknown_engine_uses_argmax_not_final(self):
+        from dbwarden.lock.table import read_status_row
+
+        conn = FakeCHConnection(
+            engine=None, status_row={"namespace": "default", "fencing_token": 1}
+        )
+        read_status_row(conn, namespace="default", db_type="clickhouse")
+        assert " FINAL" not in conn.sql_text()
+        assert "argMax" in conn.sql_text()
+
+
+class TestClickHouseAcquisition:
+    """CH-0 lease acquisition: no FINAL in generated SQL, competing
+    holders rejected, stale fencing tokens refused."""
+
+    def _row(self, **overrides):
+        row = {
+            "namespace": "default",
+            "execution_id": "exec-1",
+            "owner_id": "owner-1",
+            "fencing_token": 5,
+            "state": "RUNNING",
+            "expires_at": "2026-10-09T12:05:00+00:00",
+        }
+        row.update(overrides)
+        return row
+
+    def test_acquire_sql_contains_no_final(self):
+        from dbwarden.lock.clickhouse import ClickHouseStrategy
+
+        conn = FakeCHConnection(status_row=self._row())
+        strategy = ClickHouseStrategy(ttl_seconds=120)
+        status_row = StatusRow(namespace="default", execution_id="exec-1")
+        result = strategy.acquire(conn, status_row)
+        assert result.success
+        # The acquisition INSERT itself must not use FINAL; the post-insert
+        # verify read may (engine is ReplacingMergeTree here).
+        insert_sql = next(s for s in conn.statements if s.lstrip().startswith("INSERT"))
+        assert " FINAL" not in insert_sql
+        # ensure_table ran: DDL issued, engine detected
+        assert "CREATE TABLE IF NOT EXISTS dbwarden_lock" in conn.sql_text()
+        assert status_row.fencing_token == 5
+
+    def test_acquire_rejects_competing_holder(self):
+        from dbwarden.lock.clickhouse import ClickHouseStrategy
+
+        conn = FakeCHConnection(
+            status_row=self._row(execution_id="other-exec", owner_id="other-owner")
+        )
+        strategy = ClickHouseStrategy(ttl_seconds=120)
+        status_row = StatusRow(namespace="default", execution_id="exec-1")
+        result = strategy.acquire(conn, status_row)
+        assert not result.success
+        assert "other-exec"[:12] in result.holder_description or "host" in result.holder_description
+
+    def test_acquire_rejects_expired_lease_holder(self):
+        from dbwarden.lock.clickhouse import ClickHouseStrategy
+
+        conn = FakeCHConnection(
+            status_row=self._row(
+                execution_id="other-exec",
+                expires_at="2026-10-09T11:00:00+00:00",  # before now()
+            )
+        )
+        strategy = ClickHouseStrategy(ttl_seconds=120)
+        status_row = StatusRow(namespace="default", execution_id="exec-1")
+        result = strategy.acquire(conn, status_row)
+        assert not result.success
+
+    def test_fence_check_rejects_stale_token(self):
+        from dbwarden.lock.clickhouse import ClickHouseStrategy
+
+        strategy = ClickHouseStrategy()
+        conn = FakeCHConnection(status_row=self._row(fencing_token=9))
+        assert strategy.fence_check(conn, "default", 9) is True
+        assert strategy.fence_check(conn, "default", 8) is False
+
+    def test_fence_check_rejects_expired_lease(self):
+        from dbwarden.lock.clickhouse import ClickHouseStrategy
+
+        conn = FakeCHConnection(
+            status_row=self._row(expires_at="2026-10-09T11:00:00+00:00")
+        )
+        strategy = ClickHouseStrategy()
+        assert strategy.fence_check(conn, "default", 5) is False
+
+    def test_acquire_migrates_legacy_plain_mergine_tree(self):
+        from dbwarden.lock.clickhouse import ClickHouseStrategy
+
+        conn = FakeCHConnection(engine="MergeTree", status_row=self._row())
+        strategy = ClickHouseStrategy(ttl_seconds=120)
+        result = strategy.acquire(conn, StatusRow(namespace="default", execution_id="exec-1"))
+        assert result.success
+        sql = conn.sql_text()
+        assert "RENAME TABLE dbwarden_lock TO dbwarden_lock_legacy" in sql
+        insert_sql = next(s for s in conn.statements if s.lstrip().startswith("INSERT INTO dbwarden_lock\n"))
+        assert " FINAL" not in insert_sql
+        # Migration dedup copy used argMax semantics
+        copy_sql = next(s for s in conn.statements if "INSERT INTO dbwarden_lock_migration" in s)
+        assert "argMax(execution_id, fencing_token)" in copy_sql
+
+    def test_release_and_termination_paths_engine_agnostic(self):
+        from dbwarden.lock.clickhouse import ClickHouseStrategy
+
+        conn = FakeCHConnection(status_row=self._row())
+        strategy = ClickHouseStrategy()
+        assert strategy.release(conn, "default") is True
+        assert "ALTER TABLE dbwarden_lock UPDATE" in conn.sql_text()

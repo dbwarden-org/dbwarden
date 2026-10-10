@@ -228,7 +228,7 @@ def make_cases():
     # Case 32c: special engines: Merge
     add("merge_table",
         "CREATE TABLE merge_source (a UInt64) ENGINE = MergeTree ORDER BY a",
-        {"engine": merge("'audit'", "'merge_source'"), "order_by": None},
+        {"engine": merge('audit', 'merge_source'), "order_by": None},
         [{"name": "a", "type": "UInt64"}],
         extra_sql=["CREATE TABLE merge_table (a UInt64) ENGINE = Merge('audit', 'merge_source')"])
 

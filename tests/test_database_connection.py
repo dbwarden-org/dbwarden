@@ -137,6 +137,64 @@ class TestSandboxOverride:
 
 
 class TestConvertUrl:
+    @pytest.mark.parametrize(
+        "scheme",
+        ["http", "https", "clickhouse", "clickhousedb", "clickhouse+http", "clickhouse+https"],
+    )
+    def test_preserves_url_fields(self, scheme):
+        from sqlalchemy.engine import make_url
+
+        from dbwarden.connection.connection import _convert_url_to_clickhouse_dialect
+
+        source = make_url(
+            f"{scheme}://user%40name:p%40ss%3Aword%2F%25@[::1]:8443/db"
+            "?verify=false&connect_timeout=7&session_id=a&session_id=b"
+        )
+        result = make_url(_convert_url_to_clickhouse_dialect(source.render_as_string(hide_password=False)))
+        assert result.drivername == "clickhousedb"
+        for field in ("username", "password", "host", "port", "database"):
+            assert getattr(result, field) == getattr(source, field)
+        secure = scheme.endswith("https")
+        assert dict(result.query) == dict(source.query, **({"secure": "true"} if secure else {}))
+
+    def test_https_defaults_and_no_native_protocol_inference(self):
+        from sqlalchemy.engine import make_url
+
+        from dbwarden.connection.connection import _convert_url_to_clickhouse_dialect
+
+        secure = make_url(_convert_url_to_clickhouse_dialect("https://host/db?secure=false"))
+        assert secure.port == 8443
+        assert secure.query["secure"] == "true"
+        plus_secure = make_url(_convert_url_to_clickhouse_dialect("clickhouse+https://user:p%40ss@host/db"))
+        assert plus_secure.port == 8443
+        assert plus_secure.query == {"secure": "true"}
+        assert plus_secure.password == "p@ss"
+        assert make_url(_convert_url_to_clickhouse_dialect("host:9000/db")).query == {}
+
+    @pytest.mark.parametrize("discovery", [False, True])
+    def test_introspection_uses_shared_conversion_and_disposes(self, discovery):
+        from sqlalchemy.engine import make_url
+
+        from dbwarden.engine.model_discovery.helpers import extract_tables_from_database
+        from dbwarden.engine.snapshot.extract import extract_full_schema_snapshot
+
+        url = "https://user:p%40ss@host/db?verify=false"
+        with patch("sqlalchemy.create_engine") as create, patch("sqlalchemy.inspect") as inspect, patch(
+            "dbwarden.engine.snapshot.extract._extract_clickhouse_schema_snapshot", return_value={"tables": {}}
+        ) as extract:
+            inspect.return_value.get_table_names.return_value = ["events"]
+            inspect.return_value.get_columns.return_value = [{"name": "ID"}]
+            if discovery:
+                assert extract_tables_from_database(url, "clickhouse") == {"events": {"id"}}
+            else:
+                assert extract_full_schema_snapshot("db", url, "clickhouse") == {"tables": {}}
+                extract.assert_called_once()
+            parsed = make_url(create.call_args.args[0])
+            assert parsed.drivername == "clickhousedb"
+            assert parsed.password == "p@ss"
+            assert parsed.query == {"secure": "true", "verify": "false"}
+            create.return_value.dispose.assert_called_once()
+
     def test_convert_clickhouse_http_url(self):
         from dbwarden.connection.connection import _convert_url_to_clickhouse_dialect
 

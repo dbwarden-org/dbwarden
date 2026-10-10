@@ -89,7 +89,7 @@ _LOCK_TABLE_V2_DDL = {
             acquired_at         DateTime    NOT NULL,
             last_heartbeat_at   DateTime    NOT NULL,
             expires_at          Nullable(DateTime)
-        ) ENGINE = MergeTree()
+        ) ENGINE = ReplacingMergeTree(fencing_token)
         ORDER BY namespace
     """,
 }
@@ -165,7 +165,7 @@ _UPSERT_STATUS_ROW = {
             :namespace, :execution_id, :owner_id, :migration_version, :migration_checksum,
             ifNull(max(fencing_token), 0) + 1, :host, :pid, :db_connection_id, 'RUNNING',
             :acquired_at, :last_heartbeat_at
-        FROM dbwarden_lock FINAL
+        FROM dbwarden_lock
         WHERE namespace = :namespace
           AND (expires_at IS NULL OR expires_at <= now())
         LIMIT 1
@@ -246,6 +246,37 @@ _READ_STATUS_ROW = {
     """,
 }
 
+# Engine-agnostic read for pre-existing dbwarden_lock tables that were
+# created as plain MergeTree (no deduplication, possibly duplicate rows per
+# namespace). The authoritative row is the one with the highest fencing
+# token, so argMax reconstructs it without requiring FINAL (which is only
+# valid on ReplacingMergeTree-family engines).
+_READ_STATUS_ROW_CH_ARGMAX = """
+    SELECT namespace, execution_id, owner_id, migration_version, migration_checksum,
+           max_token AS fencing_token, host, pid, db_connection_id, state,
+           acquired_at, last_heartbeat_at, expires_at
+    FROM (
+        SELECT namespace,
+               argMax(execution_id, fencing_token)       AS execution_id,
+               argMax(owner_id, fencing_token)           AS owner_id,
+               argMax(migration_version, fencing_token)  AS migration_version,
+               argMax(migration_checksum, fencing_token) AS migration_checksum,
+               max(fencing_token)                        AS max_token,
+               argMax(host, fencing_token)               AS host,
+               argMax(pid, fencing_token)                AS pid,
+               argMax(db_connection_id, fencing_token)   AS db_connection_id,
+               argMax(state, fencing_token)              AS state,
+               argMax(acquired_at, fencing_token)        AS acquired_at,
+               argMax(last_heartbeat_at, fencing_token)  AS last_heartbeat_at,
+               argMax(expires_at, fencing_token)         AS expires_at
+        FROM dbwarden_lock
+        WHERE namespace = :namespace
+        GROUP BY namespace
+    )
+"""
+
+_CH_REPLACING_ENGINE = "ReplacingMergeTree(fencing_token)"
+
 # MariaDB shares MySQL's DDL and syntax; alias it so a config declaring
 # ``database_type = "mariadb"`` does not fall back to the SQLite templates.
 for _queries in (
@@ -256,6 +287,103 @@ for _queries in (
     _READ_STATUS_ROW,
 ):
     _queries.setdefault("mariadb", _queries["mysql"])
+
+
+def _get_ch_lock_engine(connection: Any) -> str | None:
+    """Return the engine of dbwarden_lock in the current database.
+
+    Returns None if the engine cannot be determined (e.g. the table does
+    not exist or system.tables is unreachable). The result is cached on
+    the connection object; _set_ch_lock_engine_cache() updates the cache
+    after DDL that changes the engine.
+    """
+    cached = getattr(connection, "_dbwarden_lock_engine", None)
+    if cached is not None:
+        return cached
+    engine = None
+    try:
+        engine = connection.execute(
+            text(
+                "SELECT engine FROM system.tables "
+                "WHERE database = currentDatabase() AND name = 'dbwarden_lock'"
+            )
+        ).scalar()
+    except Exception as exc:
+        logger.debug("Could not detect dbwarden_lock engine: %s", exc)
+        engine = None
+    _set_ch_lock_engine_cache(connection, engine)
+    return engine
+
+
+def _set_ch_lock_engine_cache(connection: Any, engine: str | None) -> None:
+    try:
+        connection._dbwarden_lock_engine = engine
+    except Exception as exc:
+        # Unusual connection objects: detection just runs uncached
+        logger.debug("Could not cache dbwarden_lock engine: %s", exc)
+
+
+def _migrate_ch_lock_engine(connection: Any) -> bool:
+    """Migrate a plain-MergeTree dbwarden_lock to ReplacingMergeTree.
+
+    Lock tables created by older versions use plain MergeTree, which keeps
+    every inserted row (duplicates per namespace) and does not support
+    SELECT ... FINAL. The migration copies the authoritative row per
+    namespace (highest fencing_token) into a ReplacingMergeTree table and
+    swaps it in with an atomic RENAME, preserving existing lease state.
+
+    Returns True if the table is ReplacingMergeTree after this call.
+    """
+    engine = _get_ch_lock_engine(connection)
+    if engine is None:
+        return False  # Nothing to migrate (table absent / undetectable)
+    if "ReplacingMergeTree" in engine:
+        return True
+
+    logger.info(
+        "Migrating dbwarden_lock from %s to %s", engine, _CH_REPLACING_ENGINE
+    )
+    new_ddl = _LOCK_TABLE_V2_DDL["clickhouse"].replace(
+        "dbwarden_lock", "dbwarden_lock_migration", 1
+    )
+    connection.execute(text(new_ddl))
+    # Deduplicate to the authoritative row per namespace: the row with
+    # the highest fencing_token wins.
+    connection.execute(
+        text(
+            """
+            INSERT INTO dbwarden_lock_migration
+                (namespace, execution_id, owner_id, migration_version,
+                 migration_checksum, fencing_token, host, pid, db_connection_id,
+                 state, acquired_at, last_heartbeat_at, expires_at)
+            SELECT namespace,
+                   argMax(execution_id, fencing_token),
+                   argMax(owner_id, fencing_token),
+                   argMax(migration_version, fencing_token),
+                   argMax(migration_checksum, fencing_token),
+                   max(fencing_token),
+                   argMax(host, fencing_token),
+                   argMax(pid, fencing_token),
+                   argMax(db_connection_id, fencing_token),
+                   argMax(state, fencing_token),
+                   argMax(acquired_at, fencing_token),
+                   argMax(last_heartbeat_at, fencing_token),
+                   argMax(expires_at, fencing_token)
+            FROM dbwarden_lock
+            GROUP BY namespace
+            """
+        )
+    )
+    connection.execute(
+        text(
+            "RENAME TABLE dbwarden_lock TO dbwarden_lock_legacy, "
+            "dbwarden_lock_migration TO dbwarden_lock"
+        )
+    )
+    connection.execute(text("DROP TABLE dbwarden_lock_legacy"))
+    _set_ch_lock_engine_cache(connection, _CH_REPLACING_ENGINE)
+    logger.info("dbwarden_lock migrated to %s", _CH_REPLACING_ENGINE)
+    return True
 
 
 def _get_db_type(connection: Any) -> str:
@@ -291,6 +419,21 @@ def ensure_lock_table(connection: Any, db_type: str, schema: str = "public") -> 
     ddl = _LOCK_TABLE_V2_DDL.get(db_type, _LOCK_TABLE_V2_DDL["sqlite"])
     formatted = _format_query(ddl, db_type, schema)
     connection.execute(text(formatted))
+
+    if db_type == "clickhouse":
+        # New tables are created as ReplacingMergeTree(fencing_token).
+        # Tables created by older versions may still be plain MergeTree;
+        # migrate them in place (atomic RENAME swap). If the migration
+        # fails, reads fall back to argMax semantics, so locking stays
+        # correct and the migration is retried on the next ensure call.
+        try:
+            _migrate_ch_lock_engine(connection)
+        except Exception as exc:
+            logger.warning(
+                "Could not migrate dbwarden_lock to %s: %s",
+                _CH_REPLACING_ENGINE,
+                exc,
+            )
 
     # Ensure v2 schema (drops v1 table if it exists)
     _ensure_v2_schema(connection, db_type, schema)
@@ -475,7 +618,18 @@ def read_status_row(
     if db_type is None:
         db_type = _get_db_type(connection)
 
-    template = _READ_STATUS_ROW.get(db_type, _READ_STATUS_ROW["sqlite"])
+    if db_type == "clickhouse":
+        # FINAL is only valid on ReplacingMergeTree-family engines. New
+        # tables use ReplacingMergeTree(fencing_token); pre-existing plain
+        # MergeTree tables are read with argMax-by-fencing_token instead,
+        # which reconstructs the same authoritative row.
+        engine = _get_ch_lock_engine(connection)
+        if engine is not None and "ReplacingMergeTree" in engine:
+            template = _READ_STATUS_ROW["clickhouse"]
+        else:
+            template = _READ_STATUS_ROW_CH_ARGMAX
+    else:
+        template = _READ_STATUS_ROW.get(db_type, _READ_STATUS_ROW["sqlite"])
     formatted = _format_query(template, db_type, schema)
     result = connection.execute(
         text(formatted), {"namespace": namespace}

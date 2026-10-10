@@ -199,8 +199,14 @@ class ClickHouseStrategy:
         expires_dt = now_dt + timedelta(seconds=self.ttl_seconds)
         expires_str = str(expires_dt)
 
-        # Atomic conditional upsert: INSERT only if no valid lease exists
-        # This is the core of CH-0: single-statement atomicity
+        # Atomic conditional upsert: INSERT only if no valid lease exists.
+        # This is the core of CH-0: single-statement atomicity.
+        # No FINAL in the subqueries: max() is unaffected by unmerged
+        # duplicate rows, and an unmerged duplicate with an unexpired lease
+        # only makes the NOT EXISTS check more conservative.
+        # ensure_table() migrates pre-existing plain-MergeTree lock tables
+        # to ReplacingMergeTree, where FINAL-based reads are valid.
+        self.ensure_table(connection, schema)
         try:
             connection.execute(
                 text(
@@ -212,12 +218,12 @@ class ClickHouseStrategy:
                     SELECT
                         :namespace, :execution_id, :owner_id, :migration_version,
                         :migration_checksum,
-                        ifNull((SELECT max(fencing_token) FROM dbwarden_lock FINAL
+                        ifNull((SELECT max(fencing_token) FROM dbwarden_lock
                                 WHERE namespace = :namespace), 0) + 1,
                         :host, :pid, :db_connection_id, 'RUNNING',
                         :acquired_at, :last_heartbeat_at, :expires_at
                     WHERE NOT EXISTS (
-                        SELECT 1 FROM dbwarden_lock FINAL
+                        SELECT 1 FROM dbwarden_lock
                         WHERE namespace = :namespace
                           AND expires_at > now()
                     )

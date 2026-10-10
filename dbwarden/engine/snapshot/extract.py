@@ -155,7 +155,10 @@ def _extract_clickhouse(
     """Extract ClickHouse schema snapshot."""
     if sqlalchemy_url is not None:
         from sqlalchemy import create_engine
-        engine = create_engine(sqlalchemy_url)
+
+        from dbwarden.connection.connection import _convert_url_to_clickhouse_dialect
+
+        engine = create_engine(_convert_url_to_clickhouse_dialect(sqlalchemy_url))
         try:
             with engine.connect() as connection:
                 return _extract_clickhouse_schema_snapshot(connection, db_name)
@@ -188,6 +191,12 @@ def _setup_connection(
     if sqlalchemy_url is not None and database_type is not None:
         from sqlalchemy import create_engine
         from sqlalchemy.pool import NullPool
+        if database_type == "clickhouse":
+            from dbwarden.connection.connection import (
+                _convert_url_to_clickhouse_dialect,
+            )
+
+            sqlalchemy_url = _convert_url_to_clickhouse_dialect(sqlalchemy_url)
         engine = create_engine(sqlalchemy_url, poolclass=NullPool)
         inspector = inspect(engine)
         return engine, inspector, True, None, None

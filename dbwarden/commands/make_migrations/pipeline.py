@@ -362,7 +362,7 @@ def generate_migration_sql(
             incomplete = True
             warning("No snapshot available; compatibility preview uses column names only. Existing column attributes cannot be compared. Review SQL before applying.")
             try:
-                names = extract_tables_from_database(config.sqlalchemy_url) if config else {}
+                names = extract_tables_from_database(config.sqlalchemy_url, config.database_type) if config else {}
             except ConfigurationError:
                 names = {}
             snapshot = {"tables": {name: {"columns": {column: {"type": "unknown"} for column in columns}} for name, columns in names.items()}}

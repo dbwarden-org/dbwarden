@@ -45,19 +45,28 @@ def compare_model_to_database(
     return differences
 
 
-def extract_tables_from_database(sqlalchemy_url: str) -> dict[str, set[str]]:
+def extract_tables_from_database(
+    sqlalchemy_url: str, database_type: str | None = None,
+) -> dict[str, set[str]]:
     from sqlalchemy import create_engine, inspect
 
     tables: dict[str, set[str]] = {}
 
+    if database_type == "clickhouse":
+        from dbwarden.connection.connection import _convert_url_to_clickhouse_dialect
+
+        sqlalchemy_url = _convert_url_to_clickhouse_dialect(sqlalchemy_url)
     engine = create_engine(sqlalchemy_url)
     try:
-        inspector = inspect(engine)
+        # Inspector on a Connection (not Engine): clickhouse-connect's
+        # inspector calls connection.execute(), which Engine no longer has.
+        with engine.connect() as conn:
+            inspector = inspect(conn)
 
-        for table_name in inspector.get_table_names():
-            columns = inspector.get_columns(table_name)
-            column_names = {col["name"].lower() for col in columns}
-            tables[table_name] = column_names
+            for table_name in inspector.get_table_names():
+                columns = inspector.get_columns(table_name)
+                column_names = {col["name"].lower() for col in columns}
+                tables[table_name] = column_names
 
     except Exception:
         pass

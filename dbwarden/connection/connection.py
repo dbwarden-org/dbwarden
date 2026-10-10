@@ -15,26 +15,18 @@ from dbwarden.logging import get_logger
 
 
 def _convert_url_to_clickhouse_dialect(url: str) -> str:
-    """Convert HTTP URL or clickhousedb URL to clickhouse-connect dialect format.
-
-    Supports both HTTP (port 8123) and native TCP (port 9000) protocols.
-    Port 9000 triggers native protocol; all other ports use HTTP.
-    """
-    from sqlalchemy.engine import make_url
-
-    if url.startswith(("http://", "https://", "clickhouse://", "clickhousedb://")):
-        parsed = make_url(url)
-        host = parsed.host or "localhost"
-        port = parsed.port or 8123
-        username = parsed.username or "default"
-        password = parsed.password or ""
-        database = parsed.database or "default"
-        creds = f"{username}:{password}@" if password else f"{username}@"
-        if port == 9000:
-            return f"clickhousedb://{creds}{host}:{port}/{database}?protocol=native"
-        return f"clickhousedb://{creds}{host}:{port}/{database}"
-
-    return f"clickhousedb://{url}"
+    """Normalize URLs for clickhouse-connect's HTTP-only SQLAlchemy dialect."""
+    parsed = make_url(url if "://" in url else f"clickhousedb://{url}")
+    secure = parsed.drivername == "https" or parsed.drivername.endswith("+https")
+    if secure:
+        parsed = parsed.update_query_dict({"secure": "true"})
+    return parsed.set(
+        drivername="clickhousedb",
+        host=parsed.host or "localhost",
+        port=parsed.port or (8443 if secure else 8123),
+        username=parsed.username if parsed.username is not None else "default",
+        database=parsed.database or "default",
+    ).render_as_string(hide_password=False)
 
 
 _engine_cache: dict[tuple[str, str], Engine] = {}
