@@ -18,16 +18,56 @@ def extract_balanced_parens(match: re.Match) -> str | None:
     return None
 
 
+def _split_column_list(create_query: str) -> tuple[str, str]:
+    """Split a CREATE query into (column list body, everything after it)."""
+    start = create_query.find("(")
+    if start == -1:
+        return "", create_query
+    depth = 0
+    for index in range(start, len(create_query)):
+        char = create_query[index]
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                return create_query[start + 1:index], create_query[index + 1:]
+    return create_query[start + 1:], ""
+
+
 def parse_ttl_expressions(create_query: str) -> list[str]:
+    """Return the table-level TTL expressions.
+
+    The table TTL lives after the column list (typically after ``ORDER BY``),
+    so the column list is removed first; otherwise a column-level TTL inside the
+    list is matched and the capture runs on into the engine clause.
+    """
+    _, tail = _split_column_list(create_query)
     ttl_match = re.search(
         r"\bTTL\s+(.+?)(?:\s+SETTINGS\b|\s+COMMENT\b|\s+AS\b|$)",
-        create_query,
+        tail,
         re.IGNORECASE | re.DOTALL,
     )
     if not ttl_match:
         return []
     ttl_body = ttl_match.group(1).strip()
     return _split_top_level_commas(ttl_body)
+
+
+def parse_column_ttls(create_query: str) -> dict[str, str]:
+    """Return ``{column_name: ttl_expression}`` for column-level TTLs."""
+    body, _ = _split_column_list(create_query)
+    result: dict[str, str] = {}
+    for line in body.splitlines():
+        stripped = line.strip().rstrip(",")
+        match = re.match(
+            r"^`?([A-Za-z_][A-Za-z0-9_]*)`?\s+.*?\bTTL\s+(.+)$",
+            stripped,
+            re.IGNORECASE,
+        )
+        if match:
+            result[match.group(1)] = match.group(2).strip()
+    return result
 
 
 def parse_projection_queries(create_query: str) -> list[dict[str, str]]:

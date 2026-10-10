@@ -71,6 +71,17 @@ def column_name_from_expr(expr: ColumnElement | str | Any) -> str:
     if isinstance(expr, ColumnClause):
         return expr.name
 
+    # ORM column references (``Model.column``) are InstrumentedAttribute, not
+    # ColumnClause, and ``str()`` yields "Model.column"; use the column name.
+    try:
+        from sqlalchemy.orm.attributes import InstrumentedAttribute
+        from sqlalchemy.sql.schema import Column as _SAColumn
+
+        if isinstance(expr, (InstrumentedAttribute, _SAColumn)):
+            return expr.key if getattr(expr, "key", None) else expr.name
+    except Exception:
+        pass
+
     from dbwarden.databases.clickhouse.raw import ChRaw
 
     raw: str

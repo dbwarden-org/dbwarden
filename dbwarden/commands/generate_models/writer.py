@@ -45,7 +45,8 @@ def _write_models(
                     })
                 else:
                     ch_meta_imports.update({
-                        "CHColumnMeta", "CHTableMeta", "ChEngineSpec", "ProjectionSpec",
+                        "CHColumnMeta", "CHTableMeta", "ChEngineSpec", "ChIndexSpec",
+                        "ProjectionSpec",
                     })
             all_classes.append(
                 _generate_table_code(

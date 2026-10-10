@@ -96,6 +96,27 @@ def _render_ch_meta(columns: list[dict], options: dict, object_type: str, commen
                 lines.append(f"            ProjectionSpec({getattr(projection, 'name', '')!r}, {getattr(projection, 'query', '')!r}),")
         lines.append("        ]")
 
+    indexes = options.get("indexes") or []
+    if indexes:
+        lines.append("        ch_indexes = [")
+        for index in indexes:
+            if isinstance(index, dict):
+                name = index.get("name")
+                index_columns = list(index.get("columns") or [])
+                index_type = index.get("clickhouse_type") or index.get("type") or "minmax"
+                granularity = index.get("clickhouse_granularity", index.get("granularity", 1))
+                expr = index.get("expr")
+                args = f"{name!r}, {index_columns!r}, type={index_type!r}, granularity={granularity!r}"
+                if expr is not None:
+                    args += f", expr={expr!r}"
+                lines.append(f"            ChIndexSpec({args}),")
+            else:
+                lines.append(
+                    f"            ChIndexSpec({index.name!r}, {list(index.columns)!r}, "
+                    f"type={index.type!r}, granularity={index.granularity!r}),"
+                )
+        lines.append("        ]")
+
     _CH_FLAT_TO_SPEC: dict[str, str] = {
         "ch_codec": "codec",
         "ch_default_expression": "default_expression",
@@ -123,14 +144,28 @@ def _render_ch_meta(columns: list[dict], options: dict, object_type: str, commen
             if flat_key not in ch_meta:
                 continue
             val = ch_meta[flat_key]
-            if flat_key == "ch_type" and not (
-                isinstance(val, str)
-                and (
-                    val.startswith("UInt")
-                    or val.startswith("AggregateFunction(")
-                    or val.startswith("SimpleAggregateFunction(")
+            if flat_key == "ch_type":
+                if not isinstance(val, str) or not val.strip():
+                    continue
+                # Emit the base ClickHouse type (nullable/low-cardinality are
+                # carried by their own flags). A handful of simple types are
+                # reproduced exactly by the SQLAlchemy column and stay silent;
+                # everything else (DateTime64, Enum8, FixedString, UUID, UInt*,
+                # AggregateFunction, Array, Decimal, ...) needs an explicit type.
+                from dbwarden.engine.backends.clickhouse.extract import (
+                    _render_ch_type_from_sa,
                 )
-            ):
+
+                base_type, _, _ = _parse_ch_type_wrappers(val)
+                _PLAIN = {
+                    "String", "Int8", "Int16", "Int32", "Int64",
+                    "Float32", "Float64", "Date", "DateTime", "Bool",
+                }
+                if base_type in _PLAIN and _render_ch_type_from_sa(
+                    None, str(col.get("type", "")).upper().strip()
+                ) == base_type:
+                    continue
+                ch_kwargs[spec_key] = base_type
                 continue
             if spec_key in ("low_cardinality", "nullable"):
                 if val:
@@ -228,14 +263,28 @@ def _render_ch_mv_meta(columns: list[dict], options: dict) -> list[str]:
             if flat_key not in ch_meta:
                 continue
             val = ch_meta[flat_key]
-            if flat_key == "ch_type" and not (
-                isinstance(val, str)
-                and (
-                    val.startswith("UInt")
-                    or val.startswith("AggregateFunction(")
-                    or val.startswith("SimpleAggregateFunction(")
+            if flat_key == "ch_type":
+                if not isinstance(val, str) or not val.strip():
+                    continue
+                # Emit the base ClickHouse type (nullable/low-cardinality are
+                # carried by their own flags). A handful of simple types are
+                # reproduced exactly by the SQLAlchemy column and stay silent;
+                # everything else (DateTime64, Enum8, FixedString, UUID, UInt*,
+                # AggregateFunction, Array, Decimal, ...) needs an explicit type.
+                from dbwarden.engine.backends.clickhouse.extract import (
+                    _render_ch_type_from_sa,
                 )
-            ):
+
+                base_type, _, _ = _parse_ch_type_wrappers(val)
+                _PLAIN = {
+                    "String", "Int8", "Int16", "Int32", "Int64",
+                    "Float32", "Float64", "Date", "DateTime", "Bool",
+                }
+                if base_type in _PLAIN and _render_ch_type_from_sa(
+                    None, str(col.get("type", "")).upper().strip()
+                ) == base_type:
+                    continue
+                ch_kwargs[spec_key] = base_type
                 continue
             if spec_key in ("low_cardinality", "nullable"):
                 if val:
@@ -332,7 +381,9 @@ def _extract_ch_meta(connection, table_name: str) -> dict:
 
     from dbwarden.engine.backends.clickhouse.parse import (
         _clean_expression,
+        parse_column_ttls,
         parse_mv_query,
+        parse_mv_refresh,
         parse_projection_queries,
         parse_replica_name,
         parse_ttl_expressions,
@@ -381,6 +432,9 @@ def _extract_ch_meta(connection, table_name: str) -> dict:
     if mv_query:
         options["ch_select_statement"] = _strip_clickhouse_db_qualifier(mv_query, actual_db)
         options["ch_object_type"] = "materialized_view"
+    mv_refresh = parse_mv_refresh(create_query)
+    if mv_refresh:
+        options["ch_refresh"] = mv_refresh
     zk_path = parse_zookeeper_path(create_query, engine)
     if zk_path:
         options["ch_zookeeper_path"] = zk_path
@@ -491,6 +545,7 @@ def _extract_ch_meta(connection, table_name: str) -> dict:
         ),
         parameters={"tname": table_name},
     )
+    column_ttls = parse_column_ttls(create_query)
     ch_columns: list[dict] = []
     for c in columns_result.fetchall():
         cname = getattr(c, "name", "")
@@ -521,6 +576,7 @@ def _extract_ch_meta(connection, table_name: str) -> dict:
                 "ch_low_cardinality": ch_low_cardinality,
                 "ch_nullable": ch_nullable,
                 "ch_type": raw_type.strip(),
+                "ch_ttl": column_ttls.get(cname),
             },
         }
         if col_comment:
