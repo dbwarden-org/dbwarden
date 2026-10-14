@@ -9,6 +9,12 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 
 ## Unreleased
 
+## \[0.20.9\] - 2026-10-14
+
+### Fixed
+
+- **Merge detection resolves the branch's actual upstream.** The divergence check hard-coded `origin/main` and asked whether `HEAD` was an ancestor of the remote, so it reported a divergence on a normal ahead branch and on any repository whose default branch is not `main`. It now uses the branch's configured upstream (falling back to `origin/main`, `origin/master`, `origin/HEAD`) and treats the branch as forward-moving when the remote is an ancestor of `HEAD`.
+
 ## \[0.20.8\] - 2026-10-14
 
 ### Fixed

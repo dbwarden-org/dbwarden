@@ -121,19 +121,20 @@ def check_divergent_base(db_name: str | None = None) -> bool:
 
 
 def _is_descendant_of_base(db_name: str | None, base_checksum: str) -> bool:
-    """Check if the current model state is a descendant of the base checksum.
+    """Check if the current branch is a normal forward move from its remote.
 
-    Uses git to check if the model_state.json file at HEAD is a descendant
-    of the commit that produced the base checksum.
+    A base-checksum mismatch is only a merge signal when the current branch has
+    diverged from the remote. We treat the branch as forward-moving when the
+    remote-tracking branch is an ancestor of HEAD. The remote branch is
+    resolved from the branch's upstream, so branches named ``master`` (or with
+    any other upstream) are handled, not only ``origin/main``.
     """
     import subprocess
 
     try:
-        # Get the migrations directory to find the git root
         from dbwarden.engine.version import get_migrations_directory
         migrations_dir = get_migrations_directory(db_name)
 
-        # Find git root
         result = subprocess.run(
             ["git", "rev-parse", "--show-toplevel"],
             cwd=migrations_dir,
@@ -142,29 +143,37 @@ def _is_descendant_of_base(db_name: str | None, base_checksum: str) -> bool:
         )
         if result.returncode != 0:
             return False
-
         git_root = result.stdout.strip()
 
-        # Find the commit that introduced the base checksum
-        # Search for commits that modified model_state.json
-        result = subprocess.run(
-            ["git", "log", "--all", "--oneline", "--", ".dbwarden/model_state.json"],
+        candidates: list[str] = []
+        upstream = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"],
             cwd=git_root,
             capture_output=True,
             text=True,
         )
-        if result.returncode != 0:
-            return False
+        if upstream.returncode == 0 and upstream.stdout.strip():
+            candidates.append(upstream.stdout.strip())
+        candidates += ["origin/main", "origin/master", "origin/HEAD"]
 
-        # For simplicity, check if HEAD is ahead of the merge-base
-        # This is a heuristic: if we're on a forward-moving branch, we're not diverged
-        result = subprocess.run(
-            ["git", "merge-base", "--is-ancestor", "HEAD", "origin/main"],
-            cwd=git_root,
-            capture_output=True,
-        )
-        # If HEAD is ancestor of main, we're on a forward-moving branch
-        return result.returncode == 0
+        for ref in candidates:
+            exists = subprocess.run(
+                ["git", "rev-parse", "--verify", "--quiet", ref],
+                cwd=git_root,
+                capture_output=True,
+            )
+            if exists.returncode != 0:
+                continue
+            # Remote is an ancestor of HEAD => we are strictly ahead, i.e. a
+            # normal forward-moving branch, not a divergent merge.
+            ancestor = subprocess.run(
+                ["git", "merge-base", "--is-ancestor", ref, "HEAD"],
+                cwd=git_root,
+                capture_output=True,
+            )
+            if ancestor.returncode == 0:
+                return True
+        return False
 
     except Exception as e:
         logger.debug("Could not check git ancestry: %s", e)
