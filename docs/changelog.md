@@ -9,6 +9,12 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 
 ## Unreleased
 
+## \[0.20.5\] - 2026-10-14
+
+### Fixed
+
+- **MySQL diffs ignore the `AUTO_INCREMENT` counter.** The counter advances with every insert, so a model captured at one point in time produced a spurious `ALTER TABLE ... AUTO_INCREMENT=n` on each diff that never converged. Table diffs (online and offline) no longer compare `my_auto_increment`.
+
 ## \[0.20.4\] - 2026-10-14
 
 ### Fixed

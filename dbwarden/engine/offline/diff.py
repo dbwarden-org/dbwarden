@@ -368,7 +368,8 @@ def diff_model_states(
         for key in sorted(scalar_keys):
             prev_val = _normalize_mysql_table_value(key, prev_my_table.get(key))
             curr_val = _normalize_mysql_table_value(key, curr_my_table.get(key))
-            if key == "my_auto_increment" and curr_val is None:
+            # AUTO_INCREMENT is a runtime counter, not schema; never diff it.
+            if key == "my_auto_increment":
                 continue
             if prev_val != curr_val:
                 upgrade_ops.append({

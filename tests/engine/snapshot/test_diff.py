@@ -1666,6 +1666,32 @@ class TestIndexDiff:
         assert upgrade == []
         assert rollback == []
 
+    def test_mysql_table_diff_ignores_changed_auto_increment_counter(self):
+        # AUTO_INCREMENT is runtime state: the snapshot counter advances with
+        # inserts, so a differing model value must not produce a spurious ALTER.
+        snapshot = {
+            "tables": {
+                "users": {
+                    "columns": {
+                        "id": {"type": "integer", "nullable": False, "primary_key": True, "my_column": {"my_unsigned": True}},
+                    },
+                    "my_table": {"my_engine": "InnoDB", "my_auto_increment": 91000},
+                }
+            },
+            "constraints": {},
+            "indexes": {},
+        }
+        model_tables = [
+            ModelTable(
+                name="users",
+                columns=[ModelColumn("id", "INT", False, True, False, None, None, my_meta={"my_unsigned": True})],
+                my_table={"my_engine": "InnoDB", "my_auto_increment": 1},
+            )
+        ]
+        upgrade, rollback = diff_models_against_snapshot(model_tables, snapshot, db_name=None)
+        assert [op for op in upgrade if op.get("type") == "alter_my_table"] == []
+        assert rollback == []
+
     def test_index_clickhouse_uses_generic(self):
         op = {"type": "add_index", "table": "users", "columns": ["email"], "unique": False}
         stmt = _build_index_sql(op, "clickhouse")

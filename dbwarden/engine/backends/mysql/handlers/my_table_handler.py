@@ -68,7 +68,10 @@ class MyTableHandler(ObjectHandler):
             for key in sorted(all_keys):
                 snap_val = snap_entry.get(key)
                 model_val = model_entry.get(key)
-                if key == "my_auto_increment" and model_val is None:
+                # AUTO_INCREMENT is a runtime counter, not schema: it advances
+                # with every insert and would otherwise produce a spurious
+                # ALTER on each diff (and never converge). Never diff it.
+                if key == "my_auto_increment":
                     continue
                 if snap_val != model_val:
                     upgrade_ops.append(Op(

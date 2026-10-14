@@ -2484,3 +2484,17 @@ def test_offline_diff_my_auto_increment_none():
     up, down = diff_model_states(prev, curr)
     my_ops = [op for op in up if op["type"] == "alter_my_table"]
     assert len(my_ops) == 0
+
+
+def test_offline_diff_my_auto_increment_changed_is_ignored():
+    prev = model_state_to_dict([
+        _make_table("users", columns=[_make_col("id", pk=True)])
+    ])
+    curr = model_state_to_dict([
+        _make_table("users", columns=[_make_col("id", pk=True)])
+    ])
+    prev["tables"]["users"]["backend_table_spec"] = {"backend": "mysql", "my_auto_increment": 1}
+    curr["tables"]["users"]["backend_table_spec"] = {"backend": "mysql", "my_auto_increment": 5000}
+    up, down = diff_model_states(prev, curr)
+    my_ops = [op for op in up if op["type"] == "alter_my_table"]
+    assert len(my_ops) == 0
