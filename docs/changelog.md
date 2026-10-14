@@ -9,6 +9,15 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 
 ## Unreleased
 
+## \[0.20.7\] - 2026-10-14
+
+### Fixed
+
+- **Offline and `make-migrations` diffs keep column type parameters.** Model/state column entries store the base type and its length or precision separately (`varchar` + `255`). The offline diff compared and emitted the bare base type, so an unchanged `varchar(255)` produced a spurious `ALTER COLUMN TYPE` whose rollback was `varchar` with no length, and MySQL rejected it with `Incomplete MySQL column type`. Types are now rebuilt in full before comparison and emission.
+- **Column-level foreign keys attach to their constraint operation.** A foreign key is recorded both as a table constraint and as a column `foreign_key` field. Generation raised `Unrepresented schema change tables.<t>.columns.<c>.foreign_key` because the column-level change had no operation; it now attaches to the matching `add_foreign_key`/`drop_foreign_key`.
+- **A foreign key rollback uses `DROP FOREIGN KEY` on MySQL.** The rollback of `add_foreign_key` emitted `DROP CONSTRAINT`, which MySQL 5.7 rejects. It now emits `DROP FOREIGN KEY`, matching the forward `drop_foreign_key` path.
+- **Model files are no longer re-executed within a command.** `make-migrations` loads models for the snapshot and again for the spec; re-executing a file defined the same table twice on the shared metadata and failed with `Table '...' is already defined`. An unchanged file now reuses its already-loaded module (content is re-read when the file changes).
+
 ## \[0.20.6\] - 2026-10-14
 
 ### Fixed

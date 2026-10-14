@@ -30,6 +30,24 @@ def load_model_from_path(filepath: str) -> Optional[ModuleType]:
 
     try:
         module_name = "_dbwarden_loaded_model_" + hashlib.md5(str(filepath).encode()).hexdigest()[:12]
+        # A file can be requested more than once in a single command (for
+        # example make-migrations loads models for the snapshot and again for
+        # the spec). Re-executing it defines the same table a second time on
+        # the shared declarative metadata, which SQLAlchemy rejects with
+        # "Table '...' is already defined". Reuse the module already loaded,
+        # but only while the file on disk is unchanged: when a caller rewrites
+        # a model file (tests, watchers) the new content must be re-read.
+        try:
+            stat = os.stat(filepath)
+            signature = (stat.st_mtime_ns, stat.st_size)
+        except OSError:
+            signature = None
+        cached = sys.modules.get(module_name)
+        if cached is not None and (
+            signature is None
+            or getattr(cached, "__dbwarden_source_signature__", None) == signature
+        ):
+            return cached
         spec = importlib.util.spec_from_file_location(module_name, str(filepath))
         if spec is None or spec.loader is None:
             logger.log_model_file_load_failed(str(filepath), "not a loadable module")
@@ -42,6 +60,7 @@ def load_model_from_path(filepath: str) -> Optional[ModuleType]:
             spec.loader.exec_module(module)
         finally:
             sys.dont_write_bytecode = previous_bytecode
+        module.__dbwarden_source_signature__ = signature
         return module
     except FileNotFoundError:
         logger.log_model_file_load_failed(str(filepath), "file not found")

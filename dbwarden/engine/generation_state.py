@@ -230,6 +230,16 @@ def attach_state_changes(ops: list[dict], before: dict, after: dict) -> None:
                     ]:
                         score = 6
                 if (
+                    len(path) > 4
+                    and path[2] == "columns"
+                    and path[4] == "foreign_key"
+                    and kind in {"add_foreign_key", "drop_foreign_key"}
+                    and path[3] in (op.get("columns") or [])
+                ):
+                    # A foreign key is also recorded as a column-level field;
+                    # attach that change to the constraint op that manages it.
+                    score = 6
+                if (
                     len(path) > 2
                     and path[2] == "backend_table_spec"
                     and kind

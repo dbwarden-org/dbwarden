@@ -321,6 +321,48 @@ def test_offline_alter_column_type_sql():
     assert any(c.operation == "alter_column_type" for c in changes)
 
 
+def test_state_col_type_reattaches_length_and_precision():
+    # A state column stores the base type with length/precision separately;
+    # the DDL builders need the full type, or MySQL rejects a bare "varchar".
+    from dbwarden.engine.offline.diff import _state_col_type
+
+    assert _state_col_type({"type": "varchar", "length": 255}) == "varchar(255)"
+    assert _state_col_type({"type": "char", "length": 36}) == "char(36)"
+    assert _state_col_type({"type": "numeric", "precision": 10, "scale": 6}) == "numeric(10,6)"
+    assert _state_col_type({"type": "numeric", "precision": 10}) == "numeric(10)"
+    assert _state_col_type({"type": "varchar(255)"}) == "varchar(255)"
+    assert _state_col_type({"type": "integer"}) == "integer"
+
+
+def test_offline_varchar_length_change_emits_no_type_op():
+    # Same base type and same length must not be treated as a change: before
+    # the fix the bare "varchar" vs "varchar(255)" comparison produced a
+    # spurious ALTER whose rollback was invalid DDL.
+    from dbwarden.engine.offline.diff import diff_model_states
+
+    def _state():
+        return {
+            "tables": {
+                "users": {
+                    "columns": {
+                        "name": {
+                            "type": "varchar", "length": 255,
+                            "nullable": True, "primary_key": False,
+                        },
+                    },
+                    "primary_key": [],
+                },
+            },
+            "indexes": {},
+            "constraints": {},
+            "enums": {},
+        }
+
+    up_ops, _ = diff_model_states(_state(), _state())
+    assert [op for op in up_ops if op["type"] == "alter_column_type"] == []
+
+
+
 def test_offline_alter_nullable_sql():
     prev = model_state_to_dict([_make_table("users", columns=[_make_col("email", "varchar", nullable=True)])])
     curr = model_state_to_dict([_make_table("users", columns=[_make_col("email", "varchar", nullable=False)])])

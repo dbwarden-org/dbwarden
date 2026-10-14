@@ -27,6 +27,32 @@ from dbwarden.engine.snapshot import (
 from .constraints import _diff_constraints, _diff_enums
 
 
+def _state_col_type(col: dict) -> str:
+    """Rebuild a full SQL type from a state column entry.
+
+    Model states store the base type and its length/precision separately
+    (``{"type": "varchar", "length": 255}``). Handing the bare base type to
+    the column-definition builders yields ``varchar`` without a length, which
+    MySQL rejects, so reattach the parameters before comparing or emitting.
+    """
+    base = col.get("type") or "???"
+    if not isinstance(base, str) or "(" in base:
+        return base
+    lower = base.lower()
+    length = col.get("length")
+    if length is not None and lower in (
+        "varchar", "char", "character", "character varying", "varbinary", "binary",
+    ):
+        return f"{base}({length})"
+    precision = col.get("precision")
+    if precision is not None and lower in ("numeric", "decimal"):
+        scale = col.get("scale")
+        if scale is not None:
+            return f"{base}({precision},{scale})"
+        return f"{base}({precision})"
+    return base
+
+
 def diff_model_states(
     prev_state: dict, curr_state: dict, db_name: str | None = None,
     *, detect_column_renames: bool = True,
@@ -113,7 +139,7 @@ def diff_model_states(
             curr_col = curr_cols.get(col_name)
 
             if prev_col is None and curr_col is not None:
-                col_type = curr_col.get("type") or "???"
+                col_type = _state_col_type(curr_col)
                 upgrade_ops.append({
                     "type": "add_column", "table": table_name, "column": col_name,
                     "definition": {"type": col_type, "nullable": curr_col.get("nullable", True), "default": curr_col.get("default")},
@@ -128,7 +154,7 @@ def diff_model_states(
                 continue
 
             if curr_col is None and prev_col is not None:
-                col_type = prev_col.get("type") or "???"
+                col_type = _state_col_type(prev_col)
                 upgrade_ops.append({
                     "type": "drop_column", "table": table_name, "column": col_name,
                     "definition": prev_col,
@@ -142,8 +168,8 @@ def diff_model_states(
                 })
                 continue
 
-            prev_type = prev_col.get("type", "")
-            curr_type = curr_col.get("type", "")
+            prev_type = _state_col_type(prev_col)
+            curr_type = _state_col_type(curr_col)
             if _normalize_type(prev_type) != _normalize_type(curr_type):
                 upgrade_ops.append({
                     "type": "alter_column_type", "table": table_name, "column": col_name,

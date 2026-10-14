@@ -375,3 +375,29 @@ class TestPgCreateTableInline:
         assert "PARTITION BY RANGE (created_at)" in sql
         assert "INHERITS (parent_table)" in sql
         assert "TABLESPACE fast_ssd" in sql
+
+
+class TestMySQLForeignKeyRollback:
+    def test_add_foreign_key_rollback_uses_drop_foreign_key(self, monkeypatch):
+        # MySQL 5.7 rejects DROP CONSTRAINT; a foreign key is dropped with
+        # DROP FOREIGN KEY, including when dropping is the rollback of an add.
+        from dbwarden.engine.backends.postgresql.handlers import ConstraintHandler
+        from dbwarden.engine.core.protocol import Op
+
+        monkeypatch.setattr(
+            "dbwarden.engine.snapshot._get_backend", lambda db_name=None: "mysql"
+        )
+        op = Op(
+            object_type="add_foreign_key",
+            upgrade_attrs={
+                "table": "zonas_tokko",
+                "columns": ["id_cym"],
+                "referenced_table": "zonas",
+                "referenced_columns": ["id"],
+            },
+        )
+        stmts = ConstraintHandler().emit(op, db_name="primary")
+        assert len(stmts) == 1
+        assert stmts[0].rollback_sql == (
+            "ALTER TABLE zonas_tokko DROP FOREIGN KEY fk_zonas_tokko_id_cym;"
+        )

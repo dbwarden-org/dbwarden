@@ -624,7 +624,12 @@ class ConstraintHandler(ObjectHandler):
                     if not_valid:
                         upgrade += " NOT VALID"
                     upgrade += ";"
-                    rollback = f"ALTER TABLE {table} DROP CONSTRAINT {fk_name};"
+                    # MySQL 5.7 has no DROP CONSTRAINT; a foreign key is
+                    # dropped with DROP FOREIGN KEY.
+                    if backend in ("mysql", "mariadb"):
+                        rollback = f"ALTER TABLE {table} DROP FOREIGN KEY {fk_name};"
+                    else:
+                        rollback = f"ALTER TABLE {table} DROP CONSTRAINT {fk_name};"
                     stmts.append(MigrationStatement(
                         order=StatementOrder.ALTER_FOREIGN_KEY,
                         upgrade_sql=upgrade, rollback_sql=rollback,
