@@ -234,7 +234,13 @@ def read_trusted_plan(path: str | Path) -> tuple[dict | None, str]:
         if not isinstance(plan, dict):
             return None, "invalid plan object"
         severity = plan.get("severity")
-        if not isinstance(severity, dict) or severity.get("provenance") not in (
+        if not isinstance(severity, dict):
+            # Legacy (<0.17) plan sidecars carried no severity/provenance
+            # block. Treat them like a plan-less migration so the missing-plan
+            # policy governs them; otherwise upgrading dbwarden hard-stops on
+            # every pre-existing migration ("no trusted provenance").
+            return None, MISSING_PLAN_REASON
+        if severity.get("provenance") not in (
             "generated",
             "static",
         ):

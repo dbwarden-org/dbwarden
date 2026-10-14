@@ -131,7 +131,7 @@ def normalize_type(raw_type: str) -> dict[str, Any]:
             result["type"] = "float"
         full_lower = raw_type.strip().lower()
         length_match = re.search(r"\((\d+)\)", full_lower)
-        if length_match and normalized in ("varchar",):
+        if length_match and normalized in ("varchar", "char"):
             result["length"] = int(length_match.group(1))
         precision_scale = re.search(r"\((\d+),\s*(\d+)\)", full_lower)
         if precision_scale and normalized in ("numeric",):

@@ -659,3 +659,20 @@ class TestClickHouseAcquisition:
         strategy = ClickHouseStrategy()
         assert strategy.release(conn, "default") is True
         assert "ALTER TABLE dbwarden_lock UPDATE" in conn.sql_text()
+
+
+class TestMySQLLockTableDDL:
+    """MySQL 5.7 (the production target) rejects a NOT NULL TIMESTAMP column
+    without an explicit default when another TIMESTAMP column precedes it
+    ("Invalid default value"), because explicit_defaults_for_timestamp is OFF
+    by default and cannot be changed at runtime on 5.7. Both heartbeats must
+    therefore carry an explicit default."""
+
+    def test_mysql_ddl_gives_timestamps_explicit_defaults(self):
+        from dbwarden.lock.table import _LOCK_TABLE_V2_DDL
+
+        ddl = _LOCK_TABLE_V2_DDL["mysql"]
+        for column in ("acquired_at", "last_heartbeat_at"):
+            line = next(l for l in ddl.splitlines() if l.strip().startswith(column))
+            assert "NOT NULL" in line
+            assert "DEFAULT CURRENT_TIMESTAMP" in line

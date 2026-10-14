@@ -9,6 +9,14 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 
 ## Unreleased
 
+## \[0.20.4\] - 2026-10-14
+
+### Fixed
+
+- **MySQL 5.7 accepts the lock status table.** The MySQL `dbwarden_lock` DDL declared two `TIMESTAMP NOT NULL` columns with no defaults. With MySQL 5.7's default `explicit_defaults_for_timestamp=OFF` (which cannot be toggled at runtime) the second column was rejected with `(1067, "Invalid default value for 'last_heartbeat_at'")`, so every migration failed before it started. Both heartbeats now carry `DEFAULT CURRENT_TIMESTAMP`.
+- **Legacy plan sidecars no longer hard-stop migrations.** Plan files written before the severity/provenance block existed resolved to `UNKNOWN` with reason "no trusted provenance", which exceeds every ceiling — so upgrading dbwarden deferred every pre-existing migration. A sidecar without a `severity` block is now treated like a plan-less migration and follows the missing-plan policy. Plans that *claim* provenance but fail integrity still fail closed.
+- **Fixed `CHAR(n)` keeps its length in snapshots.** MySQL snapshots stored `char` without its length (only `varchar` captured it), so a reverse-engineered `CHAR(36)` reached the rollback DDL builder as a bare `char` and raised `Incomplete MySQL column type`. `CHAR` length is now normalized alongside `varchar`.
+
 ## \[0.20.2\] - 2026-10-10
 
 ### Fixed

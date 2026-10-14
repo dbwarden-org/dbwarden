@@ -31,6 +31,25 @@ def test_strict_prefix_does_not_examine_later_files(tmp_path):
     assert len(severity_prefix(files, "CRITICAL")[0]) == 3
 
 
+def test_legacy_plan_sidecar_follows_missing_plan_policy(tmp_path):
+    """A <0.17 plan sidecar (no severity/provenance block) must behave like a
+    plan-less migration: allowed at the default CRITICAL ceiling, not treated
+    as tamper evidence that exceeds every ceiling."""
+    from dbwarden.engine.safety.plans import MISSING_PLAN_REASON, file_severity
+
+    path = tmp_path / "primary__0001_legacy.sql"
+    path.write_text("-- upgrade\nSELECT 1;\n-- rollback\nSELECT 1;\n", encoding="utf-8")
+    path.with_suffix(".plan.json").write_text(
+        json.dumps({"migration_id": "primary__0001_legacy", "operations": [], "required_flags": [], "checksum": "e3b0"}),
+        encoding="utf-8",
+    )
+
+    level, reason = file_severity(path)
+    assert level.value == "UNKNOWN"
+    assert reason == MISSING_PLAN_REASON
+    assert severity_prefix({"0001": str(path)}, "CRITICAL")[0] == {"0001": str(path)}
+
+
 def test_repeatable_skip_is_per_run(tmp_path):
     path = migration(tmp_path, "RA", "set_not_null")
     assert filter_repeatables([path], "INFO", "primary") == []

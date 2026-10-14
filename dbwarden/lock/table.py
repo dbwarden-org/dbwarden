@@ -68,9 +68,9 @@ _LOCK_TABLE_V2_DDL = {
             pid                 INTEGER,
             db_connection_id    VARCHAR(255),
             state               VARCHAR(50)  NOT NULL DEFAULT 'AVAILABLE',
-            acquired_at         TIMESTAMP    NOT NULL,
-            last_heartbeat_at   TIMESTAMP    NOT NULL,
-            expires_at          TIMESTAMP    NULL,
+            acquired_at         TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            last_heartbeat_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            expires_at          TIMESTAMP    NULL DEFAULT NULL,
             PRIMARY KEY (namespace)
         )
     """,

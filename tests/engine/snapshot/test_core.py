@@ -50,6 +50,13 @@ class TestNormalizeType:
         result = normalize_type("CHAR")
         assert result["type"] in ("char", "varchar")
 
+    def test_char_with_length_keeps_length(self):
+        # A fixed CHAR column's length must survive normalization, otherwise
+        # rollback DDL is emitted as a bare "char" and MySQL rejects it.
+        result = normalize_type("CHAR(36)")
+        assert result["type"] == "char"
+        assert result["length"] == 36
+
     def test_boolean_variants(self):
         for raw in ("BOOL", "BOOLEAN"):
             assert normalize_type(raw)["type"] == "boolean"
