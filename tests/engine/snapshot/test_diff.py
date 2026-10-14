@@ -1292,6 +1292,17 @@ class TestIndexDiff:
         stmts = _build_index_sql(op, "postgresql")
         assert "DROP INDEX idx_users_email;" in stmts[0].upgrade_sql
 
+    def test_index_drop_sql_mysql_uses_alter_table(self):
+        # MySQL has no standalone DROP INDEX; it drops through the table.
+        op = {"type": "drop_index", "table": "users", "index_name": "idx_users_email", "columns": ["email"], "unique": False}
+        stmts = _build_index_sql(op, "mysql")
+        assert stmts[0].upgrade_sql == "ALTER TABLE users DROP INDEX idx_users_email;"
+
+    def test_index_add_rollback_sql_mysql_uses_alter_table(self):
+        op = {"type": "add_index", "table": "users", "index_name": "idx_users_email", "columns": ["email"], "unique": False}
+        stmts = _build_index_sql(op, "mysql")
+        assert stmts[0].rollback_sql == "ALTER TABLE users DROP INDEX idx_users_email;"
+
     def test_index_sql_with_postgresql_ops(self):
         op = {"type": "add_index", "table": "users", "columns": ["data"],
               "using": "gin", "postgresql_ops": {"data": "jsonb_path_ops"}}

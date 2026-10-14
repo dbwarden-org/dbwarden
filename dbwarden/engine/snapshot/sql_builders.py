@@ -477,7 +477,12 @@ def _build_index_sql(op: dict[str, Any], backend: str) -> list[MigrationStatemen
         if backend == "postgresql" and concurrently:
             from dbwarden.engine.file_parser import DBWARDEN_AUTOCOMMIT_MARKER
             upgrade = f"{DBWARDEN_AUTOCOMMIT_MARKER}\n{upgrade}"
-        rollback = f"DROP INDEX {idx_name_sql};"
+        # MySQL/MariaDB have no standalone DROP INDEX; the index is dropped
+        # through its table.
+        if backend in ("mysql", "mariadb"):
+            rollback = f"ALTER TABLE {table_sql} DROP INDEX {idx_name_sql};"
+        else:
+            rollback = f"DROP INDEX {idx_name_sql};"
         return [
             MigrationStatement(
                 order=StatementOrder.ALTER_INDEX,
@@ -503,7 +508,12 @@ def _build_index_sql(op: dict[str, Any], backend: str) -> list[MigrationStatemen
                     rollback_sql=rollback,
                 ),
             ]
-        upgrade = f"DROP INDEX {idx_name_sql};"
+        # MySQL/MariaDB have no standalone DROP INDEX; the index is dropped
+        # through its table.
+        if backend in ("mysql", "mariadb"):
+            upgrade = f"ALTER TABLE {table_sql} DROP INDEX {idx_name_sql};"
+        else:
+            upgrade = f"DROP INDEX {idx_name_sql};"
         unique_clause = "UNIQUE " if unique else ""
         cols_list = ", ".join(columns)
         rollback_parts = ["CREATE"]

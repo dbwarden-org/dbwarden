@@ -9,6 +9,12 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 
 ## Unreleased
 
+## \[0.20.8\] - 2026-10-14
+
+### Fixed
+
+- **Index drops use valid MySQL syntax.** `drop_index` and the rollback of `add_index` emitted a standalone `DROP INDEX <name>;`, which MySQL and MariaDB do not accept; the statement now drops the index through its table (`ALTER TABLE <t> DROP INDEX <name>;`). PostgreSQL and SQLite keep the standalone form.
+
 ## \[0.20.7\] - 2026-10-14
 
 ### Fixed
