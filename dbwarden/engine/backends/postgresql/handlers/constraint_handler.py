@@ -357,12 +357,25 @@ class ConstraintHandler(ObjectHandler):
             def _fk_action(value: Any) -> str:
                 # The database reports NO ACTION for an unspecified action while
                 # a model may leave it out, and a model may spell an action in
-                # any case ("cascade"). Comparing these literally drops and
+                # any case ("cascade"). MySQL also reports RESTRICT, which is a
+                # synonym for NO ACTION and cannot be expressed distinctly in a
+                # SQLAlchemy ForeignKey. Comparing these literally drops and
                 # recreates a foreign key that never changed.
                 if value is None:
                     return "NO ACTION"
                 text = str(value).strip().upper()
-                return text or "NO ACTION"
+                if text in ("", "RESTRICT"):
+                    return "NO ACTION"
+                return text
+
+            def _fk_match(value: Any) -> str | None:
+                # MySQL reports MATCH unconditionally (REFERENTIAL_CONSTRAINTS
+                # MATCH_OPTION = NONE); a model leaves it unset. NONE and SIMPLE
+                # both mean "no match clause", so compare them as unset.
+                if not value:
+                    return None
+                text = str(value).strip().upper()
+                return None if text in ("NONE", "SIMPLE") else text
 
             def _fk_sig(fk: dict) -> tuple:
                 return (
@@ -372,7 +385,7 @@ class ConstraintHandler(ObjectHandler):
                     _fk_action(fk.get("on_delete")),
                     _fk_action(fk.get("on_update")),
                     bool(fk.get("deferrable", False)),
-                    (str(fk.get("match")).upper() if fk.get("match") else None),
+                    _fk_match(fk.get("match")),
                 )
 
             snap_fk_sigs = {_fk_sig(fk) for fk in snap_fks}

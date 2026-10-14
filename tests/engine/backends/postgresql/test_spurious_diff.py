@@ -350,6 +350,39 @@ class TestForeignKeyMatching:
         }])
         assert {op.object_type for op in upgrade} == {"drop_foreign_key", "add_foreign_key"}
 
+    def _diff_with_snapshot(self, mutate, foreign_keys):
+        handler = ConstraintHandler()
+        snapshot = self._snapshot()
+        mutate(snapshot)
+        handler._snapshot = snapshot
+        table = ModelTable(
+            name="orders", columns=[_col("user_id", "integer")],
+            foreign_keys=foreign_keys,
+        )
+        snap = handler.canonicalize(handler.extract(snapshot))
+        model = handler.canonicalize(handler.model_spec_from_tables([table]))
+        return handler.diff(snap, model)
+
+    def test_restrict_matches_no_action(self):
+        # MySQL reports RESTRICT for an unspecified action; a model that omits
+        # it must not trigger a spurious drop and recreate.
+        upgrade, _ = self._diff_with_snapshot(
+            lambda s: s["constraints"]["orders.orders_user_id_fkey"].update(on_update="RESTRICT"),
+            [{"columns": ["user_id"], "referred_table": "users",
+              "referred_columns": ["id"], "on_delete": "CASCADE"}],
+        )
+        assert upgrade == []
+
+    def test_mysql_match_none_matches_absent(self):
+        # MySQL reports MATCH_OPTION = NONE unconditionally; a model leaves it
+        # unset and the two must compare equal.
+        upgrade, _ = self._diff_with_snapshot(
+            lambda s: s["constraints"]["orders.orders_user_id_fkey"].update(match="NONE"),
+            [{"columns": ["user_id"], "referred_table": "users",
+              "referred_columns": ["id"], "on_delete": "CASCADE", "on_update": "NO ACTION"}],
+        )
+        assert upgrade == []
+
 
 class TestCanonicalizeDoesNotMutateTheSnapshot:
     """extract() hands back the snapshot's own dicts; canonicalize must copy."""

@@ -9,6 +9,12 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 
 ## Unreleased
 
+## \[0.20.6\] - 2026-10-14
+
+### Fixed
+
+- **Foreign keys no longer drop and recreate over MySQL spelling differences.** MySQL reports `ON UPDATE RESTRICT` for an unspecified action and `MATCH_OPTION = NONE` unconditionally; a SQLAlchemy model can express neither (RESTRICT is a synonym for NO ACTION, NONE means "no clause"). The diff compared these literally, so every such foreign key was dropped and re-added on each run. `RESTRICT` now compares equal to `NO ACTION`, and `MATCH NONE`/`SIMPLE` compare equal to an absent match.
+
 ## \[0.20.5\] - 2026-10-14
 
 ### Fixed
