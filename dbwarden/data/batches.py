@@ -12,6 +12,7 @@ from sqlglot import exp
 
 from .declarations import column_names
 from .sql import statement_text as text
+from dbwarden.sql import leading_keyword
 
 _ATTEMPT_STARTS = ContextVar("data_execution_starts", default=None)
 
@@ -114,6 +115,8 @@ def attach_execution(upgrade, rollback, item, backend):
     for step in upgrade:
         batches = {}
         for index, statement in enumerate(step["sql"]):
+            if leading_keyword(statement) not in ("INSERT", "UPDATE", "DELETE", "REPLACE"):
+                continue
             tree = sqlglot.parse_one(statement, read=dialect)
             table = (
                 tree.this.this

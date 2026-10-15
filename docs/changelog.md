@@ -9,6 +9,14 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 
 ## Unreleased
 
+## \[0.20.11\] - 2026-10-15
+
+### Fixed
+
+- **A legacy ClickHouse lock table no longer aborts startup.** A v1 `dbwarden_lock` (columns `id`/`locked`/...) could not be copied with the v2 column list, so `ALTER`/migration raised and the process (API container CMD) failed before serving. The v1 table is now detected and dropped/recreated as v2, and the migration falls back to a clean recreate on any failure.
+- **Snapshot re-registration is idempotent.** Registering the same snapshot id twice in a migration run (snapshot write + state) raised "Snapshot ID already registered"; it now replaces the stored entry.
+- **Non-DML statements are not fed to the SQL parser.** Data-bundle DDL such as `CREATE TABLE ... AS SELECT` made sqlglot emit "unsupported syntax. Falling back to parsing as a 'Command'" during migration; DDL is now skipped before parsing.
+
 ## \[0.20.10\] - 2026-10-14
 
 ### Fixed

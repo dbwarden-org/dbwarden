@@ -332,9 +332,17 @@ def register_snapshot(
         if existing:
             if len(existing) == 1 and existing[0] == entry:
                 return entry
-            raise ValueError(
-                f"Snapshot ID already registered: {database}:{snapshot_id}"
-            )
+            # Re-registration during a migration run (write + state) may carry a
+            # trivially different entry (e.g. a fresh created_at); replace the
+            # stored snapshot of the same id rather than failing the run.
+            registry["snapshots"] = [
+                item
+                for item in registry["snapshots"]
+                if not (
+                    item.get("database") == database
+                    and item.get("snapshot_id") == snapshot_id
+                )
+            ]
         registry["snapshots"].append(entry)
         registry["snapshots"].sort(
             key=lambda item: (item.get("database", ""), item.get("snapshot_id", ""))

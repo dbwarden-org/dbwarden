@@ -16,6 +16,7 @@ from sqlalchemy.exc import DBAPIError, SQLAlchemyError
 from .batches import check_duration, execute_statement, execution_attempt
 from .ir import canonical_bytes
 from .sql import statement_text as text
+from dbwarden.sql import leading_keyword
 
 _JOURNAL = "_dbwarden_data_runs"
 _CHECKPOINTS = "_dbwarden_data_operations"
@@ -561,6 +562,8 @@ def _mysql_lock_queries(connection, step):
     queries = []
     tables = []
     for statement in step["sql"]:
+        if leading_keyword(statement) not in ("INSERT", "UPDATE", "DELETE"):
+            return []
         expression = sqlglot.parse_one(statement, read="mysql")
         if not isinstance(expression, (exp.Delete, exp.Insert, exp.Update)):
             return []

@@ -1,6 +1,20 @@
 from __future__ import annotations
 
 
+def leading_keyword(statement: str) -> str:
+    """First SQL keyword of a statement, ignoring leading comments/blank lines.
+
+    Lets callers skip non-DML statements (DDL, CTAS, ...) before handing them to
+    a parser that would otherwise warn and fall back to a generic Command.
+    """
+    for line in statement.splitlines():
+        line = line.strip()
+        if not line or line.startswith("--"):
+            continue
+        return line.split(None, 1)[0].upper()
+    return ""
+
+
 def split_sql_statements(sql: str) -> list[str]:
     """Split SQL on semicolons outside quoted strings and SQL comments."""
     statements: list[str] = []

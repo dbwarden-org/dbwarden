@@ -323,6 +323,15 @@ def _set_ch_lock_engine_cache(connection: Any, engine: str | None) -> None:
         logger.debug("Could not cache dbwarden_lock engine: %s", exc)
 
 
+def _get_ch_lock_columns(connection: Any) -> set[str]:
+    """Column names of the ClickHouse lock table (empty if it does not exist)."""
+    try:
+        result = connection.execute(text("DESCRIBE TABLE dbwarden_lock"))
+        return {row[0] for row in result.fetchall()}
+    except Exception:
+        return set()
+
+
 def _migrate_ch_lock_engine(connection: Any) -> bool:
     """Migrate a plain-MergeTree dbwarden_lock to ReplacingMergeTree.
 
@@ -338,6 +347,17 @@ def _migrate_ch_lock_engine(connection: Any) -> bool:
     if engine is None:
         return False  # Nothing to migrate (table absent / undetectable)
     if "ReplacingMergeTree" in engine:
+        return True
+
+    # A v1 lock table (columns id/locked/acquired_at/owner_token) cannot be
+    # copied with the v2 column list; recreate it instead. The lock is
+    # transient and no migration holds it before acquisition.
+    columns = _get_ch_lock_columns(connection)
+    if columns and "namespace" not in columns:
+        logger.info("Recreating v1 ClickHouse dbwarden_lock with v2 schema")
+        connection.execute(text("DROP TABLE IF EXISTS dbwarden_lock"))
+        connection.execute(text(_LOCK_TABLE_V2_DDL["clickhouse"]))
+        _set_ch_lock_engine_cache(connection, _CH_REPLACING_ENGINE)
         return True
 
     logger.info(
@@ -434,6 +454,14 @@ def ensure_lock_table(connection: Any, db_type: str, schema: str = "public") -> 
                 _CH_REPLACING_ENGINE,
                 exc,
             )
+            # Last resort: recreate the lock table cleanly. It is transient
+            # bookkeeping and no migration is running before acquisition.
+            try:
+                connection.execute(text("DROP TABLE IF EXISTS dbwarden_lock"))
+                connection.execute(text(_LOCK_TABLE_V2_DDL["clickhouse"]))
+                _set_ch_lock_engine_cache(connection, _CH_REPLACING_ENGINE)
+            except Exception as recreate_exc:
+                logger.warning("Could not recreate dbwarden_lock: %s", recreate_exc)
 
     # Ensure v2 schema (drops v1 table if it exists)
     _ensure_v2_schema(connection, db_type, schema)
