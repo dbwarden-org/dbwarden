@@ -516,6 +516,12 @@ class ConstraintHandler(ObjectHandler):
             name = attrs["name"]
             using = attrs.get("using")
             using_clause = f" USING INDEX {using}" if using else ""
+            # MySQL/MariaDB have no DROP CONSTRAINT; a unique constraint is a
+            # unique index and is dropped with DROP INDEX.
+            if backend in ("mysql", "mariadb"):
+                drop_unique = f"ALTER TABLE {table} DROP INDEX {name};"
+            else:
+                drop_unique = f"ALTER TABLE {table} DROP CONSTRAINT {name};"
             if ot == "add_unique_constraint":
                 cols = ", ".join(attrs.get("columns", []))
                 defer_clause = ""
@@ -525,9 +531,9 @@ class ConstraintHandler(ObjectHandler):
                     else:
                         defer_clause = " DEFERRABLE INITIALLY IMMEDIATE"
                 up = f"ALTER TABLE {table} ADD CONSTRAINT {name} UNIQUE ({cols}){using_clause}{defer_clause};"
-                rb = f"ALTER TABLE {table} DROP CONSTRAINT {name};"
+                rb = drop_unique
             else:
-                up = f"ALTER TABLE {table} DROP CONSTRAINT {name};"
+                up = drop_unique
                 cols = ", ".join(attrs.get("columns", []))
                 defer_clause = ""
                 if backend == "postgresql" and attrs.get("deferrable"):

@@ -401,3 +401,46 @@ class TestMySQLForeignKeyRollback:
         assert stmts[0].rollback_sql == (
             "ALTER TABLE zonas_tokko DROP FOREIGN KEY fk_zonas_tokko_id_cym;"
         )
+
+
+class TestMySQLUniqueConstraintDrop:
+    def test_add_unique_rollback_uses_drop_index(self, monkeypatch):
+        from dbwarden.engine.backends.postgresql.handlers import ConstraintHandler
+        from dbwarden.engine.core.protocol import Op
+
+        monkeypatch.setattr(
+            "dbwarden.engine.snapshot._get_backend", lambda db_name=None: "mysql"
+        )
+        op = Op(
+            object_type="add_unique_constraint",
+            upgrade_attrs={
+                "table": "zonas_tokko",
+                "name": "uq_zonas_tokko_id_tokko",
+                "columns": ["id_tokko"],
+            },
+        )
+        stmts = ConstraintHandler().emit(op, db_name="primary")
+        assert len(stmts) == 1
+        assert stmts[0].rollback_sql == (
+            "ALTER TABLE zonas_tokko DROP INDEX uq_zonas_tokko_id_tokko;"
+        )
+
+    def test_drop_unique_uses_drop_index(self, monkeypatch):
+        from dbwarden.engine.backends.postgresql.handlers import ConstraintHandler
+        from dbwarden.engine.core.protocol import Op
+
+        monkeypatch.setattr(
+            "dbwarden.engine.snapshot._get_backend", lambda db_name=None: "mysql"
+        )
+        op = Op(
+            object_type="drop_unique_constraint",
+            upgrade_attrs={
+                "table": "zonas_tokko",
+                "name": "uq_zonas_tokko_id_tokko",
+                "columns": ["id_tokko"],
+            },
+        )
+        stmts = ConstraintHandler().emit(op, db_name="primary")
+        assert stmts[0].upgrade_sql == (
+            "ALTER TABLE zonas_tokko DROP INDEX uq_zonas_tokko_id_tokko;"
+        )

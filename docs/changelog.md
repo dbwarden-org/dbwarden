@@ -9,6 +9,12 @@ All notable changes to dbwarden, newest first. Versions follow semantic versioni
 
 ## Unreleased
 
+## \[0.20.10\] - 2026-10-14
+
+### Fixed
+
+- **Unique constraints drop with valid MySQL syntax.** `drop_unique_constraint` and the rollback of `add_unique_constraint` emitted `ALTER TABLE ... DROP CONSTRAINT`, which MySQL and MariaDB reject; on those backends they now emit `ALTER TABLE ... DROP INDEX`. PostgreSQL keeps `DROP CONSTRAINT`.
+
 ## \[0.20.9\] - 2026-10-14
 
 ### Fixed
